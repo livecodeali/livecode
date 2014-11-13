@@ -38,6 +38,8 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "syntax.h"
 #include "statemnt.h"
 
+#include "exec.h"
+
 ////////////////////////////////////////////////////////////////////////////////
 
 MCExpression::MCExpression()
@@ -613,6 +615,11 @@ void MCExpression::eval_ctxt(MCExecContext& ctxt, MCExecValue& r_value)
 {
     fprintf(stderr, "ERROR: eval method for expression not implemented properly\n");
     abort();
+}
+
+void MCExpression::eval_values(MCExecContext& ctxt, MCStringRef& r_value)
+{
+    r_value = MCValueRetain(kMCEmptyString);
 }
 
 void MCExpression::eval_typed(MCExecContext& ctxt, MCExecValueType p_type, void *r_value)

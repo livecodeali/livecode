@@ -1759,6 +1759,7 @@ LT factor_table[] =
 		// MW-2013-05-08: [[ Uuid ]] The uuid function token.
 		{"uuid", TT_FUNCTION, F_UUID},
         {"value", TT_FUNCTION, F_VALUE},
+        {"valuelist", TT_FUNCTION, F_VALUE_LIST},
         {"variablenames", TT_FUNCTION, F_VARIABLES},
 		// JS-2013-06-19: [[ StatsFunctions ]] Token for 'sampleVariance' (aka variance)
         {"variance", TT_FUNCTION, F_SMP_VARIANCE},

@@ -5598,3 +5598,119 @@ void MCProperty::set(MCExecContext& ctxt, MCExecValue p_value)
     else
         set_object_property(ctxt, p_value);
 }
+
+bool MCProperty::can_be_enumerated()
+{
+    // do as much as we can parsing-wise to eliminate props without enum values
+    
+    if (destvar != nil && which != P_CUSTOM_VAR)
+        return false;
+
+    if (function != F_UNDEFINED)
+        return false;
+    
+    if (customindex != nil)
+        return false;
+    
+    if (target == nil)
+        return true;
+    
+    if (tocount != CT_UNDEFINED)
+        return false;
+    
+    if (which == P_CUSTOM || which == P_CUSTOM_VAR)
+        return false;
+    
+    return true;
+}
+                    
+static void enumerate_enum_list(const MCPropertyInfo *p_info, MCStringRef& r_list)
+{
+    MCAutoListRef t_list;
+    MCListCreateMutable('\n', &t_list);
+    
+    MCExecEnumTypeInfo *t_info = (MCExecEnumTypeInfo *)(p_info -> type_info);
+    
+    for (uindex_t i = 0; i < t_info -> count; i++)
+        MCListAppendCString(*t_list, t_info -> elements[i] . tag);
+    
+    MCListCopyAsString(*t_list, r_list);
+}
+                    
+static void enumerate_set_list(const MCPropertyInfo *p_info, MCStringRef& r_list)
+{
+    MCAutoListRef t_list;
+    MCListCreateMutable(',', &t_list);
+                        
+    MCExecSetTypeInfo *t_info = (MCExecSetTypeInfo *)(p_info -> type_info);
+                        
+    for (uindex_t i = 0; i < t_info -> count; i++)
+        MCListAppendCString(*t_list, t_info -> elements[i] . tag);
+                        
+    MCListCopyAsString(*t_list, r_list);
+}
+    
+static MCPropertyInfo *lookup_object_property(const MCObjectPropertyTable *p_table, Properties p_which, bool p_effective, bool p_array_prop, MCPropertyInfoChunkType p_chunk_type)
+{
+    for(uindex_t i = 0; i < p_table -> size; i++)
+        if (p_table -> table[i] . property == p_which && (!p_table -> table[i] . has_effective || p_table -> table[i] . effective == p_effective) &&
+            (p_array_prop == p_table -> table[i] . is_array_prop) &&
+            (p_chunk_type == p_table -> table[i] . chunk_type))
+            return &p_table -> table[i];
+                        
+    if (p_table -> parent != nil)
+        return lookup_object_property(p_table -> parent, p_which, p_effective, p_array_prop, p_chunk_type);
+                        
+    return nil;
+}
+                    
+void MCProperty::eval_values(MCExecContext& ctxt, MCStringRef& r_list)
+{
+    if (!can_be_enumerated())
+    {
+        r_list = MCValueRetain(kMCEmptyString);
+        return;
+    }
+    
+    const MCPropertyInfo *t_info;
+    t_info = nil;
+    
+    if (target == nil)
+    {
+        if (!MCPropertyInfoTableLookup(which, effective, t_info, false))
+            t_info = lookup_mode_property(getmodepropertytable(), which, effective, false);
+    }
+    else
+    {
+        MCObjectChunkPtr t_obj_chunk;
+        if (target -> evalobjectchunk(ctxt, false, false, t_obj_chunk) == ES_NORMAL)
+        {
+            if (t_obj_chunk . chunk == CT_UNDEFINED)
+            {
+                t_info = lookup_object_property(t_obj_chunk . object -> getpropertytable(), which, effective, false, kMCPropertyInfoChunkTypeNone);
+                if (t_info == nil)
+                    t_info = lookup_object_property(t_obj_chunk . object -> getmodepropertytable(), which, effective, false, kMCPropertyInfoChunkTypeNone);
+            }
+            else
+            {
+                t_info = lookup_object_property(t_obj_chunk . object -> getpropertytable(), which, effective == True, false, target -> islinechunk() ? kMCPropertyInfoChunkTypeLine : kMCPropertyInfoChunkTypeChar);
+
+                if (target -> islinechunk() && t_info == nil)
+                    t_info = lookup_object_property(t_obj_chunk . object -> getpropertytable(), which, effective == True, false, kMCPropertyInfoChunkTypeChar);
+            }
+        }
+    }
+    
+        
+    if (t_info != nil)
+    {
+        if (t_info -> type == kMCPropertyTypeEnum)
+            enumerate_enum_list(t_info, r_list);
+        else if (t_info -> type == kMCPropertyTypeSet)
+            enumerate_set_list(t_info, r_list);
+        return;
+    }
+        
+    ctxt . Throw();
+}
+

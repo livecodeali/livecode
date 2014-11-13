@@ -790,6 +790,8 @@ MCExpression *MCN_new_function(int2 which)
         return new MCUnicodeCharToNum;
 	case F_VALUE:
 		return new MCValue;
+    case F_VALUE_LIST:
+        return new MCValueList;
 	case F_VARIABLES:
 		return new MCVariables;
 	case F_VERSION:

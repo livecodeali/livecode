@@ -2541,6 +2541,21 @@ public:
     virtual void eval_ctxt(MCExecContext &ctxt, MCExecValue &r_value);
 };
 
+class MCValueList: public MCFunction
+{
+    MCExpression *m_property;
+    
+public:
+    MCValueList(void)
+    {
+        m_property = nil;
+    }
+    
+    virtual ~MCValueList(void);
+    virtual Parse_stat parse(MCScriptPoint &sp, Boolean the);
+    virtual void eval_ctxt(MCExecContext &ctxt, MCExecValue &r_value);
+};
+
 #endif
 
 

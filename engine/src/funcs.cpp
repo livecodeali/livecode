@@ -7470,3 +7470,28 @@ void MCMeasureText::eval_ctxt(MCExecContext &ctxt, MCExecValue &r_value)
         r_value . type = kMCExecValueTypeStringRef;
     }
 }
+
+///////////////////////////////////////////////////////////////////////////////
+    
+#include "property.h"
+    
+MCValueList::~MCValueList(void)
+{
+    delete m_property;
+}
+    
+Parse_stat MCValueList::parse(MCScriptPoint& sp, Boolean the)
+{
+    return get1param(sp, &m_property, the);
+}
+    
+void MCValueList::eval_ctxt(MCExecContext &ctxt, MCExecValue &r_value)
+{
+    MCAutoStringRef t_value;
+    m_property -> eval_values(ctxt, &t_value);
+    
+    if (!ctxt . HasError())
+    {
+        MCExecValueTraits<MCStringRef>::set(r_value, MCValueRetain(*t_value));
+    }
+}

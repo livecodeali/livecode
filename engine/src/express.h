@@ -55,6 +55,8 @@ public:
 
 	virtual void eval_ctxt(MCExecContext& ctxt, MCExecValue& r_value);
 	
+    virtual void eval_values(MCExecContext& ctxt, MCStringRef& r_value);
+    
 	// Compile the syntax into the (new) tree for use by the new evaluator.
 	virtual void compile(MCSyntaxFactoryRef);
 	virtual void compile_out(MCSyntaxFactoryRef);

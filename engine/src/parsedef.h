@@ -555,6 +555,7 @@ enum Functions {
     F_URL_ENCODE,
     F_URL_STATUS,
     F_VALUE,
+    F_VALUE_LIST,
     F_VARIABLES,
     F_VERSION,
     F_WAIT_DEPTH,

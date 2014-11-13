@@ -50,6 +50,8 @@ public:
 	//virtual Exec_stat eval(MCExecPoint &);
     virtual void eval_ctxt(MCExecContext& ctxt, MCExecValue& r_value);
     virtual void set(MCExecContext& ctxt, MCExecValue p_value);
+    void eval_values(MCExecContext& ctxt, MCStringRef& r_list);
+    bool can_be_enumerated();
 #ifdef LEGACY_EXEC
 	MCObject *getobj(MCExecPoint &ep);
 #endif
