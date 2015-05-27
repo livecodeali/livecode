@@ -13,7 +13,7 @@ if <IfCondition> then
 	<ElseStatementList>]
 end if
 
-Summary: Executes a list of statements depending on the value of a condition.
+Summary: Does an execute of a list of statements depending on the value of a condition.
 
 Parameters:
 IfCondition(bool): An expression which evaluates to a boolean.
