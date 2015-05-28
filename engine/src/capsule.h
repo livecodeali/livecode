@@ -89,14 +89,17 @@ enum MCCapsuleSectionType
 	// Startup script to be executed after all stacks have loaded but before
 	// the main stack is opened.
 	kMCCapsuleSectionTypeStartupScript,
+<<<<<<< HEAD
 
 	// Module to be loaded on startup.
     kMCCapsuleSectionTypeModule,
+=======
     
     // Font mapping sections contain a mapping from a font name to another font
     // name (usually PostScript name). Whenever a font name is looked up it is
     // indirected through the font map first (and only once - not iteratively).
     kMCCapsuleSectionTypeFontmap,
+>>>>>>> upstream/develop-7.0
 
     // AL-2015-02-10: [[ Standalone Inclusions ]] Library consists of the mappings from universal names
     //  of resources to their platform-specific paths relative to the executable.

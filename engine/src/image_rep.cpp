@@ -369,16 +369,28 @@ bool MCLoadableImageRep::LockImageFrame(uindex_t p_frame, MCGFloat p_density, MC
 	// frame index check
 	if (p_frame >= m_frame_count)
 		return false;
+	
+    // MM-2014-07-31: [[ ThreadedRendering ]] Make sure only a single thread locks an image frame at a time.
+    //  This could potentially be improved to be less obtrusive and resource hungry (mutex per image)
     
+<<<<<<< HEAD
+	if (!EnsureImageFrames())
+    {
+        MCThreadMutexUnlock(MCimagerepmutex);
+=======
 	if (m_frame_count != 0 && p_frame >= m_frame_count)
         return false;
     
 	if (!EnsureMCGImageFrames())
+>>>>>>> upstream/develop-7.0
 		return false;
 	
+<<<<<<< HEAD
+=======
 	if (p_frame >= m_frame_count)
         return false;
     
+>>>>>>> upstream/develop-7.0
 	r_frame = m_frames[p_frame];
     MCGImageRetain(r_frame . image);
     
@@ -492,6 +504,10 @@ void MCLoadableImageRep::ReleaseFrames()
 
 bool MCLoadableImageRep::GetGeometry(uindex_t &r_width, uindex_t &r_height)
 {
+<<<<<<< HEAD
+	if (!EnsureHeader())
+		return false;
+=======
 	if (!m_have_geometry)
 	{
 		// IM-2014-09-30: [[ Bug 13501 ]] CalculateGeometry is not thread-safe due to 
@@ -499,6 +515,7 @@ bool MCLoadableImageRep::GetGeometry(uindex_t &r_width, uindex_t &r_height)
 		if (!m_have_geometry)
 			m_have_geometry = CalculateGeometry(m_width, m_height);
 	}
+>>>>>>> upstream/develop-7.0
 	
 	r_width = m_width;
 	r_height = m_height;

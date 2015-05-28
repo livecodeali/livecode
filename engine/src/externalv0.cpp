@@ -63,8 +63,11 @@ extern MCExecContext *MCECptr;
 // IM-2014-03-06: [[ revBrowserCEF ]] Add revision number to v0 external interface
 // SN-2014-07-08: [[ UnicodeExternalsV0 ]] Bump revision number after unicode update
 // AL-2015-02-06: [[ SB Inclusions ]] Increment revision number of v0 external interface
+<<<<<<< HEAD
+=======
 // SN-2015-03-12: [[ Bug 14413 ]] Increment revision number, for the addition of
 //  UTF-8 <-> native string functions.
+>>>>>>> upstream/develop-7.0
 #define EXTERNAL_INTERFACE_VERSION 4
 
 typedef struct _Xternal
@@ -1724,6 +1727,7 @@ static char *resolve_symbol_in_module(const char *arg1, const char *arg2,
     return nil;
 }
 
+<<<<<<< HEAD
 ////////////////////////////////////////////////////////////////////////
 // Interface V4
 //
@@ -1734,19 +1738,7 @@ static char *get_display_handle(const char *arg1, const char *arg2, const char *
     t_display = nil;
 
     if (!MCscreen->platform_get_display_handle(t_display))
-    {
-        *retval = xresFail;
-        return nil;
-    }
-    
-    void **t_return;
-    t_return = (void**)arg3;
-    
-    *t_return = t_display;
-    *retval = xresSucc;
-    
-    return nil;
-}
+=======
 ////////////////////////////////////////////////////////////////////////////////
 //  V4: UTF-8 <-> Native string conversion
 // arg1 contains the string to convert, for both of the functions.
@@ -1758,14 +1750,27 @@ static char *convert_from_native_to_utf8(const char *arg1, const char *arg2,
     if (arg1 == NULL
             || !MCStringCreateWithNativeChars((char_t*)arg1, strlen(arg1), &t_input)
             || !MCStringConvertToUTF8String(*t_input, t_utf8_string))
+>>>>>>> upstream/develop-7.0
     {
         *retval = xresFail;
         return nil;
     }
+<<<<<<< HEAD
+
+    void **t_return;
+    t_return = (void**)arg3;
+
+    *t_return = t_display;
+    *retval = xresSucc;
+
+    return nil;
+}
+
+=======
     
     *retval = xresSucc;
-    // Return a string owned by the engine, to avoid the release issue
-    MCExternalAddAllocatedString(MCexternalallocpool, t_utf8_string);
+	// Return a string owned by the engine, to avoid the release issue
+	MCExternalAddAllocatedString(MCexternalallocpool, t_utf8_string);
     return t_utf8_string;
 }
 
@@ -1791,6 +1796,7 @@ static char *convert_to_native_from_utf8(const char *arg1, const char *arg2,
 
 ////////////////////////////////////////////////////////////////////////////////
 
+>>>>>>> upstream/develop-7.0
 // IM-2014-03-06: [[ revBrowserCEF ]] Add externals extension to the callback list
 // SN-2014-07-08: [[ UnicodeExternalsV0 ]] Add externals extension to handle UTF8-encoded parameters
 // AL-2015-02-06: [[ SB Inclusions ]] Add new callbacks for resource loading.

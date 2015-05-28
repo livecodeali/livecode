@@ -820,8 +820,12 @@ bool MCStringFormatV(MCStringRef& r_string, const char *p_format, va_list p_args
 
 	if (t_success)
 		t_success = MCStringCopyAndRelease(t_buffer, r_string);
+<<<<<<< HEAD
+	else
+=======
     
     if (!t_success)
+>>>>>>> upstream/develop-7.0
 		MCValueRelease (t_buffer);
 	
 	return t_success;

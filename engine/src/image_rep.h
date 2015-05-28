@@ -185,6 +185,13 @@ private:
 	MCGImageFrame *m_frames;
 	uindex_t m_frame_count;
 	bool m_frames_premultiplied;
+<<<<<<< HEAD
+    
+    // MM-2014-07-31: [[ ThreadedRendering ]] Used to ensure only a single threrad locks an image frame at a time.
+    MCThreadMutexRef m_frame_lock;
+
+=======
+>>>>>>> upstream/develop-7.0
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -492,12 +492,21 @@ public:
     }
 
     const char *operator * () const
+<<<<<<< HEAD
     {
         return Ptr();
     }
     
     const char *Ptr(void) const
     {
+=======
+    {
+        return Ptr();
+    }
+    
+    const char *Ptr(void) const
+    {
+>>>>>>> upstream/develop-7.0
         MCAssert(m_bytes != nil);
         return m_bytes;
     }

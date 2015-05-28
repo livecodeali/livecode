@@ -2006,6 +2006,10 @@
 				4DD3DF041040ADFC00CAC7EF /* System.h */,
 				4C529CBA1973CF16007C5F7C /* systhreads.h */,
 				4C6D0A371407D04D003B1BA3 /* sysunxnetwork.cpp */,
+<<<<<<< HEAD
+				4C529CBB1973CF16007C5F7C /* sysunxthreads.cpp */,
+=======
+>>>>>>> upstream/develop-7.0
 			);
 			name = System;
 			sourceTree = "<group>";
@@ -2206,6 +2210,15 @@
 		4DD3DD7D1040AA4700CAC7EF /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
+<<<<<<< HEAD
+=======
+				LastUpgradeCheck = 0420;
+				TargetAttributes = {
+					4DD3DD981040AA9A00CAC7EF = {
+						DevelopmentTeam = SA2BUJR53Y;
+					};
+				};
+>>>>>>> upstream/develop-7.0
 			};
 			buildConfigurationList = 4DD3DD801040AA4700CAC7EF /* Build configuration list for PBXProject "engine-mobile" */;
 			compatibilityVersion = "Xcode 3.2";

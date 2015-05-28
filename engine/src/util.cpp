@@ -1588,16 +1588,23 @@ Boolean MCU_parsepoints(MCPoint *&points, uindex_t &noldpoints, MCStringRef data
 
 Boolean MCU_parsepoint(MCPoint &point, MCStringRef data)
 {
+<<<<<<< HEAD
+    MCAutoPointer<char> t_data;
+    /* UNCHECKED */ MCStringConvertToCString(data, &t_data);
+	const char *sptr = *t_data;
+	uint4 l = MCStringGetLength(data);
+=======
     // This method returns False if it can't parse the point - which will happen
     // if the string isn't native.
     if (!MCStringCanBeNative(data))
         return false;
     
-    MCAutoPointer<char> t_data;
-    /* UNCHECKED */ MCStringConvertToCString(data, &t_data);
-    const char *sptr = *t_data;
-    uint4 l = MCStringGetLength(data);
-
+    const char *sptr;
+    uint4 l;
+    l = MCStringGetLength(data);
+    sptr = (const char *)MCStringGetNativeCharPtr(data);
+    
+>>>>>>> upstream/develop-7.0
 	Boolean done1, done2;
 	// MDW-2013-06-09: [[ Bug 11041 ]] Round non-integer values to nearest.
 	int2 i1= (int2)(MCU_strtol(sptr, l, ',', done1, True));
@@ -3213,6 +3220,17 @@ bool MCU_compare_strings_native(const char *p_a, bool p_a_isunicode, const char 
 
 ///////////////////////////////////////////////////////////////////////////////
 
+<<<<<<< HEAD
+=======
+// MW-2013-05-21: [[ RandomBytes ]] Utility function for generating random bytes.
+bool MCU_random_bytes(size_t p_bytecount, MCDataRef& r_bytes)
+{
+	// IM-2014-08-06: [[ Bug 13038 ]] Use system implementation directly instead of SSL
+	return MCS_random_bytes(p_bytecount, r_bytes);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
 // SN-2015-04-07: [[ Bug 15164 ]] MCU_loadmodule is now a wrapper of MCU_loadmodule_stringref
 //  to keep consistent its use from the externals.
 void* MCU_loadmodule(const char* p_module)
@@ -3224,6 +3242,7 @@ void* MCU_loadmodule(const char* p_module)
     return MCU_loadmodule_stringref(*t_module);
 }
 
+>>>>>>> upstream/develop-7.0
 // AL-2015-02-06: [[ SB Inclusions ]] Add utility functions for module loading where
 //  p_module can be a universal module name, where a mapping from module names to
 // relative paths has been provided.

@@ -379,13 +379,19 @@ bool MCDeployWriteCapsule(const MCDeployParameters& p_params, MCDeployFileRef p_
 		t_success = MCDeployWriteCapsuleDefineStandaloneSections(p_params, t_capsule);
 
 	// Add any redirects
+<<<<<<< HEAD
 	if (t_success)
 		for(uindex_t i = 0; i < MCArrayGetCount(p_params.redirects) && t_success; i++)
+=======
+    if (t_success)
+		for(uint32_t i = 0; i < MCArrayGetCount(p_params.redirects) && t_success; i++)
+>>>>>>> upstream/develop-7.0
 		{
 			MCValueRef t_val;
             /* UNCHECKED */ MCArrayFetchValueAtIndex(p_params.redirects, i + 1, t_val);
 			t_success = MCDeployCapsuleDefineString(t_capsule, kMCCapsuleSectionTypeRedirect, (MCStringRef)t_val);
 		}
+<<<<<<< HEAD
     
     ////////
     
@@ -430,6 +436,7 @@ bool MCDeployWriteCapsule(const MCDeployParameters& p_params, MCDeployFileRef p_
     
     ////////
     
+=======
 			
     // Add any font mappings
     if (t_success)
@@ -440,6 +447,7 @@ bool MCDeployWriteCapsule(const MCDeployParameters& p_params, MCDeployFileRef p_
             t_success = MCDeployCapsuleDefineString(t_capsule, kMCCapsuleSectionTypeFontmap, (MCStringRef)t_val);
         }
 
+>>>>>>> upstream/develop-7.0
 	// Now we add the main stack
 	if (t_success)
 		t_success = MCDeployCapsuleDefineFromFile(t_capsule, kMCCapsuleSectionTypeStack, t_stackfile);

@@ -80,11 +80,16 @@ SOURCES=\
     syntax.cpp quicktime.cpp \
 	foundation-legacy.cpp legacy_spec.cpp \
 	srvposix.cpp \
+<<<<<<< HEAD
     srvcgi.cpp srvmultipart.cpp \
+	sysunxthreads.cpp, stacktile.cpp \
 	widget.cpp \
 	widget-events.cpp
 
 MLC_LIST = libkernel-modules.list
+=======
+    srvcgi.cpp srvmultipart.cpp
+>>>>>>> upstream/develop-7.0
 	
 SOURCE_DIRS=
 

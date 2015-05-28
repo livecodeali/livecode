@@ -5475,7 +5475,118 @@ MCChunkType MCChunkTypeFromChunkTerm(Chunk_term p_chunk_term)
         case CT_PARAGRAPH:
             return kMCChunkTypeParagraph;
         case CT_SENTENCE:
+<<<<<<< HEAD
             return kMCChunkTypeSentence;
+=======
+        {
+            MCAutoStringRef t_substring;
+            MCStringCopySubstring(text, p_restriction, &t_substring);
+            MCRange t_range;
+            uindex_t t_end;
+            /* UNCHECKED */ MCLocaleBreakIteratorCreate(kMCBasicLocale, p_chunk_type == CT_SENTENCE ? kMCBreakIteratorTypeSentence : kMCBreakIteratorTypeCharacter, break_iterator);
+            /* UNCHECKED */ MCLocaleBreakIteratorSetText(break_iterator, *t_substring);
+            t_range . length = p_restriction . length;
+            t_range . offset = p_restriction . offset;
+            
+            while ((t_end = MCLocaleBreakIteratorAdvance(break_iterator)) != kMCLocaleBreakIteratorDone)
+            {
+                t_range . offset += t_range . length;
+                t_range . length = t_end - t_range . offset;
+                breaks . Push(t_range);
+            }
+        }
+            break;
+        case CT_TRUEWORD:
+        {
+            MCAutoStringRef t_substring;
+            MCStringCopySubstring(text, p_restriction, &t_substring);
+            MCAutoArray<uindex_t> t_breaks;
+            /* UNCHECKED */ MCLocaleBreakIteratorCreate(kMCBasicLocale, kMCBreakIteratorTypeWord, break_iterator);
+            /* UNCHECKED */ MCLocaleBreakIteratorSetText(break_iterator, *t_substring);
+            MCRange t_range;
+            // PM-2015-05-26: [[ Bug 15422 ]] Start with zero length to make sure the first trueWord is counted
+            t_range . length = 0;
+            t_range . offset = p_restriction . offset;
+            
+            while (MCLocaleWordBreakIteratorAdvance(*t_substring, break_iterator, t_range)
+                   && t_range . offset + t_range . length != kMCLocaleBreakIteratorDone)
+            {
+                breaks . Push(t_range);
+            }
+        }
+            break;
+        case CT_LINE:
+        case CT_ITEM:
+        case CT_PARAGRAPH:
+            // delimiter length may vary for line and item.
+            delimiter_length = 1;
+        default:
+            break;
+    }
+    
+    if (break_iterator != nil)
+        MCLocaleBreakIteratorRelease(break_iterator);
+}
+
+
+MCTextChunkIterator::~MCTextChunkIterator()
+{    
+    MCValueRelease(text);
+    delete sp;
+}
+
+bool MCTextChunkIterator::next(MCExecContext& ctxt)
+{
+    if (type == CT_TRUEWORD || type == CT_SENTENCE || type == CT_CHARACTER)
+    {
+        // We have a word, sentence or character delimiter, we just have to get the range stored from the constructor
+        if (break_position < breaks . Size())
+        {
+            range = breaks[break_position++];
+            
+            if (break_position == breaks . Size())
+                exhausted = true;
+            
+            return true;
+        }
+        
+        return false;
+    }
+    
+    if (sp != nil)
+    {
+        MCerrorlock++;
+        
+        bool t_found = true;
+        uint2 t_pos;
+        Parse_stat ps = sp -> nexttoken();
+        if (ps == PS_ERROR || ps == PS_EOF)
+            t_found = false;
+        
+        if (t_found)
+        {
+            range . offset = sp -> getindex();
+            range . length = MCStringGetLength(sp -> gettoken_stringref());
+        }
+        
+        return t_found;
+    }
+    
+    uindex_t t_offset = range . offset + range . length;
+    
+    if (!first_chunk)
+        t_offset += delimiter_length;
+    
+    if (t_offset >= length)
+        return false;
+    
+    range . offset = t_offset;
+    first_chunk = false;
+    
+    switch (type)
+    {
+        case CT_LINE:
+>>>>>>> upstream/develop-7.0
         case CT_ITEM:
             return kMCChunkTypeItem;
         case CT_TRUEWORD:

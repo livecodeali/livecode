@@ -850,6 +850,16 @@ public:
         return m_is_parent_script;
     }
     
+    void setisparentscript(bool p_value)
+    {
+        m_is_parent_script = p_value;
+    }
+    
+    bool getisparentscript(void)
+    {
+        return m_is_parent_script;
+    }
+    
     MCRectangle measuretext(MCStringRef p_text, bool p_is_unicode);
     
     // Copy the font which should be used for this object. This will map/unmap
