@@ -78,17 +78,13 @@ enum
     /* V3 */ OPERATION_LOAD_MODULE,
     /* V3 */ OPERATION_UNLOAD_MODULE,
     /* V3 */ OPERATION_RESOLVE_SYMBOL_IN_MODULE,
-<<<<<<< HEAD
 
     // SN-2015-02-25: [[ Merge 6.7.4-rc-1 ]] OPERATION_GET_XDISPLAY_HANDLE is
     //  actually from the version 4 (V3 is Ali's module functions).
     /* V3 */ OPERATION_GET_XDISPLAY_HANDLE,
-=======
-    
     // SN-2015-03-12: [[ Bug 14413 ]] Add new UTF-8 <-> native conversion functions
     /* V4 */ OPERATION_CONVERT_FROM_NATIVE_TO_UTF8,
     /* V4 */ OPERATION_CONVERT_TO_NATIVE_FROM_UTF8,
->>>>>>> upstream/develop-7.0
 };
 
 enum
@@ -920,7 +916,6 @@ void ResolveSymbolInModule(void *p_handle, const char *p_symbol, void **r_resolv
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-<<<<<<< HEAD
 //
 // IM-2014-09-23: [[ RevBrowserCEF ]] External V4 functions
 
@@ -941,7 +936,7 @@ extern void GetXDisplayHandle(void **r_display, int *r_success)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-=======
+
 // V4: UTF-8 <-> native string conversion
 
 const char *ConvertCStringFromNativeToUTF8(const char *p_native, int *r_success)
@@ -973,7 +968,6 @@ const char *ConvertCStringToNativeFromUTF8(const char *p_utf8, int *r_success)
     
     return t_result;
 }
->>>>>>> upstream/develop-7.0
 
 #ifdef TARGET_SUBPLATFORM_IPHONE
 struct LibExport

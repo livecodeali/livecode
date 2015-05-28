@@ -2354,10 +2354,8 @@ static MCExternalError MCExternalVariableAppend(MCExternalVariableRef var, MCExt
     {
         MCAutoStringRef t_stringref;
         MCString* t_string;
-<<<<<<< HEAD
-=======
+
         // SN-2015-03-25: [[ External Fix ]] Actually set t_string to the param
->>>>>>> upstream/develop-7.0
         t_string = (MCString*)p_value;
         if (!MCStringCreateWithBytes((byte_t*)t_string->getstring(), 2 * t_string->getlength(), kMCStringEncodingUTF16, false, &t_stringref))
             return kMCExternalErrorOutOfMemory;

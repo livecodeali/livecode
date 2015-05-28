@@ -6147,13 +6147,6 @@
 			</File>
 			<File
 				RelativePath=".\src\system.h"
-<<<<<<< HEAD
-				>
-			</File>
-			<File
-				RelativePath=".\src\systhreads.h"
-=======
->>>>>>> upstream/develop-7.0
 				>
 			</File>
 			<File
@@ -6271,19 +6264,7 @@
 					<Tool
 						Name="VCCLCompilerTool"
 						PrecompiledHeaderThrough="w32prefix.h"
-<<<<<<< HEAD
-=======
 						PrecompiledHeaderFile="$(IntDir)\w32$(TargetName).pch"
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Release|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						PrecompiledHeaderThrough="w32prefix.h"
-						PrecompiledHeaderFile="$(IntDir)\w32$(TargetName).pch"
->>>>>>> upstream/develop-7.0
 					/>
 				</FileConfiguration>
 			</File>

@@ -52,15 +52,10 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include <GLES/gl.h>
 #include <unistd.h>
 
-<<<<<<< HEAD
-#include "stacktile.cpp"
-
 #include "script.h"
 
 extern bool MCModulesInitialize();
 
-=======
->>>>>>> upstream/develop-7.0
 ////////////////////////////////////////////////////////////////////////////////
 
 // Various globals depended on by other parts of the engine.

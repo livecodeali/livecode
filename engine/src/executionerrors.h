@@ -2591,7 +2591,6 @@ enum Exec_errors
     // SN-2014-12-15: [[ Bug 14211 ]] Add an error when using a parsed bad extents (such as 'next')
     // {EE-0849} Chunk: bad extents provided
     EE_CHUNK_BADEXTENTS,
-<<<<<<< HEAD
 
 	// MDW-2014-09-28: [[ feature_floor ]]
 	// {EE-0850} floor: bad parameter
@@ -2645,48 +2644,6 @@ enum Exec_errors
     
     // {EE-0866} MCInternalPayloadPatch: error in base item expression
     EE_INTERNAL_BASE_BADITEM,
-=======
-    
-    // {EE-0846} Error evaluating expression
-    EE_EXPR_EVALERROR,
-    
-    // {EE-0847} Property: value is not a character
-    EE_PROPERTY_NAC,
-    
-    // {EE-0848} Property: value is not a string
-    EE_PROPERTY_NAS,
-    
-    // {EE-0849} Property: value is not a color
-    EE_PROPERTY_NOTACOLOR,
-    
-    // {EE-0850} Property: value is not a rectangle
-    EE_PROPERTY_NOTARECT,
-    
-    // {EE-0851} Property: value is not a point
-    EE_PROPERTY_NOTAPOINT,
-    
-    // {EE-0852} Property: value is not a pair of integers
-    EE_PROPERTY_NOTAINTPAIR,
-    
-    // {EE-0853} Property: value is not a quadruple of integers
-    EE_PROPERTY_NOTAINTQUAD,
-    
-    // {EE-0854} Property: invalid enumeration value
-    EE_PROPERTY_BADENUMVALUE,
-    
-    // {EE-0855} Backdrop: invalid value
-    EE_BACKDROP_INVALIDVALUE,
-    
-    // {EE-0856} Property: value is not an array
-    EE_PROPERTY_NOTANARRAY,
-    
-    // {EE-0857} MCInternalPayloadPatch: error in patch item expression
-    EE_INTERNAL_PATCH_BADITEM,
-    
-    // {EE-0858} MCInternalPayloadPatch: error in base item expression
-    EE_INTERNAL_BASE_BADITEM,
-
->>>>>>> upstream/develop-7.0
 };
 
 extern const char *MCexecutionerrors;

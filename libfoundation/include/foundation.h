@@ -2079,11 +2079,7 @@ MC_DLLEXPORT bool MCStringConvertToBSTR(MCStringRef string, BSTR& r_bstr);
 // as an opaque sequence of bytes with an 'unknowable' encoding.
 // Note that the output string is allocated with an implicit NUL byte, but this
 // is not included in the byte_count.
-<<<<<<< HEAD
 MC_DLLEXPORT bool MCStringConvertToSysString(MCStringRef string, char*& r_bytes, size_t& r_byte_count);
-=======
-bool MCStringConvertToSysString(MCStringRef string, char*& r_bytes, size_t& r_byte_count);
->>>>>>> upstream/develop-7.0
 
 /////////
 

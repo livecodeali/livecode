@@ -253,9 +253,7 @@ void MCPlayer::Redraw(void)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-<<<<<<< HEAD
 // PM-2014-12-19: [[ Bug 14245 ]] Make possible to set the filename using a relative path
-=======
 // SN-2015-01-06: [[ Merge-6.7.2-rc-1 ]] Update to MCStringRef
 static bool MCPathIsAbsolute(MCStringRef p_path)
 {
@@ -275,7 +273,6 @@ static bool MCPathIsRemoteURL(MCStringRef p_path)
 
 // PM-2014-12-19: [[ Bug 14245 ]] Make possible to set the filename using a relative path to the stack folder
 // PM-2015-01-26: [[ Bug 14435 ]] Make possible to set the filename using a relative path to the default folder
->>>>>>> upstream/develop-7.0
 bool MCPlayer::resolveplayerfilename(MCStringRef p_filename, MCStringRef &r_filename)
 {
     if (MCPathIsAbsolute(p_filename) || MCPathIsRemoteURL(p_filename))

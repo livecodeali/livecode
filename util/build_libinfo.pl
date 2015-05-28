@@ -87,12 +87,7 @@ output "{";
 output "    &__libexternalname,";
 output "    __libexports";
 output "};";
-<<<<<<< HEAD
 output "__attribute__((__visibility__(\"default\"))) LibInfo *__libinfoptr_$name = &__libinfo;";
-=======
-output "__attribute((section(\"__DATA,__libs\"))) volatile struct LibInfo *__libinfoptr_revsecurity = &__libinfo;";
-output "};";
->>>>>>> upstream/develop-7.0
 
 sub output
 {

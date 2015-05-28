@@ -85,16 +85,11 @@ LOCAL_SRC_FILES := $(addprefix src/,\
 	exec-interface-object.cpp exec-interface-player.cpp exec-interface-scrollbar.cpp exec-interface-stack.cpp \
 	exec-interface-vclip.cpp exec-legacy.cpp exec-dialog.cpp exec-keywords.cpp \
 	syntax.cpp \
-<<<<<<< HEAD
 	foundation-legacy.cpp legacy_spec.cpp \
-	stacktile.cpp sysunxthreads.cpp \
 	widget.cpp widget-events.cpp native-layer.cpp native-layer-android.cpp \
 	module-canvas.cpp module-engine.cpp module-resources.cpp modules.cpp \
 	exec-extension.cpp exec-keywords.cpp filepath.cpp) \
 	$(DERIVED_SRC)/canvas.mlc.c $(DERIVED_SRC)/engine.mlc.c $(DERIVED_SRC)/widget.mlc.c
-=======
-	foundation-legacy.cpp legacy_spec.cpp )
->>>>>>> upstream/develop-7.0
 
 LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include \

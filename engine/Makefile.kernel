@@ -84,13 +84,9 @@ SOURCES=\
 	modules.cpp \
 	syntax.cpp \
 	foundation-legacy.cpp legacy_spec.cpp \
-<<<<<<< HEAD
-	sysunxthreads.cpp, stacktile.cpp \
 	native-layer.cpp native-layer-x11.cpp \
 	widget.cpp widget-events.cpp \
 	linux-theme.cpp \
-=======
->>>>>>> upstream/develop-7.0
 	mcstring.cpp
 
 linuxstubs.cpp: src/linux.stubs ../util/weak_stub_maker.pl
