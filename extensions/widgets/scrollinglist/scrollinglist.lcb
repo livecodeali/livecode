@@ -1,0 +1,479 @@
+/*
+Copyright (C) 2014-2015 Runtime Revolution Ltd.
+
+This file is part of LiveCode.
+
+LiveCode is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License v3 as published by the Free
+Software Foundation.
+
+LiveCode is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
+
+widget com.livecode.widget.listWidget
+
+use com.livecode.canvas
+use com.livecode.widget
+
+metadata title is "List Widget"
+metadata author is "LiveCode"
+metadata version is "1.0.0"
+
+// The list of widgets
+private variable mDataList as List
+// The number of lines to be displayed
+private variable mDataCount as Integer
+// The total height of the displayed data
+private variable mDataHeight as Real
+// The height of each row
+private variable mRowHeight as Real
+
+// The height of the view area
+private variable mViewHeight as Real
+// The width of the view area
+private variable mViewWidth as Real
+
+// The first part of the data being displayed
+private variable mViewTopPosition as Real
+// The index in the display list corresponding the the top of the view
+private variable mFirstDataItem as Integer
+
+private variable mRecalculate as Boolean
+private variable mHoverRow as Integer
+
+public handler onCreate()
+    put [] into mDataList
+
+    variable tWidgetNum as Number
+    variable tWidget as Widget
+    variable tWidgetName as String
+    variable tArray as Array
+    put the empty array into tArray
+    put the empty array into tArray["1"]
+
+   repeat with tWidgetNum from 1 up to 40
+      put a new widget "com.livecode.widget.navbarForList" into tWidget
+      set annotation "Index" of tWidget to tWidgetNum
+      put "Label" && tWidgetNum formatted as string into tWidgetName
+      put tWidgetName into tArray["1"]["label"]
+      set property "navData" of tWidget to tArray
+      push tWidget onto mDataList
+      place tWidget
+   end repeat
+
+    put 50 into mRowHeight
+
+    put my height into mViewHeight
+    put my width into mViewWidth
+
+    put 0 into mHoverRow
+    put 0 into mViewTopPosition
+    initialiseScrollbar()
+
+    put true into mRecalculate
+end handler
+
+public handler OnPaint() returns nothing
+	// If anything has changed requiring a recalculation, update parameters
+	if mRecalculate then
+		updateParameters()
+	end if
+
+	variable tTop as Real
+	variable tPath as Path
+
+	put 0 into tTop
+
+	variable tX as Integer
+	put 1 into tX
+
+	variable tTopOffset
+	put mViewTopPosition mod mRowHeight into tTopOffset
+	subtract tTopOffset from tTop
+
+	// Iterate from the first data item drawing each row until the can't display any more items
+	repeat with tX from mFirstDataItem up to the number of elements in mDataList
+      -- Draw anything relevant for this row
+		if tTop > mViewHeight then
+			exit repeat
+		end if
+		add mRowHeight to tTop
+	end repeat
+
+    // Paint the scrollbar
+	paintScrollbar(this canvas, getPaint("scrollbar", "fill"))
+end handler
+
+private handler getPaint(pLocation, pType) returns Paint
+   if pLocation is "scrollbar" then
+		if pType is "fill" then
+			return solid paint with stringToColor("0,0,0,50")
+		end if
+	end if
+
+	return solid paint with stringToColor("255,100,200")
+end handler
+
+public handler OnGeometryChanged()
+   put true into mRecalculate
+end handler
+
+public handler OnMouseEnter()
+    if the target is not nothing then
+        log annotation "Index" of the target
+    end if
+end handler
+
+
+--------------------------------------------------------------------------------
+--
+--		Mouse events
+--
+--------------------------------------------------------------------------------
+
+public handler OnMouseDown() returns nothing
+	// Notify the scrollbar of a mouse down
+	checkScrollbarMouseDown()
+end handler
+
+public handler OnMouseMove() returns nothing
+	if scrollDragging() then
+		variable tScrollPositionRatio as Real
+		scrollbarDrag(mViewHeight)
+		put scrollRatio(mViewHeight) into tScrollPositionRatio
+
+		// Calculate the new top position of list
+		put (mDataHeight - mViewHeight) * tScrollPositionRatio into mViewTopPosition
+      log mViewTopPosition
+		ensureViewTopPosition()
+		updateFirstDataItem()
+      log mViewTopPosition
+      log mFirstDataItem
+      updateChildren()
+		updateScrollbar(mViewWidth, mViewHeight, mDataHeight, mViewTopPosition)
+		redraw all
+	else
+        variable tRedraw as Boolean
+        put false into tRedraw
+		variable tNewHoverRow as Integer
+		put yPosToRowNumber(the y of the mouse position) into tNewHoverRow
+		if mHoverRow is not tNewHoverRow then
+			put tNewHoverRow into mHoverRow
+            put true into tRedraw
+		end if
+
+        if tRedraw then
+            redraw all
+        end if
+	end if
+end handler
+
+public handler OnMouseLeave() returns nothing
+	put 0 into mHoverRow
+	redraw all
+end handler
+
+public handler OnMouseUp() returns nothing
+	scrollbarMouseUp()
+end handler
+
+public handler OnMouseCancel() returns nothing
+	scrollbarMouseUp()
+end handler
+
+public handler OnMouseScroll(in pDeltaX as Real, in pDeltaY as Real) returns nothing
+	if mViewHeight < mDataHeight then
+		variable tOldTop as Real
+		put mViewTopPosition into tOldTop
+
+		if pDeltaY < 0 then
+			subtract mRowHeight from mViewTopPosition
+		else
+			add mRowHeight to mViewTopPosition
+		end if
+
+		ensureViewTopPosition()
+
+		// If nothing changed, don't update anything
+		if mViewTopPosition is tOldTop then
+			return
+		end if
+
+		updateFirstDataItem()
+      updateChildren()
+		updateScrollbar(mViewWidth, mViewHeight, mDataHeight, mViewTopPosition)
+
+		redraw all
+    end if
+end handler
+
+--------------------------------------------------------------------------------
+--
+--		Display calculations
+--
+--------------------------------------------------------------------------------
+
+private handler yPosToRowNumber(in pYPos as Number) returns Integer
+	return the floor of ((mViewTopPosition + pYPos) / mRowHeight + 1)
+end handler
+
+// Clamp mViewTopPosition
+private handler ensureViewTopPosition()
+	variable tMinTop as Real
+	put 0 into tMinTop
+
+	// Make sure we don't try to scroll above 0
+	if mViewTopPosition < tMinTop then
+		put tMinTop into mViewTopPosition
+	// Make sure we don't try to scroll past the last displayable item
+	else if mDataHeight > mViewHeight and mViewTopPosition > mDataHeight - mViewHeight then
+		put mDataHeight - mViewHeight into mViewTopPosition
+	else if mDataHeight < mViewHeight then
+		put tMinTop into mViewTopPosition
+	end if
+end handler
+
+// Calculate mFirstDataItem from the view position
+private handler updateFirstDataItem()
+	put the floor of (mViewTopPosition / mRowHeight) + 1 into mFirstDataItem
+	if mFirstDataItem < 1 then
+		put 1 into mFirstDataItem
+	end if
+end handler
+
+private handler updateParameters() returns nothing
+	put the number of elements in mDataList into mDataCount
+   log mDataCount
+	put mRowHeight * mDataCount into mDataHeight
+   log mDataHeight
+	put my height into mViewHeight
+	put my width into mViewWidth
+
+	ensureViewTopPosition()
+	updateFirstDataItem()
+
+   log mViewTopPosition
+   log mFirstDataItem
+
+   updateChildren()
+
+	// Calculate scrollbar dimensions
+	updateScrollbar(mViewWidth, mViewHeight, mDataHeight, mViewTopPosition)
+
+   log mScrollbarHeight
+
+	put false into mRecalculate
+end handler
+
+private handler updateChildren() returns nothing
+   // Iterate from the first data item setting the rects of the widget lines
+   variable tTop as Number
+   variable tX as Number
+   put 0 into tTop
+   repeat with tX from mFirstDataItem up to the number of elements in mDataList
+      set the rectangle of mDataList[tX] to rectangle [0, tTop, mViewWidth - kScrollbarWidth - 10, tTop + mRowHeight]
+      if tTop > mViewHeight then
+         exit repeat
+      end if
+      add mRowHeight to tTop
+   end repeat
+end handler
+  --------------------------------------------------------------------------------
+  --
+  --		Scrollbar
+  --		In the future, a scrollbar will be a widget in its own right
+  --		and included as a component of scrollable widgets.
+  --
+  --------------------------------------------------------------------------------
+
+  private variable mScrollbarHeight as Real
+  private variable mScrollbarPath as Path
+  private variable mScrollbarY as Real
+
+  // Drag related
+  private variable mDragging as Boolean
+  private variable mDragStartLoc as Point
+  private variable mDragScrollbarOffset as Real
+
+  constant kScrollbarWidth is 5
+
+  // Will be the scrollbar's OnCreate handler
+  public handler initialiseScrollbar()
+  	put 0 into mScrollbarHeight
+  	put false into mDragging
+  end handler
+
+  // Will be the scrollbar's OnPaint handler
+  public handler paintScrollbar(in pCanvas as Canvas, in pPaint as Paint)
+  	// Draw scrollbar if there is any need
+  	if mScrollbarHeight > 0 then
+  		set the paint of pCanvas to pPaint
+  		fill mScrollbarPath on pCanvas
+  	end if
+  end handler
+
+  // Will be the scrollbar's OnMouseDown handler
+  public handler checkScrollbarMouseDown()
+  	if mScrollbarHeight > 0 then
+  		put the mouse position into mDragStartLoc
+
+  		variable tScrollbarRect as Rectangle
+  		put the bounding box of mScrollbarPath into tScrollbarRect
+
+  		if mDragStartLoc is within tScrollbarRect then
+  			put true into mDragging
+  			put the y of mDragStartLoc - the top of tScrollbarRect into mDragScrollbarOffset
+  		end if
+  	end if
+  end handler
+
+  public handler scrollbarMouseUp()
+  	put false into mDragging
+  end handler
+
+  private handler scrollbarYFromView(in pViewHeight as Real, in pDataHeight as Real, in pTopPosition as Real) returns Real
+  	variable tScrollPositionRatio as Real
+  	put pTopPosition / (pDataHeight - pViewHeight) into tScrollPositionRatio
+  	return (pViewHeight - mScrollbarHeight) * tScrollPositionRatio
+  end handler
+
+  private handler updateScrollbar(in pViewWidth as Real, in pViewHeight as Real, in pDataHeight as Real, in pTopPosition as Real)
+
+  	variable tScrollbarHeight as Real
+  	variable tScrollbarRatio as Real
+
+  	put pViewHeight / pDataHeight into tScrollbarRatio
+
+  	if tScrollbarRatio >= 1 or tScrollbarRatio <= 0 then
+  		put 0 into mScrollbarHeight
+  	else
+  		put pViewHeight * tScrollbarRatio into tScrollbarHeight
+
+  		if tScrollbarHeight < 25 then
+  			put 25 into mScrollbarHeight
+  		else
+  			put tScrollbarHeight into mScrollbarHeight
+  		end if
+
+  		variable tScrollbarY as Real
+  		put scrollbarYFromView(pViewHeight, pDataHeight, pTopPosition) into tScrollbarY
+
+  		variable tRect as Rectangle
+  		put rectangle [pViewWidth - 10, 0, pViewWidth - 10 + kScrollbarWidth, mScrollbarHeight] into tRect
+  		put rounded rectangle path of tRect with radius 3 into mScrollbarPath
+
+  		put 0 into mScrollbarY
+  		setScrollbarY(tScrollbarY)
+  	end if
+  end handler
+
+  private handler setScrollbarY(in pScrollbarY as Real)
+  	variable tScrollbarMove as Real
+  	put pScrollbarY - mScrollbarY into tScrollbarMove
+  	translate mScrollbarPath by [0, tScrollbarMove]
+  	put pScrollbarY into mScrollbarY
+  end handler
+
+  private handler scrollbarDrag(in pViewHeight as Real)
+  	// Get the mouse y position
+  	variable tMouseY as Real
+  	put the y of the mouse position into tMouseY
+
+  	if tMouseY < mDragScrollbarOffset then
+  		put mDragScrollbarOffset into tMouseY
+  	else if tMouseY > mViewHeight + mDragScrollbarOffset - mScrollbarHeight then
+  		put mViewHeight + mDragScrollbarOffset - mScrollbarHeight into tMouseY
+  	end if
+
+  	// Set the y of the new middle of the scrollbar
+  	variable tScrollbarY as Real
+  	put tMouseY - mDragScrollbarOffset into tScrollbarY
+  	setScrollbarY(tScrollbarY)
+  end handler
+
+  public handler scrollbarWidth() returns Real
+  	if mScrollbarHeight is 0 then
+  		return 0
+  	end if
+  	return kScrollbarWidth + 10
+  end handler
+
+  private handler scrollbarY() returns Real
+  	return mScrollbarY
+  end handler
+
+  private handler scrollDragging() returns Boolean
+  	return mDragging
+  end handler
+
+  private handler scrollRatio(in pViewHeight as Real)
+  	// Get the scrollbar space
+  	variable tScrollbarSpace as Real
+  	variable tScrollbarSpaceTop as Real
+  	put pViewHeight - mScrollbarHeight into tScrollbarSpace
+
+  	return mScrollbarY / tScrollbarSpace
+  end handler
+
+-- COLOR UTILS
+
+  -- this handler converts a string of numbers to an RGBA color
+  private handler stringToColor(in pString as String) returns Color
+  	variable tRed as Real
+  	variable tGreen as Real
+  	variable tBlue as Real
+  	variable tAlpha as Real
+
+  	variable tComponentList as List
+  	split pString by "," into tComponentList
+
+  	variable tComponentCount
+  	put the number of elements in tComponentList into tComponentCount
+  	if tComponentCount is not 3 and tComponentCount is not 4 then
+  		// Invalid number of components detected
+  		throw "Invalid color"
+  	end if
+
+  	put (element 1 of tComponentList) parsed as number into tRed
+  	put (element 2 of tComponentList) parsed as number into tGreen
+  	put (element 3 of tComponentList) parsed as number into tBlue
+
+  	if tComponentCount is 4 then
+  		put (element 4 of tComponentList) parsed as number into tAlpha
+  	else
+  		put 255 into tAlpha
+  	end if
+
+  	return color [ tRed/255, tGreen/255, tBlue/255, tAlpha/255 ]
+  end handler
+  ----------
+
+  -- this handler converts an RGBA color to a string
+  private handler colorToString(in pColor as Color) returns String
+  	return stripZeros((the rounded of ((the red of pColor) * 255)) formatted as string) & "," & stripZeros((the rounded of ((the green of pColor) * 255)) formatted as string) & "," & stripZeros((the rounded of ((the blue of pColor) * 255)) formatted as string) & "," & stripZeros((the rounded of ((the alpha of pColor) * 255)) formatted as string)
+  end handler
+  ----------
+
+  -- this handler strips the zeros when a integer is formatted as a string
+  private handler stripZeros(in tString as String) returns String
+  	if tString contains "." then
+  		variable tCount as Integer
+  		repeat while ((the last char of tString) is in ".0")
+  			if the last char of tString is "." then
+  				delete the last char of tString
+  				exit repeat
+  			else
+  				delete the last char of tString
+  			end if
+  		end repeat
+  	end if
+  	return tString
+  end handler
+  ----------
+
+end widget

@@ -44,6 +44,8 @@
 				'widgets/svgpath/svgpath.lcb',
 				'widgets/switchbutton/switchbutton.lcb',
 				'widgets/treeview/treeview.lcb',
+				'widgets/navbarforlist/navbarforlist.lcb',
+				'widgets/scrollinglist/scrollinglist.lcb',
 			],
 			
 			'all_dependent_settings':
