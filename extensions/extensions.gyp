@@ -46,6 +46,10 @@
 				'widgets/treeview/treeview.lcb',
 				'widgets/navbarforlist/navbarforlist.lcb',
 				'widgets/scrollinglist/scrollinglist.lcb',
+				'widgets/scrollbar/scrollbar.lcb',
+				'widgets/progressbarforlist/progressbarforlist.lcb',
+				'widgets/badge/badge.lcb',
+				'widgets/progressitem/progressitem.lcb',
 			],
 			
 			'all_dependent_settings':

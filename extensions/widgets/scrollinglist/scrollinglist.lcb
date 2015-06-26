@@ -64,13 +64,32 @@ private variable mFirstDataItem as Integer
 
 private variable mRecalculate as Boolean
 private variable mHoverRow as Integer
+private variable mDividePaths as List
 
 private variable mWidgetKind as String
 private variable mWidgetList as List
 
-public handler onCreate()
+public handler OnSave(out rProperties as Array) returns nothing
+   variable tProperties as Array
+   put the empty array into tProperties
+   put mLineProperties into tProperties["lineProperties"]
+   put mLineCount into tProperties["lineCount"]
+   put mListProperties into tProperties["listProperties"]
+   put mWidgetKind into tProperties["lineWidget"]
+   put tProperties into rProperties
+end handler
+
+public handler OnLoad(in pProperties as Array) returns nothing
+   put pProperties["lineProperties"] into mLineProperties
+   put pProperties["lineCount"] into mLineCount
+   put pProperties["listProperties"] into mListProperties
+   put pProperties["lineWidget"] into mWidgetKind
+end handler
+
+public handler OnCreate()
     put [] into mLineProperties
     put [] into mWidgetList
+    put [] into mDividePaths
 
     variable tWidgetNum as Number
     variable tArray as Array
@@ -97,7 +116,7 @@ public handler onCreate()
     put 0 into mHoverRow
     put 0 into mViewTopPosition
 
-    put "com.livecode.widget.navbarForList" into mWidgetKind
+    put "com.livecode.widget.progressItem" into mWidgetKind
 
     initialiseScrollbar()
     put true into mRecalculate
@@ -109,25 +128,13 @@ public handler OnPaint() returns nothing
 		updateParameters()
 	end if
 
-	variable tTop as Real
-	variable tPath as Path
-
-	put 0 into tTop
-
-	variable tX as Integer
-	put 1 into tX
-
-	variable tTopOffset
-	put mViewTopPosition mod mRowHeight into tTopOffset
-	subtract tTopOffset from tTop
-
-	// Iterate from the first data item drawing each row until the can't display any more items
-	repeat with tX from mFirstDataItem up to the number of elements in mLineProperties
-      -- Draw anything relevant for this row
-		if tTop > mViewHeight then
-			exit repeat
-		end if
-		add mRowHeight to tTop
+   variable tX as Integer
+	repeat with tX from 1 up to mViewCount
+      -- Draw the divides
+      set the opacity of this canvas to 1
+      set the paint of this canvas to solid paint with color [0, 0, 0, 0.2]
+      set the stroke width of this canvas to 0
+      stroke mDividePaths[tX] on this canvas
 	end repeat
 end handler
 
@@ -137,7 +144,7 @@ end handler
 
 public handler OnMouseEnter()
     if the target is not nothing then
-        log annotation "Index" of the target
+        log annotation "DisplayIndex" of the target
     end if
 end handler
 
@@ -283,7 +290,7 @@ private handler updateParameters() returns nothing
    ensureViewTopPosition()
    updateFirstDataItem()
 
-   updateViewCount(the floor of (mViewHeight / mRowHeight))
+   updateViewCount(the ceiling of (mViewHeight / mRowHeight))
 
    updateChildren()
 
@@ -293,13 +300,22 @@ private handler updateParameters() returns nothing
 	put false into mRecalculate
 end handler
 
+--Iterate from the first data item setting the rects and annotations of the visible lines
 private handler updateChildren() returns nothing
-   --Iterate from the first data item setting the rects and annotations of the widget lines
-   variable tTop as Number
+   variable tTop as Real
+   put 0 into tTop
+
+   variable tTopOffset
+   put mViewTopPosition mod mRowHeight into tTopOffset
+   subtract tTopOffset from tTop
+   log tTopOffset
    variable tX as Number
+
+   put [] into mDividePaths
    repeat with tX from 1 up to mViewCount
       put (tX - 1) * mRowHeight into tTop
-      set the rectangle of mWidgetList[tX] to rectangle [0, tTop, mViewWidth - kScrollbarWidth - 10, tTop + mRowHeight]
+      set the rectangle of mWidgetList[tX] to rectangle [0.5, tTop + 1, mViewWidth - 0.5, tTop + mRowHeight - 1]
+      push line path from point [0.5, tTop] to point [mViewWidth - 0.5, tTop] onto mDividePaths
       set annotation "Display Index" of mWidgetList[tX] to tX
    end repeat
 end handler
@@ -373,7 +389,7 @@ private handler updateViewCount(in pViewCount as Number) returns nothing
       repeat with tWidgetNum from mViewCount + 1 up to pViewCount
          put a new widget mWidgetKind into tWidget
          set annotation "DisplayIndex" of tWidget to tWidgetNum
-         place tWidget
+         place tWidget below mScrollbar
          push tWidget onto mWidgetList
       end repeat
       updateProperties(mViewCount + 1, pViewCount)
