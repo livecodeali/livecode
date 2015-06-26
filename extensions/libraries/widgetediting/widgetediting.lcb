@@ -1,0 +1,80 @@
+/*
+Copyright (C) 2015 Runtime Revolution Ltd.
+
+This file is part of LiveCode.
+
+LiveCode is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License v3 as published by the Free
+Software Foundation.
+
+LiveCode is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
+
+/*
+IDE Widget editing library
+*/
+
+library com.livecode.library.widgetEditing
+
+use com.livecode.canvas
+use com.livecode.engine
+
+metadata version is "1.0.0"
+metadata author is "LiveCode"
+metadata title is "Widget Editing Library"
+
+handler type PopupCallback(in pPopupResult as optional any, in pClickPos as Point)
+
+private variable sEditData as Array
+
+public handler setEditableRect(in pWidgetIdentifier as String, in pComponentIdentifier as String, in pRect as Rectangle, in pPopup as String, in pCallback as PopupCallback)
+	if sEditData is not defined then
+		put the empty array into sEditData
+	end if
+	
+	if pWidgetIdentifier is not among the keys of sEditData then
+		put the empty array into sEditData[pWidgetIdentifier]
+	end if
+	
+	if pComponentIdentifier is not among the keys of sEditData[pWidgetIdentifier] then
+		put the empty array into sEditData[pWidgetIdentifier][pComponentIdentifier]
+	end if
+	
+	put pRect into sEditData[pWidgetIdentifier][pComponentIdentifier]["rect"]
+	put pPopup into sEditData[pWidgetIdentifier][pComponentIdentifier]["popup"]
+	put pCallback into sEditData[pWidgetIdentifier][pComponentIdentifier]["callback"]
+end handler
+
+public handler drawEditableRects(in pWidgetIdentifier as String, in pCanvas as Canvas)
+	variable tElement as Array
+	repeat for each element tElement in sEditData[pWidgetIdentifier]
+		set the paint of pCanvas to solid paint with color [0,0,0]
+		stroke rectangle path of tElement["rect"] on pCanvas
+	end repeat
+end handler
+
+public handler widgetClicked(in pWidgetIdentifier as String, in pClickPosition as Point)
+	variable tElement as Array
+	repeat for each element tElement in sEditData[pWidgetIdentifier]
+		if pClickPosition is within tElement["rect"] then
+			doPopup(pClickPosition, tElement)
+		end if
+	end repeat
+end handler
+
+private handler doPopup(in pClickPos as Point, in pArray as Array)
+	variable tResult
+	popup widget pArray["popup"] at pClickPos
+	put the result into tResult
+	
+	variable tCallback as PopupCallback
+	put pArray["callback"] into tCallback
+	tCallback(tResult, pClickPos)
+end handler
+
+end library

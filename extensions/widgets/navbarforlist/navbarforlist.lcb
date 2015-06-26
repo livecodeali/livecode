@@ -574,50 +574,30 @@ private handler listToArray(in pList as List) returns Array
 end handler
 
 private handler setData(in pArray as Array, in pKeys as List, out rList as List)
-	-- Excessive hoop-jumping to work around the fact that keys of numerically keyed LCS array
-	-- comes into LCB as strings, and therefore must be parsed as number to sort, then formatted back
-	-- to be used as keys again. Because parse/format of integer doesn't currently roundtrip, we need to
-	-- create a lookup from the original strings.
-	variable tKey
-	variable tOrder as List
-	put the empty list into tOrder
-	variable tLookup as Array
-	put the empty array into tLookup
-	variable tNumericKey as Number
-	repeat for each key tKey in pArray
-		put tKey parsed as number into tNumericKey
-		push tNumericKey onto tOrder
-		put tKey into tLookup[tNumericKey formatted as string]
-	end repeat
-	sort tOrder in ascending numeric order
-
 	variable tOrderKey
 	variable tElement as Array
 	variable tList as List
+    variable tKey as String
 	put the empty list into tList
-
-	variable tOriginalKey as String
-	repeat for each element tOrderKey in tOrder
-		put the empty array into tElement
-		repeat for each element tKey in pKeys
-			put tLookup[tOrderKey formatted as string] into tOriginalKey
-			-- Use default item if key is not present
-			if tKey is among the keys of pArray[tOriginalKey] then
-				put pArray[tOriginalKey][tKey] into tElement[tKey]
-			else
-				put defaultNavElement(tKey) into tElement[tKey]
-			end if
-		end repeat
-		if tElement["label"] is "" then
-			put "New Item" into tElement["label"]
+	put the empty array into tElement
+	repeat for each element tKey in pKeys
+		-- Use default item if key is not present
+		if tKey is among the keys of pArray then
+			put pArray[tKey] into tElement[tKey]
+		else
+			put defaultNavElement(tKey) into tElement[tKey]
 		end if
-		-- If the selected icon is the same as the icon, just put empty into the selected icon name
-		-- that way, when the icon is changed, the selected icon will change too.
-		if tElement["selected_icon_name"] is tElement["icon_name"] then
-			put "" into tElement["selected_icon_name"]
-		end if
-		push tElement onto tList
 	end repeat
+
+	if tElement["label"] is "" then
+		put "New Item" into tElement["label"]
+	end if
+	-- If the selected icon is the same as the icon, just put empty into the selected icon name
+	-- that way, when the icon is changed, the selected icon will change too.
+	if tElement["selected_icon_name"] is tElement["icon_name"] then
+		put "" into tElement["selected_icon_name"]
+	end if
+	push tElement onto tList
 
 	put tList into rList
 end handler

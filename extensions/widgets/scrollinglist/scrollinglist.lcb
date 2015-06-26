@@ -19,20 +19,39 @@ widget com.livecode.widget.listWidget
 
 use com.livecode.canvas
 use com.livecode.widget
+use com.livecode.library.iconSVG
 
 metadata title is "List Widget"
 metadata author is "LiveCode"
 metadata version is "1.0.0"
+metadata preferredSize is "320,300"
 
-// The list of widgets
-private variable mDataList as List
-// The number of lines to be displayed
-private variable mDataCount as Integer
+property lineWidget     get mWidgetKind      set setWidgetKind
+metadata lineWidget.editor is "com.livecode.pi.enum"
+metadata lineWidget.options is "execute:get the loadedExtensions; sort it"
+
+-- Per-line property setting
+property lineProperties    get getLineProperties      set setLineProperties
+
+property lineCount      get mLineCount    set setDataCount
+
+-- Global child widget property setting
+property listProperties    get mListProperties     set setListProperties
+
+// The list of widget properties
+private variable mLineProperties as List
+// The global list properties
+private variable mListProperties as Array
+
 // The total height of the displayed data
 private variable mDataHeight as Real
 // The height of each row
 private variable mRowHeight as Real
+// The number of items in the list
+private variable mLineCount as Number
 
+// The number of lines to be displayed
+private variable mViewCount as Integer
 // The height of the view area
 private variable mViewHeight as Real
 // The width of the view area
@@ -46,35 +65,41 @@ private variable mFirstDataItem as Integer
 private variable mRecalculate as Boolean
 private variable mHoverRow as Integer
 
+private variable mWidgetKind as String
+private variable mWidgetList as List
+
 public handler onCreate()
-    put [] into mDataList
+    put [] into mLineProperties
+    put [] into mWidgetList
 
     variable tWidgetNum as Number
-    variable tWidget as Widget
-    variable tWidgetName as String
     variable tArray as Array
     put the empty array into tArray
-    put the empty array into tArray["1"]
+    variable tProperties as Array
+    put the empty array into tProperties
 
-   repeat with tWidgetNum from 1 up to 40
-      put a new widget "com.livecode.widget.navbarForList" into tWidget
-      set annotation "Index" of tWidget to tWidgetNum
-      put "Label" && tWidgetNum formatted as string into tWidgetName
-      put tWidgetName into tArray["1"]["label"]
-      set property "navData" of tWidget to tArray
-      push tWidget onto mDataList
-      place tWidget
+    variable tIconList as List
+    put iconList() into tIconList
+   repeat with tWidgetNum from 1 up to 500
+      put "Label" && tWidgetNum formatted as string into tArray["label"]
+      put element (((tWidgetNum - 1) mod (the number of elements in tIconList)) + 1) of tIconList into tArray["icon_name"]
+      put tArray into tProperties["navData"]
+      push tProperties onto mLineProperties
    end repeat
+   put 500 into mLineCount
 
     put 50 into mRowHeight
 
-    put my height into mViewHeight
-    put my width into mViewWidth
+    put 0 into mViewHeight
+    put 0 into mViewWidth
+    put 0 into mViewCount
 
     put 0 into mHoverRow
     put 0 into mViewTopPosition
-    initialiseScrollbar()
 
+    put "com.livecode.widget.navbarForList" into mWidgetKind
+
+    initialiseScrollbar()
     put true into mRecalculate
 end handler
 
@@ -97,26 +122,13 @@ public handler OnPaint() returns nothing
 	subtract tTopOffset from tTop
 
 	// Iterate from the first data item drawing each row until the can't display any more items
-	repeat with tX from mFirstDataItem up to the number of elements in mDataList
+	repeat with tX from mFirstDataItem up to the number of elements in mLineProperties
       -- Draw anything relevant for this row
 		if tTop > mViewHeight then
 			exit repeat
 		end if
 		add mRowHeight to tTop
 	end repeat
-
-    // Paint the scrollbar
-	paintScrollbar(this canvas, getPaint("scrollbar", "fill"))
-end handler
-
-private handler getPaint(pLocation, pType) returns Paint
-   if pLocation is "scrollbar" then
-		if pType is "fill" then
-			return solid paint with stringToColor("0,0,0,50")
-		end if
-	end if
-
-	return solid paint with stringToColor("255,100,200")
 end handler
 
 public handler OnGeometryChanged()
@@ -137,8 +149,11 @@ end handler
 --------------------------------------------------------------------------------
 
 public handler OnMouseDown() returns nothing
-	// Notify the scrollbar of a mouse down
-	checkScrollbarMouseDown()
+	if the target is not nothing then
+      if annotation "Name" of the target is "Scrollbar" then
+	        scrollbarMouseDown()
+       end if
+     end if
 end handler
 
 public handler OnMouseMove() returns nothing
@@ -147,14 +162,20 @@ public handler OnMouseMove() returns nothing
 		scrollbarDrag(mViewHeight)
 		put scrollRatio(mViewHeight) into tScrollPositionRatio
 
+      variable tOldFirstItem as Number
+      put mFirstDataItem into tOldFirstItem
+
 		// Calculate the new top position of list
 		put (mDataHeight - mViewHeight) * tScrollPositionRatio into mViewTopPosition
-      log mViewTopPosition
+
 		ensureViewTopPosition()
 		updateFirstDataItem()
-      log mViewTopPosition
-      log mFirstDataItem
-      updateChildren()
+
+      if mFirstDataItem is not tOldFirstItem then
+         scrollChildren(mFirstDataItem - tOldFirstItem)
+         updateChildren()
+      end if
+
 		updateScrollbar(mViewWidth, mViewHeight, mDataHeight, mViewTopPosition)
 		redraw all
 	else
@@ -205,7 +226,14 @@ public handler OnMouseScroll(in pDeltaX as Real, in pDeltaY as Real) returns not
 		end if
 
 		updateFirstDataItem()
+      if pDeltaY < 0 then
+         scrollChildren(-1)
+      else
+         scrollChildren(1)
+      end if
+
       updateChildren()
+
 		updateScrollbar(mViewWidth, mViewHeight, mDataHeight, mViewTopPosition)
 
 		redraw all
@@ -247,52 +275,222 @@ private handler updateFirstDataItem()
 end handler
 
 private handler updateParameters() returns nothing
-	put the number of elements in mDataList into mDataCount
-   log mDataCount
-	put mRowHeight * mDataCount into mDataHeight
-   log mDataHeight
 	put my height into mViewHeight
 	put my width into mViewWidth
 
-	ensureViewTopPosition()
-	updateFirstDataItem()
+   put mRowHeight *  mLineCount into mDataHeight
 
-   log mViewTopPosition
-   log mFirstDataItem
+   ensureViewTopPosition()
+   updateFirstDataItem()
+
+   updateViewCount(the floor of (mViewHeight / mRowHeight))
 
    updateChildren()
 
 	// Calculate scrollbar dimensions
 	updateScrollbar(mViewWidth, mViewHeight, mDataHeight, mViewTopPosition)
 
-   log mScrollbarHeight
-
 	put false into mRecalculate
 end handler
 
 private handler updateChildren() returns nothing
-   // Iterate from the first data item setting the rects of the widget lines
+   --Iterate from the first data item setting the rects and annotations of the widget lines
    variable tTop as Number
    variable tX as Number
-   put 0 into tTop
-   repeat with tX from mFirstDataItem up to the number of elements in mDataList
-      set the rectangle of mDataList[tX] to rectangle [0, tTop, mViewWidth - kScrollbarWidth - 10, tTop + mRowHeight]
-      if tTop > mViewHeight then
-         exit repeat
-      end if
-      add mRowHeight to tTop
+   repeat with tX from 1 up to mViewCount
+      put (tX - 1) * mRowHeight into tTop
+      set the rectangle of mWidgetList[tX] to rectangle [0, tTop, mViewWidth - kScrollbarWidth - 10, tTop + mRowHeight]
+      set annotation "Display Index" of mWidgetList[tX] to tX
    end repeat
 end handler
+
+-- Move the bottom widget to the top, or top to the bottom, and set the properties accordingly
+-- Assumes the 'first data item' has already been updated
+private handler scrollChildren(in pAmount as Number) returns nothing
+
+   variable tRepeatCount as Number
+   put the abs of pAmount into tRepeatCount
+
+   -- Just set all the properties if the repeat count is sufficiently high
+   if tRepeatCount > mViewCount / 2 then
+      updateProperties(1, mViewCount)
+      return
+   end if
+
+   variable tUp as Boolean
+   put pAmount < 0 into tUp
+
+   repeat tRepeatCount times
+      variable tWidget as Widget
+      variable tDataNum as Number
+      if tUp then
+         pop back of mWidgetList into tWidget
+         push tWidget onto front of mWidgetList
+         put mFirstDataItem into tDataNum
+      else
+         pop front of mWidgetList into tWidget
+         push tWidget onto back of mWidgetList
+         put mFirstDataItem + mViewCount - 1 into tDataNum
+      end if
+
+      variable tProperty as String
+      repeat for each key tProperty in mLineProperties[tDataNum]
+         set property tProperty of tWidget to mLineProperties[tDataNum][tProperty]
+      end repeat
+   end repeat
+
+end handler
+
+private handler updateProperties(in pDisplayFrom as Number, in pDisplayTo as Number) returns nothing
+   variable tDataNum as Number
+   repeat with tDataNum from pDisplayFrom up to pDisplayTo
+      variable tProperty as String
+      repeat for each key tProperty in mLineProperties[tDataNum + mFirstDataItem - 1]
+         set property tProperty of mWidgetList[tDataNum] to mLineProperties[tDataNum + mFirstDataItem - 1][tProperty]
+      end repeat
+   end repeat
+end handler
+
+private handler updateListProperties() returns nothing
+   variable tDataNum as Number
+   repeat with tDataNum from 1 up to mViewCount
+      variable tProperty as String
+      repeat for each key tProperty in mListProperties
+         set property tProperty of mWidgetList[tDataNum] to mListProperties[tProperty]
+      end repeat
+   end repeat
+end handler
+
+-- Update the number of lines being displayed (and create or destroy widgets accordingly)
+private handler updateViewCount(in pViewCount as Number) returns nothing
+   if pViewCount is mViewCount then
+      return
+   end if
+
+   variable tWidgetNum as Number
+   if pViewCount > mViewCount then
+      variable tWidget as Widget
+      repeat with tWidgetNum from mViewCount + 1 up to pViewCount
+         put a new widget mWidgetKind into tWidget
+         set annotation "DisplayIndex" of tWidget to tWidgetNum
+         place tWidget
+         push tWidget onto mWidgetList
+      end repeat
+      updateProperties(mViewCount + 1, pViewCount)
+   else
+      repeat with tWidgetNum from pViewCount + 1 up to mViewCount
+         unplace mWidgetList[tWidgetNum]
+         delete element pViewCount + 1 to mViewCount of mWidgetList
+      end repeat
+   end if
+
+   put pViewCount into mViewCount
+end handler
+
+--------------------------------------------------------------------------------
+--
+--		Properties
+--
+--------------------------------------------------------------------------------
+
+private handler listToArray(in pList as List) returns Array
+	variable tCount
+	variable tArray
+	put the empty array into tArray
+
+	variable tKey as String
+	repeat with tCount from 1 up to the number of elements in pList
+		put tCount formatted as string into tKey
+      put the empty array into tArray[tKey]
+		variable tProperty as String
+		repeat for each key tProperty in pList[tCount]
+			put pList[tCount][tProperty] into tArray[tKey][tProperty]
+		end repeat
+	end repeat
+	return tArray
+end handler
+
+private handler getLineProperties() returns Array
+	return listToArray(mLineProperties)
+end handler
+
+private handler setLineProperties(in pArray as Array)
+
+   variable tList as List
+   put the empty list into tList
+
+   variable tListNum as Number
+   repeat with tListNum from 1 up to mLineCount
+         push the empty array onto tList
+   end repeat
+
+   variable tKey
+   variable tNumericKey as Number
+   repeat for each key tKey in pArray
+      put tKey parsed as number into tNumericKey
+      if 0 < tNumericKey and tNumericKey <= mLineCount then
+            put pArray[tKey] into element tNumericKey of tList
+      end if
+   end repeat
+
+   put tList into mLineProperties
+   updateProperties(1, mLineCount)
+   redraw all
+end handler
+
+private handler setListProperties(in pArray as Array)
+   put pArray into mListProperties
+   updateListProperties()
+   redraw all
+end handler
+
+private handler setWidgetKind(in pKind as String) returns nothing
+   if pKind is mWidgetKind then
+      return
+   end if
+
+   variable tWidget as Widget
+   repeat for each element tWidget in mWidgetList
+      unplace tWidget
+   end repeat
+   put the empty list into mWidgetList
+   put pKind into mWidgetKind
+
+   put 0 into mViewCount
+   -- Empty all the property data when the widget kind changes
+   setLineProperties(the empty array)
+   put the empty array into mListProperties
+   put true into mRecalculate
+   redraw all
+end handler
+
+private handler setDataCount(in pCount as Number)
+   if pCount is mLineCount then
+      return
+   end if
+
+   if pCount > mLineCount then
+      put pCount into mLineCount
+      setLineProperties(mLineProperties)
+   else
+      delete element pCount to mLineCount  of mLineProperties
+      put pCount into mLineCount
+   end if
+
+   put true into mRecalculate
+   redraw all
+end handler
+
   --------------------------------------------------------------------------------
   --
   --		Scrollbar
-  --		In the future, a scrollbar will be a widget in its own right
-  --		and included as a component of scrollable widgets.
   --
   --------------------------------------------------------------------------------
 
+  private variable mScrollbar as Widget
+  private variable mScrollbarRect as Rectangle
+
   private variable mScrollbarHeight as Real
-  private variable mScrollbarPath as Path
   private variable mScrollbarY as Real
 
   // Drag related
@@ -302,33 +500,18 @@ end handler
 
   constant kScrollbarWidth is 5
 
-  // Will be the scrollbar's OnCreate handler
-  public handler initialiseScrollbar()
-  	put 0 into mScrollbarHeight
-  	put false into mDragging
-  end handler
+public handler initialiseScrollbar()
+   put false into mDragging
+   put a new widget "com.livecode.widget.scrollbar" into mScrollbar
+   set annotation "Name" of mScrollbar to "Scrollbar"
+   place mScrollbar
+end handler
 
-  // Will be the scrollbar's OnPaint handler
-  public handler paintScrollbar(in pCanvas as Canvas, in pPaint as Paint)
-  	// Draw scrollbar if there is any need
-  	if mScrollbarHeight > 0 then
-  		set the paint of pCanvas to pPaint
-  		fill mScrollbarPath on pCanvas
-  	end if
-  end handler
-
-  // Will be the scrollbar's OnMouseDown handler
-  public handler checkScrollbarMouseDown()
+  public handler scrollbarMouseDown()
   	if mScrollbarHeight > 0 then
   		put the mouse position into mDragStartLoc
-
-  		variable tScrollbarRect as Rectangle
-  		put the bounding box of mScrollbarPath into tScrollbarRect
-
-  		if mDragStartLoc is within tScrollbarRect then
-  			put true into mDragging
-  			put the y of mDragStartLoc - the top of tScrollbarRect into mDragScrollbarOffset
-  		end if
+        put true into mDragging
+        put the y of mDragStartLoc - the top of mScrollbarRect into mDragScrollbarOffset
   	end if
   end handler
 
@@ -351,6 +534,7 @@ end handler
 
   	if tScrollbarRatio >= 1 or tScrollbarRatio <= 0 then
   		put 0 into mScrollbarHeight
+      set property "isVisible" of mScrollbar to false
   	else
   		put pViewHeight * tScrollbarRatio into tScrollbarHeight
 
@@ -363,20 +547,22 @@ end handler
   		variable tScrollbarY as Real
   		put scrollbarYFromView(pViewHeight, pDataHeight, pTopPosition) into tScrollbarY
 
-  		variable tRect as Rectangle
-  		put rectangle [pViewWidth - 10, 0, pViewWidth - 10 + kScrollbarWidth, mScrollbarHeight] into tRect
-  		put rounded rectangle path of tRect with radius 3 into mScrollbarPath
+  		put rectangle [pViewWidth - 10, 0, pViewWidth - 10 + kScrollbarWidth, mScrollbarHeight] into mScrollbarRect
 
   		put 0 into mScrollbarY
   		setScrollbarY(tScrollbarY)
+      set property "isVisible" of mScrollbar to true
   	end if
   end handler
 
   private handler setScrollbarY(in pScrollbarY as Real)
   	variable tScrollbarMove as Real
   	put pScrollbarY - mScrollbarY into tScrollbarMove
-  	translate mScrollbarPath by [0, tScrollbarMove]
   	put pScrollbarY into mScrollbarY
+   put rectangle [the left of mScrollbarRect, the top of mScrollbarRect + tScrollbarMove,the right of mScrollbarRect, the bottom of mScrollbarRect + tScrollbarMove] into mScrollbarRect
+   set the rectangle of mScrollbar to mScrollbarRect
+   log mScrollbarRect
+   redraw all
   end handler
 
   private handler scrollbarDrag(in pViewHeight as Real)

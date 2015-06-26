@@ -1,0 +1,53 @@
+/*
+Copyright (C) 2015 Runtime Revolution Ltd.
+
+This file is part of LiveCode.
+
+LiveCode is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License v3 as published by the Free
+Software Foundation.
+
+LiveCode is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
+
+/*
+A widget to display fontawesome icons
+*/
+
+widget com.livecode.widget.iconPopup
+
+use com.livecode.canvas
+use com.livecode.widget
+use com.livecode.engine
+
+private variable mSelected as optional String
+property selectedIcon get mSelected
+
+public handler OnCreate()
+end handler
+
+public handler OnPaint()
+	variable tPath as Path
+	put rectangle path of my bounds into tPath
+	set the paint of this canvas to solid paint with color [0,0,0]
+	stroke tPath on this canvas
+end handler
+
+public handler OnClick()
+	variable tProps as Array
+	put the empty array into tProps
+	put false into tProps["showFrameBorder"]
+	
+	popup widget "com.livecode.widget.iconPicker" at the mouse position with properties tProps
+	
+		if the result is defined then
+			put the result into mSelected
+		end if
+end handler
+
+end widget

@@ -1,0 +1,85 @@
+/*
+Copyright (C) 2015 Runtime Revolution Ltd.
+
+This file is part of LiveCode.
+
+LiveCode is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License v3 as published by the Free
+Software Foundation.
+
+LiveCode is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
+
+
+widget com.livecode.widget.progressItem
+
+use com.livecode.canvas
+use com.livecode.widget
+
+metadata title is "Progress List Item"
+metadata author is "LiveCode"
+metadata version is "1.0.0"
+
+private variable mTitleString as String
+private variable mTotalSteps as String
+private variable mStepsComplete as String
+private variable mBadgeLabel as String
+private variable mBadge as Widget
+private variable mProgressBar as Widget
+
+public handler OnCreate()
+   put "Create the calculator user interface" into mTitleString
+   put "15" into mTotalSteps
+   put "3" into mStepsComplete
+   put "Resume" into mBadgeLabel
+
+   put a new widget "com.livecode.widget.badge" into mBadge
+   set property "badgeLabel" of mBadge to mBadgeLabel
+   set property "badgeColor" of mBadge to "234,126,0"
+   set property "badgeTextColor" of mBadge to "255,255,255"
+   place mBadge
+
+   put a new widget "com.livecode.widget.progressBar" into mProgressBar
+   place mProgressBar
+end handler
+
+public handler OnPaint()
+   variable tWidth as Real
+   variable tHeight as Real
+   put my width into tWidth
+   put my height into tHeight
+
+   variable tRect as Rectangle
+   put rectangle [10, 10, tWidth * 2 / 3, tHeight / 2 - 10] into tRect
+   set the font of this canvas to getFont("title")
+   fill text mTitleString at left of tRect on this canvas
+
+   set the rectangle of mProgressBar to rectangle [10, tHeight / 2 + 5, 50, tHeight / 2 + 10]
+   set property "progressRatio" of mProgressBar to (mStepsComplete parsed as number) / (mTotalSteps parsed as number)
+
+   set the rectangle of mBadge to rectangle [tWidth - 80, 10, tWidth - 10, tHeight - 10]
+
+   put rectangle [70, tHeight / 2,  tWidth * 2 / 3, tHeight / 2 + 15] into tRect
+   set the font of this canvas to getFont("subtitle")
+   fill text (mStepsComplete & "/" & mTotalSteps && "steps complete") at left of tRect on this canvas
+end handler
+
+private handler getFont(in pType as String) returns Font
+	variable tFont as Font
+	put the font of this canvas into tFont
+
+	if pType is "title" then
+		set the size of tFont to 20
+	else if pType is "subtitle" then
+		set the size of tFont to 12
+	end if
+
+	return tFont
+end handler
+
+end widget
