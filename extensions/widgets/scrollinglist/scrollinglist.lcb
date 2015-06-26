@@ -362,6 +362,8 @@ private handler updateProperties(in pDisplayFrom as Number, in pDisplayTo as Num
    repeat with tDataNum from pDisplayFrom up to pDisplayTo
       variable tProperty as String
       repeat for each key tProperty in mLineProperties[tDataNum + mFirstDataItem - 1]
+         log ("Setting property" && tProperty && "of widget" && (tDataNum formatted as string))
+         log mLineProperties[tDataNum + mFirstDataItem - 1][tProperty]
          set property tProperty of mWidgetList[tDataNum] to mLineProperties[tDataNum + mFirstDataItem - 1][tProperty]
       end repeat
    end repeat
