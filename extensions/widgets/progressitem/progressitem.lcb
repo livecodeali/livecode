@@ -88,24 +88,41 @@ public handler OnPaint()
    end if
 
    -- Set progress bar rect
+   variable tSubtitleLeft as Number
    if mShowProgress then
       set the rectangle of mProgressBar to rectangle [10, tHeight / 2 + 5, 50, tHeight / 2 + 10]
-   end if
-
-   -- Set button rect
-   if mShowButton then
-      set the rectangle of mButton to rectangle [tWidth - 100, 10, tWidth - 30, tHeight - 10]
+      put 70 into tSubtitleLeft
+   else
+      put 10 into tSubtitleLeft
    end if
 
    -- Draw subtitle string
    if mSubtitleString is not "" then
-      put rectangle [70, tHeight / 2,  tWidth * 2 / 3, tHeight / 2 + 15] into tRect
+      put rectangle [tSubtitleLeft, tHeight / 2,  tWidth * 2 / 3, tHeight / 2 + 15] into tRect
       set the font of this canvas to getFont("subtitle")
       fill text mSubtitleString at left of tRect on this canvas
    end if
 
+   -- Draw hint text
+   variable tButtonRight
+   if mHint is not "" then
+      put rectangle [tWidth - 120, tHeight / 2 - 15, tWidth - 30, tHeight / 2 +15] into tRect
+      set the paint of this canvas to getPaint("hint")
+      set the font of this canvas to getFont("hint")
+      fill text mHint at right of tRect on this canvas
+      put tWidth - 130 into tButtonRight
+   else
+      put tWidth - 30 into tButtonRight
+   end if
+
+   -- Set button rect
+   if mShowButton then
+      set the rectangle of mButton to rectangle [tButtonRight - 70, 10, tButtonRight, tHeight - 10]
+   end if
+
    -- Draw next icon
    if mShowNext then
+      set the paint of this canvas to getPaint("hint")
       variable tIconPath as Path
       put path iconSVGPathFromName("angle right") into tIconPath
       put rectangle [tWidth - 20, 10, tWidth - 10, tHeight - 10] into tRect
@@ -123,9 +140,19 @@ private handler getFont(in pType as String) returns Font
 		set the size of tFont to 20
 	else if pType is "subtitle" then
 		set the size of tFont to 12
-	end if
+   else if pType is "hint" then
+      set the size of tFont to 12
+   end if
 
 	return tFont
+end handler
+
+private handler getPaint(in pType as String) returns Paint
+   if pType is "hint" then
+      return solid paint with color [200,200,200]
+   end if
+
+   return solid paint with color [0,0,0]
 end handler
 
 -- Need to work around array values from lcs being strings
