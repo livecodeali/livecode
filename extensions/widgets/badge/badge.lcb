@@ -75,6 +75,7 @@ public handler OnPaint() returns nothing
 	set the paint of this canvas to solid paint with stringToColor(mColor)
 	fill rectangle path of my bounds on this canvas
 
+	set the font of this canvas to getFont("label")
    set the paint of this canvas to solid paint with stringToColor(mTextColor)
    fill text mLabel at center of my bounds on this canvas
 
@@ -85,6 +86,17 @@ public handler OnPaint() returns nothing
       set the paint of this canvas to solid paint with color [0,0,0,0.1]
       fill rectangle path of my bounds on this canvas
    end if
+end handler
+
+private handler getFont(in pType as String) returns Font
+	variable tFont as Font
+	put the font of this canvas into tFont
+
+	if pType is "label" then
+		set the size of tFont to 12
+   end if
+
+	return tFont
 end handler
 
 public handler OnMouseDown() returns nothing

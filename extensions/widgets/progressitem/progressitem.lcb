@@ -82,7 +82,7 @@ public handler OnPaint()
 
    -- Draw title string
    if mTitleString is not "" then
-      put rectangle [10, 10, tWidth * 2 / 3, tHeight / 2 - 10] into tRect
+      put rectangle [10, tHeight / 4, tWidth * 2 / 3, tHeight / 2] into tRect
       set the font of this canvas to getFont("title")
       fill text mTitleString at left of tRect on this canvas
    end if
@@ -90,7 +90,7 @@ public handler OnPaint()
    -- Set progress bar rect
    variable tSubtitleLeft as Number
    if mShowProgress then
-      set the rectangle of mProgressBar to rectangle [10, tHeight / 2 + 5, 50, tHeight / 2 + 10]
+      set the rectangle of mProgressBar to rectangle [10, tHeight / 2 + 10, 50, tHeight / 2 + 15]
       put 70 into tSubtitleLeft
    else
       put 10 into tSubtitleLeft
@@ -98,7 +98,8 @@ public handler OnPaint()
 
    -- Draw subtitle string
    if mSubtitleString is not "" then
-      put rectangle [tSubtitleLeft, tHeight / 2,  tWidth * 2 / 3, tHeight / 2 + 15] into tRect
+      set the paint of this canvas to solid paint with color [139/255,139/255,139/255]
+      put rectangle [tSubtitleLeft, tHeight / 2 + 5,  tWidth * 2 / 3, tHeight / 2 + 20] into tRect
       set the font of this canvas to getFont("subtitle")
       fill text mSubtitleString at left of tRect on this canvas
    end if
@@ -106,6 +107,7 @@ public handler OnPaint()
    -- Draw hint text
    variable tButtonRight
    if mHint is not "" then
+      set the paint of this canvas to solid paint with color [139/255,139/255,139/255]
       put rectangle [tWidth - 120, tHeight / 2 - 15, tWidth - 30, tHeight / 2 +15] into tRect
       set the paint of this canvas to getPaint("hint")
       set the font of this canvas to getFont("hint")
@@ -117,7 +119,7 @@ public handler OnPaint()
 
    -- Set button rect
    if mShowButton then
-      set the rectangle of mButton to rectangle [tButtonRight - 70, 10, tButtonRight, tHeight - 10]
+      set the rectangle of mButton to rectangle [tButtonRight - 70, tHeight / 4 + 5, tButtonRight, 3 * tHeight / 4 - 5]
    end if
 
    -- Draw next icon

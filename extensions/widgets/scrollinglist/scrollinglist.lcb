@@ -64,10 +64,20 @@ private variable mFirstDataItem as Integer
 
 private variable mRecalculate as Boolean
 private variable mHoverRow as Integer
-private variable mDividePaths as List
 
 private variable mWidgetKind as String
 private variable mWidgetList as List
+
+private variable mRowColor as String
+private variable mAlternateRowColor as String
+private variable mHiliteColor as String
+
+private variable mHiliteRow as Number
+
+private variable mDividePaths as List
+private variable mBackgroundRects as List
+
+constant kScrollSpeed is 16
 
 public handler OnSave(out rProperties as Array) returns nothing
    variable tProperties as Array
@@ -107,7 +117,7 @@ public handler OnCreate()
    end repeat
    put 500 into mLineCount
 
-    put 50 into mRowHeight
+    put 64 into mRowHeight
 
     put 0 into mViewHeight
     put 0 into mViewWidth
@@ -116,10 +126,16 @@ public handler OnCreate()
     put 0 into mHoverRow
     put 0 into mViewTopPosition
 
+    put 1 into mHiliteRow
+
     put "com.livecode.widget.progressItem" into mWidgetKind
 
     initialiseScrollbar()
     put true into mRecalculate
+
+    put "255,255,255" into mAlternateRowColor
+    put "247,247,247" into mRowColor
+    put "47,165,198" into mHiliteColor
 end handler
 
 public handler OnPaint() returns nothing
@@ -129,12 +145,26 @@ public handler OnPaint() returns nothing
 	end if
 
    variable tX as Integer
+   variable tTop as Real
 	repeat with tX from 1 up to mViewCount
       -- Draw the divides
       set the opacity of this canvas to 1
       set the paint of this canvas to solid paint with color [0, 0, 0, 0.2]
       set the stroke width of this canvas to 0
       stroke mDividePaths[tX] on this canvas
+
+      -- draw the background colors
+      if mFirstDataItem + tX - 1 is mHiliteRow then
+         -- This is the selected row
+         set the paint of this canvas to getPaint("selectedrow")
+      else if (mFirstDataItem + tX - 1) mod 2 is 0 then
+         -- This row should have the main color
+         set the paint of this canvas to getPaint("row")
+      else
+         -- This row should have the alternate color
+         set the paint of this canvas to getPaint("altrow")
+      end if
+      fill rectangle path of mBackgroundRects[tX] on this canvas
 	end repeat
 end handler
 
@@ -144,11 +174,21 @@ end handler
 
 public handler OnMouseEnter()
     if the target is not nothing then
-        log annotation "DisplayIndex" of the target
+       -- log annotation "DisplayIndex" of the target
     end if
 end handler
 
+handler getPaint(in pType as String) returns Paint
+   if pType is "row" then
+      return solid paint with stringToColor(mRowColor)
+   else if pType is "altrow" then
+      return solid paint with stringToColor(mAlternateRowColor)
+   else if pType is "selectedrow" then
+      return solid paint with stringToColor(mHiliteColor)
+   end if
 
+   return solid paint with color [0,0,0]
+end handler
 --------------------------------------------------------------------------------
 --
 --		Mouse events
@@ -180,8 +220,9 @@ public handler OnMouseMove() returns nothing
 
       if mFirstDataItem is not tOldFirstItem then
          scrollChildren(mFirstDataItem - tOldFirstItem)
-         updateChildren()
       end if
+
+      updateChildren()
 
 		updateScrollbar(mViewWidth, mViewHeight, mDataHeight, mViewTopPosition)
 		redraw all
@@ -216,33 +257,26 @@ end handler
 
 public handler OnMouseScroll(in pDeltaX as Real, in pDeltaY as Real) returns nothing
 	if mViewHeight < mDataHeight then
-		variable tOldTop as Real
-		put mViewTopPosition into tOldTop
+      variable tOldFirstItem as Number
+      put mFirstDataItem into tOldFirstItem
 
-		if pDeltaY < 0 then
-			subtract mRowHeight from mViewTopPosition
-		else
-			add mRowHeight to mViewTopPosition
-		end if
+      if pDeltaY > 0 then
+         add kScrollSpeed to mViewTopPosition
+      else
+         subtract kScrollSpeed from mViewTopPosition
+      end if
 
 		ensureViewTopPosition()
+      updateFirstDataItem()
 
-		// If nothing changed, don't update anything
-		if mViewTopPosition is tOldTop then
-			return
+		// If nothing changed, don't update
+		if mFirstDataItem is not tOldFirstItem then
+         scrollChildren(mFirstDataItem - tOldFirstItem)
 		end if
-
-		updateFirstDataItem()
-      if pDeltaY < 0 then
-         scrollChildren(-1)
-      else
-         scrollChildren(1)
-      end if
 
       updateChildren()
 
 		updateScrollbar(mViewWidth, mViewHeight, mDataHeight, mViewTopPosition)
-
 		redraw all
     end if
 end handler
@@ -308,15 +342,17 @@ private handler updateChildren() returns nothing
    variable tTopOffset
    put mViewTopPosition mod mRowHeight into tTopOffset
    subtract tTopOffset from tTop
-   log tTopOffset
    variable tX as Number
-
    put [] into mDividePaths
+   put [] into mBackgroundRects
+   variable tRect as Rectangle
    repeat with tX from 1 up to mViewCount
-      put (tX - 1) * mRowHeight into tTop
-      set the rectangle of mWidgetList[tX] to rectangle [0.5, tTop + 1, mViewWidth - 0.5, tTop + mRowHeight - 1]
-      push line path from point [0.5, tTop] to point [mViewWidth - 0.5, tTop] onto mDividePaths
+      put rectangle [0.5, tTop + 1, mViewWidth - 0.5, tTop + mRowHeight] into tRect
+      set the rectangle of mWidgetList[tX] to tRect
+      push tRect onto mBackgroundRects
+      push line path from point [0.5, tTop + 0.5] to point [mViewWidth - 0.5, tTop + 0.5] onto mDividePaths
       set annotation "Display Index" of mWidgetList[tX] to tX
+      add mRowHeight to tTop
    end repeat
 end handler
 
@@ -354,7 +390,6 @@ private handler scrollChildren(in pAmount as Number) returns nothing
          set property tProperty of tWidget to mLineProperties[tDataNum][tProperty]
       end repeat
    end repeat
-
 end handler
 
 private handler updateProperties(in pDisplayFrom as Number, in pDisplayTo as Number) returns nothing
@@ -398,10 +433,9 @@ private handler updateViewCount(in pViewCount as Number) returns nothing
    else
       repeat with tWidgetNum from pViewCount + 1 up to mViewCount
          unplace mWidgetList[tWidgetNum]
-         delete element pViewCount + 1 to mViewCount of mWidgetList
       end repeat
+      delete element pViewCount + 1 to mViewCount of mWidgetList
    end if
-
    put pViewCount into mViewCount
 end handler
 
@@ -579,7 +613,6 @@ end handler
   	put pScrollbarY into mScrollbarY
    put rectangle [the left of mScrollbarRect, the top of mScrollbarRect + tScrollbarMove,the right of mScrollbarRect, the bottom of mScrollbarRect + tScrollbarMove] into mScrollbarRect
    set the rectangle of mScrollbar to mScrollbarRect
-   log mScrollbarRect
    redraw all
   end handler
 
