@@ -1,0 +1,133 @@
+/*
+Copyright (C) 2014-2015 Runtime Revolution Ltd.
+
+This file is part of LiveCode.
+
+LiveCode is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License v3 as published by the Free
+Software Foundation.
+
+LiveCode is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
+
+/*
+Used by the tutorial management system to display progress of different courses.
+Simple wrapper of the listWidget widget
+*/
+widget com.livecode.widget.progressList
+
+use com.livecode.canvas
+use com.livecode.widget
+
+metadata title is "Progress List"
+metadata author is "LiveCode"
+metadata version is "1.0.0"
+metadata preferredSize is "320,320"
+
+property showNextIcon   get mShowNext     set setShowNext
+property showButton     get mShowButton      set setShowButton
+
+property borders   get getBorders    set   setBorders
+metadata borders.editor is "com.livecode.pi.border"
+metadata borders.default is "left,top,right,bottom"
+
+-- Per-line property setting
+property lineProperties    get getLineProperties      set setLineProperties
+
+private variable mList as Widget
+
+private variable mShowNext as Boolean
+private variable mShowButton as Boolean
+
+public handler OnCreate()
+  put a new widget "com.livecode.widget.listWidget" into mList
+  set property "lineWidget" of mList to "com.livecode.widget.progressItem"
+  place mList
+  set the rectangle of mList to my bounds
+end handler
+
+public handler OnPaint()
+   -- does nothing
+end handler
+
+public handler OnGeometryChanged()
+  set the rectangle of mList to my bounds
+  redraw all
+end handler
+
+handler defaultPropsArray() returns Array
+   variable tArray as Array
+   put the empty array into tArray
+   put "" into tArray["title"]
+   put "" into tArray["subtitle"]
+   put "" into tArray["showProgress"]
+   put 0 into tArray["progressRatio"]
+   put "" into tArray["hintText"]
+   put "" into tArray["buttonLabel"]
+   put "" into tArray["buttonColor"]
+   put "" into tArray["buttonTextColor"]
+   put "" into tArray["buttonTextSize"]
+   return tArray
+end handler
+
+handler setShowNext(in pShow as Boolean)
+   variable tArray as Array
+   put property "listProperties" of mList into tArray
+   put pShow into tArray["showNextIcon"]
+   set property "listProperties" of  mList to tArray
+end handler
+
+handler setShowButton(in pShow as Boolean)
+   variable tArray as Array
+   put property "listProperties" of mList into tArray
+   put pShow into tArray["showButton"]
+   set property "listProperties" of  mList to tArray
+end handler
+
+handler setLineProperties(in pProperties as Array)
+   set property "lineProperties" of mList to buildLineProperties(pProperties)
+end handler
+
+handler buildLineProperties(in pExisting as Array) returns Array
+   variable tArray as Array
+   put defaultPropsArray() into tArray
+
+   variable tLineProps as Array
+   put the empty array into tLineProps
+
+   variable tKey as String
+   variable tProp as String
+   repeat for each key tKey in pExisting
+      put the empty array into tLineProps[tKey]
+      repeat for each key tProp in tArray
+         if tProp is among the keys of pExisting[tKey] then
+            put pExisting[tKey][tProp] into tLineProps[tKey][tProp]
+         else
+            put tArray[tProp] into tLineProps[tKey][tProp]
+         end if
+      end repeat
+   end repeat
+   return tLineProps
+end handler
+
+handler getLineProperties()
+   variable tProps as Array
+   put property "lineProperties" of mList into tProps
+
+   return buildLineProperties(tProps)
+end handler
+
+handler getBorders() returns String
+   return property "borders" of mList
+end handler
+
+handler setBorders(in pBorders as String) returns nothing
+   set property "borders" of mList to pBorders
+end handler
+
+end widget

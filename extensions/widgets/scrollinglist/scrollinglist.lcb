@@ -115,13 +115,13 @@ public handler OnCreate()
 
     variable tIconList as List
     put iconList() into tIconList
-   repeat with tWidgetNum from 1 up to 500
+   repeat with tWidgetNum from 1 up to 20
       put "Label" && tWidgetNum formatted as string into tArray["label"]
       put element (((tWidgetNum - 1) mod (the number of elements in tIconList)) + 1) of tIconList into tArray["icon_name"]
       put tArray into tProperties["navData"]
       push tProperties onto mLineProperties
    end repeat
-   put 500 into mLineCount
+   put 20 into mLineCount
 
     put 64 into mRowHeight
 
@@ -651,6 +651,7 @@ handler setBorders(in pBorders as String) returns nothing
    end repeat
 
    put tBorders into mBorders
+   updateChildren()
    redraw all
 end handler
 

@@ -145,7 +145,7 @@ public handler OnPaint()
       set the paint of this canvas to getPaint("hint")
       variable tIconPath as Path
       put path iconSVGPathFromName("angle right") into tIconPath
-      put rectangle [tWidth + 10 - kPadding / 2, 10, tWidth - kPadding / 2, tHeight - 10] into tRect
+      put rectangle [tWidth - 10 - kPadding / 2, 10, tWidth - kPadding / 2, tHeight - 10] into tRect
 
       setIconPath(tRect, tIconPath)
       fill tIconPath on this canvas
@@ -203,22 +203,25 @@ handler OnMouseUp() returns nothing
    end if
 end handler
 
-handler setShowProgress(in pShow as Boolean) returns nothing
-   if pShow is mShowProgress then
+-- Need to work around array values from lcs being strings
+handler setShowProgress(in pShow as String) returns nothing
+   variable tShow as Boolean
+   put pShow parsed as boolean into tShow
+   if tShow is mShowProgress then
       return
    end if
 
-   if pShow then
+   if tShow then
       place mProgressBar
    else
       unplace mProgressBar
    end if
-   put pShow into mShowProgress
+   put tShow into mShowProgress
    redraw all
 end handler
 
-handler setShowNext(in pShow as Boolean) returns nothing
-   put pShow into mShowNext
+handler setShowNext(in pShow as String) returns nothing
+   put pShow parsed as boolean into mShowNext
    redraw all
 end handler
 
@@ -245,17 +248,19 @@ handler setProgressRatio(in pProgress as Real)
       set property "progressRatio" of mProgressBar to pProgress
 end handler
 
-handler setShowButton(in pShow as Boolean) returns nothing
-   if pShow is mShowButton then
+handler setShowButton(in pShow as String) returns nothing
+   variable tShow as Boolean
+   put pShow parsed as boolean into tShow
+   if tShow is mShowButton then
       return
    end if
 
-   if pShow then
+   if tShow then
       place mButton
    else
       unplace mButton
    end if
-   put pShow into mShowButton
+   put tShow into mShowButton
    redraw all
 end handler
 
