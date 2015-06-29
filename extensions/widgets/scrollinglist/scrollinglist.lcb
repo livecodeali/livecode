@@ -30,6 +30,10 @@ property lineWidget     get mWidgetKind      set setWidgetKind
 metadata lineWidget.editor is "com.livecode.pi.enum"
 metadata lineWidget.options is "execute:get the loadedExtensions; sort it"
 
+property borders   get getBorders    set   setBorders
+metadata borders.editor is "com.livecode.pi.border"
+metadata borders.default is "left,top,right,bottom"
+
 -- Per-line property setting
 property lineProperties    get getLineProperties      set setLineProperties
 
@@ -76,6 +80,7 @@ private variable mHiliteRow as Number
 
 private variable mDividePaths as List
 private variable mBackgroundRects as List
+private variable mBorders as List
 
 constant kScrollSpeed is 16
 
@@ -100,6 +105,7 @@ public handler OnCreate()
     put [] into mLineProperties
     put [] into mWidgetList
     put [] into mDividePaths
+    put the empty array into mListProperties
 
     variable tWidgetNum as Number
     variable tArray as Array
@@ -128,6 +134,8 @@ public handler OnCreate()
 
     put 1 into mHiliteRow
 
+    put [true,true,true,true] into mBorders
+
     put "com.livecode.widget.progressItem" into mWidgetKind
 
     initialiseScrollbar()
@@ -147,17 +155,11 @@ public handler OnPaint() returns nothing
    variable tX as Integer
    variable tTop as Real
 	repeat with tX from 1 up to mViewCount
-      -- Draw the divides
-      set the opacity of this canvas to 1
-      set the paint of this canvas to solid paint with color [0, 0, 0, 0.2]
-      set the stroke width of this canvas to 0
-      stroke mDividePaths[tX] on this canvas
-
       -- draw the background colors
       if mFirstDataItem + tX - 1 is mHiliteRow then
          -- This is the selected row
          set the paint of this canvas to getPaint("selectedrow")
-      else if (mFirstDataItem + tX - 1) mod 2 is 0 then
+      else if (mFirstDataItem + tX - 1) mod 2 is 1 then
          -- This row should have the main color
          set the paint of this canvas to getPaint("row")
       else
@@ -166,6 +168,33 @@ public handler OnPaint() returns nothing
       end if
       fill rectangle path of mBackgroundRects[tX] on this canvas
 	end repeat
+
+   repeat with tX from 1 up to mViewCount - 1
+      -- Draw the divides
+      set the opacity of this canvas to 1
+      set the paint of this canvas to getPaint("divide")
+      set the stroke width of this canvas to 0
+      stroke mDividePaths[tX] on this canvas
+   end repeat
+
+   -- Draw borders
+   set the paint of this canvas to getPaint("border")
+   set the stroke width of this canvas to 0
+    if mBorders[1] then
+      stroke getBorder("left") on this canvas
+   end if
+
+   if mBorders[2] then
+     stroke getBorder("top") on this canvas
+  end if
+
+  if mBorders[3] then
+    stroke getBorder("right") on this canvas
+  end if
+
+   if mBorders[4] then
+      stroke getBorder("bottom") on this canvas
+   end if
 end handler
 
 public handler OnGeometryChanged()
@@ -185,9 +214,25 @@ handler getPaint(in pType as String) returns Paint
       return solid paint with stringToColor(mAlternateRowColor)
    else if pType is "selectedrow" then
       return solid paint with stringToColor(mHiliteColor)
+   else if pType is "border" then
+      return solid paint with color [0,0,0,0.2]
+   else if pType is "divide" then
+      return solid paint with color [0,0,0,0.4]
    end if
 
    return solid paint with color [0,0,0]
+end handler
+
+handler getBorder(in pWhich as String) returns Path
+      if pWhich is "left" then
+         return line path from point [0.5, 0.5] to point [0.5, my height - 0.5]
+      else if pWhich is "top" then
+         return line path from point [0.5, 0.5] to point [my width - 0.5, 0.5]
+      else if pWhich is "right" then
+         return line path from point [my width - 0.5, 0.5] to point [my width - 0.5, my height - 0.5]
+      else if pWhich is "bottom" then
+         return line path from point [0.5, my height - 0.5] to point [my width - 0.5, my height - 0.5]
+      end if
 end handler
 --------------------------------------------------------------------------------
 --
@@ -249,6 +294,26 @@ end handler
 
 public handler OnMouseUp() returns nothing
 	scrollbarMouseUp()
+
+   variable tClicked as optional Number
+   if the target is not nothing then
+      put annotation "DisplayIndex" of the target into tClicked
+      if tClicked is not nothing then
+         -- whatever happens, the existing hilite should be cleared
+         set property "onLight" of mWidgetList[mHiliteRow - mFirstDataItem + 1] to "true"
+         set property "selected" of mWidgetList[mHiliteRow - mFirstDataItem + 1] to "false"
+         variable tIndex as Number
+            put mFirstDataItem + tClicked - 1 into tIndex
+            if mHiliteRow is tIndex then
+               put 0 into mHiliteRow
+            else
+               put tIndex into mHiliteRow
+               set property "onLight" of mWidgetList[tClicked] to "false"
+               set property "selected" of mWidgetList[tClicked] to "true"
+            end if
+            redraw all
+      end if
+   end if
 end handler
 
 public handler OnMouseCancel() returns nothing
@@ -350,8 +415,15 @@ private handler updateChildren() returns nothing
       put rectangle [0.5, tTop + 1, mViewWidth - 0.5, tTop + mRowHeight] into tRect
       set the rectangle of mWidgetList[tX] to tRect
       push tRect onto mBackgroundRects
-      push line path from point [0.5, tTop + 0.5] to point [mViewWidth - 0.5, tTop + 0.5] onto mDividePaths
+      if tX is not 1 then
+         push line path from point [0.5, tTop + 0.5] to point [mViewWidth - 0.5, tTop + 0.5] onto mDividePaths
+      end if
       set annotation "Display Index" of mWidgetList[tX] to tX
+      if (tX + mFirstDataItem - 1) is mHiliteRow then
+         set property "onLight" of mWidgetList[tX] to "false"
+      else
+         set property "onLight" of mWidgetList[tX] to "true"
+      end if
       add mRowHeight to tTop
    end repeat
 end handler
@@ -530,6 +602,55 @@ private handler setDataCount(in pCount as Number)
    end if
 
    put true into mRecalculate
+   redraw all
+end handler
+
+handler getBorders() returns String
+   variable tBorders as List
+   put [] into tBorders
+
+   if mBorders[1] then
+      push "left" onto tBorders
+   end if
+
+   if mBorders[2] then
+      push "top" onto tBorders
+   end if
+
+   if mBorders[3] then
+      push "right" onto tBorders
+   end if
+
+   if mBorders[4] then
+      push "bottom" onto tBorders
+   end if
+
+   variable tBorderString as String
+   combine tBorders with "," into tBorderString
+   return tBorderString
+end handler
+
+handler setBorders(in pBorders as String) returns nothing
+   variable tBorderList as List
+   split pBorders by "," into tBorderList
+
+   variable tBorders as List
+   put [false,false,false,false] into tBorders
+
+   variable tBorder as String
+   repeat for each element tBorder in tBorderList
+      if tBorder is "left" then
+         put true into tBorders[1]
+      else if tBorder is "top" then
+         put true into tBorders[2]
+      else if tBorder is "right" then
+         put true into tBorders[3]
+      else if tBorder is "bottom" then
+         put true into tBorders[4]
+      end if
+   end repeat
+
+   put tBorders into mBorders
    redraw all
 end handler
 

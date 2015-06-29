@@ -38,6 +38,8 @@ property buttonLabel    get getButtonLabel     set setButtonLabel
 property buttonColor    get getButtonColor      set setButtonColor
 property buttonTextColor    get getButtonTextColor      set setButtonTextColor
 
+property onLight     get getOnLight    set setOnLight
+
 private variable mShowProgress as Boolean
 private variable mProgressBar as Widget
 
@@ -51,6 +53,10 @@ private variable mSubtitleString as String
 private variable mShowButton as Boolean
 private variable mButton as Widget
 
+private variable mOnLight as Boolean
+
+constant kPadding is 16
+
 public handler OnCreate()
    put "Create the calculator user interface" into mTitleString
    put "3/15 steps complete" into mSubtitleString
@@ -63,13 +69,25 @@ public handler OnCreate()
 
    put a new widget "com.livecode.widget.badge" into mButton
    set property "badgeLabel" of mButton to "Resume"
-   set property "badgeColor" of mButton to "234,126,0"
+   set property "badgeColor" of mButton to "249,146,18"
    set property "badgeTextColor" of mButton to "255,255,255"
+   set property "badgeTextSize" of mButton to 14
+
+   set annotation "Name" of mButton to "Button"
+
    place mButton
 
    put a new widget "com.livecode.widget.progressBar" into mProgressBar
+   set property "mainColor" of mProgressBar to "55,165,196"
+   set property "altColor" of mProgressBar to "215,237,243"
+   set property "onLight" of mProgressBar to true
    set property "progressRatio" of mProgressBar to 3/15
+
+   set annotation "Name" of mProgressBar to "Progress"
+
    place mProgressBar
+
+   put true into mOnLight
 end handler
 
 public handler OnPaint()
@@ -82,7 +100,8 @@ public handler OnPaint()
 
    -- Draw title string
    if mTitleString is not "" then
-      put rectangle [10, tHeight / 4, tWidth * 2 / 3, tHeight / 2] into tRect
+      put rectangle [kPadding, tHeight / 4, tWidth * 2 / 3, tHeight / 2] into tRect
+      set the paint of this canvas to getPaint("title")
       set the font of this canvas to getFont("title")
       fill text mTitleString at left of tRect on this canvas
    end if
@@ -90,16 +109,16 @@ public handler OnPaint()
    -- Set progress bar rect
    variable tSubtitleLeft as Number
    if mShowProgress then
-      set the rectangle of mProgressBar to rectangle [10, tHeight / 2 + 10, 50, tHeight / 2 + 15]
-      put 70 into tSubtitleLeft
+      set the rectangle of mProgressBar to rectangle [kPadding, tHeight / 2 + 10, kPadding + 53, tHeight / 2 + 15]
+      put kPadding + 60 into tSubtitleLeft
    else
-      put 10 into tSubtitleLeft
+      put kPadding into tSubtitleLeft
    end if
 
    -- Draw subtitle string
    if mSubtitleString is not "" then
-      set the paint of this canvas to solid paint with color [139/255,139/255,139/255]
       put rectangle [tSubtitleLeft, tHeight / 2 + 5,  tWidth * 2 / 3, tHeight / 2 + 20] into tRect
+      set the paint of this canvas to getPaint("subtitle")
       set the font of this canvas to getFont("subtitle")
       fill text mSubtitleString at left of tRect on this canvas
    end if
@@ -107,7 +126,6 @@ public handler OnPaint()
    -- Draw hint text
    variable tButtonRight
    if mHint is not "" then
-      set the paint of this canvas to solid paint with color [139/255,139/255,139/255]
       put rectangle [tWidth - 120, tHeight / 2 - 15, tWidth - 30, tHeight / 2 +15] into tRect
       set the paint of this canvas to getPaint("hint")
       set the font of this canvas to getFont("hint")
@@ -118,7 +136,7 @@ public handler OnPaint()
    end if
 
    -- Set button rect
-   if mShowButton then
+   if mShowButton and not mShowNext then
       set the rectangle of mButton to rectangle [tButtonRight - 70, tHeight / 4 + 5, tButtonRight, 3 * tHeight / 4 - 5]
    end if
 
@@ -127,7 +145,7 @@ public handler OnPaint()
       set the paint of this canvas to getPaint("hint")
       variable tIconPath as Path
       put path iconSVGPathFromName("angle right") into tIconPath
-      put rectangle [tWidth - 20, 10, tWidth - 10, tHeight - 10] into tRect
+      put rectangle [tWidth + 10 - kPadding / 2, 10, tWidth - kPadding / 2, tHeight - 10] into tRect
 
       setIconPath(tRect, tIconPath)
       fill tIconPath on this canvas
@@ -139,7 +157,7 @@ private handler getFont(in pType as String) returns Font
 	put the font of this canvas into tFont
 
 	if pType is "title" then
-		set the size of tFont to 20
+		set the size of tFont to 18
 	else if pType is "subtitle" then
 		set the size of tFont to 12
    else if pType is "hint" then
@@ -150,32 +168,57 @@ private handler getFont(in pType as String) returns Font
 end handler
 
 private handler getPaint(in pType as String) returns Paint
-   if pType is "hint" then
-      return solid paint with color [200,200,200]
+   if pType is "title" then
+      if mOnLight then
+         return solid paint with color [0,0,0]
+      else
+         return solid paint with color [1,1,1]
+      end if
+   else if pType is "subtitle" then
+      if mOnLight then
+         return solid paint with color [0,0,0,0.6]
+      else
+         return solid paint with color [1,1,1,0.6]
+      end if
+   else if pType is "hint" then
+      if mOnLight then
+         return solid paint with color [0,0,0,0.6]
+      else
+         return solid paint with color [1,1,1,0.6]
+      end if
    end if
 
    return solid paint with color [0,0,0]
 end handler
 
--- Need to work around array values from lcs being strings
-handler setShowProgress(in pShow as String) returns nothing
-   variable tShow as Boolean
-   put pShow parsed as boolean into tShow
-   if tShow is mShowProgress then
+handler OnMouseUp() returns nothing
+   if the target is not nothing then
+      variable tName as optional String
+      put annotation "Name" of the target into tName
+      if tName is not nothing then
+         if tName is "Button" then
+         -- post message
+         end if
+      end if
+   end if
+end handler
+
+handler setShowProgress(in pShow as Boolean) returns nothing
+   if pShow is mShowProgress then
       return
    end if
 
-   if tShow then
+   if pShow then
       place mProgressBar
    else
       unplace mProgressBar
    end if
-   put tShow into mShowProgress
+   put pShow into mShowProgress
    redraw all
 end handler
 
-handler setShowNext(in pShow as String) returns nothing
-   put pShow parsed as boolean into mShowNext
+handler setShowNext(in pShow as Boolean) returns nothing
+   put pShow into mShowNext
    redraw all
 end handler
 
@@ -202,19 +245,17 @@ handler setProgressRatio(in pProgress as Real)
       set property "progressRatio" of mProgressBar to pProgress
 end handler
 
-handler setShowButton(in pShow as String) returns nothing
-   variable tShow as Boolean
-   put pShow parsed as boolean into tShow
-   if tShow is mShowButton then
+handler setShowButton(in pShow as Boolean) returns nothing
+   if pShow is mShowButton then
       return
    end if
 
-   if tShow then
+   if pShow then
       place mButton
    else
       unplace mButton
    end if
-   put tShow into mShowButton
+   put pShow into mShowButton
    redraw all
 end handler
 
@@ -240,6 +281,28 @@ end handler
 
 handler setButtonTextColor(in pColor as String)
       set property "badgeTextColor" of mButton to pColor
+end handler
+
+handler setSelected(in pSelected as String)
+   variable tSelected as Boolean
+   put pSelected parsed as boolean into tSelected
+   if tSelected then
+      set property "badgeColor" of mButton to "255,255,255"
+      set property "badgeTextColor" of mButton to "0,0,0"
+   else
+      set property "badgeColor" of mButton to "249,146,18"
+      set property "badgeTextColor" of mButton to "255,255,255"
+   end if
+end handler
+
+handler setOnLight(in pLight as String)
+      put pLight parsed as boolean into mOnLight
+      set property "onLight" of mProgressBar to mOnLight
+      redraw all
+end handler
+
+handler getOnLight() returns String
+      return mOnLight formatted as string
 end handler
 
 private handler setIconPath(in pTargetRect as Rectangle, inout xPath as Path)
@@ -282,6 +345,36 @@ private handler setIconPath(in pTargetRect as Rectangle, inout xPath as Path)
 	divide tYDiff by 2
 
 	translate xPath by [tXTranslate + tXDiff, tYTranslate + tYDiff]
+end handler
+
+-- this handler converts a string of numbers to an RGBA color
+private handler stringToColor(in pString as String) returns Color
+  variable tRed as Real
+  variable tGreen as Real
+  variable tBlue as Real
+  variable tAlpha as Real
+
+  variable tComponentList as List
+  split pString by "," into tComponentList
+
+  variable tComponentCount
+  put the number of elements in tComponentList into tComponentCount
+  if tComponentCount is not 3 and tComponentCount is not 4 then
+      // Invalid number of components detected
+      throw "Invalid color"
+  end if
+
+  put (element 1 of tComponentList) parsed as number into tRed
+  put (element 2 of tComponentList) parsed as number into tGreen
+  put (element 3 of tComponentList) parsed as number into tBlue
+
+  if tComponentCount is 4 then
+      put (element 4 of tComponentList) parsed as number into tAlpha
+  else
+      put 255 into tAlpha
+  end if
+
+  return color [ tRed/255, tGreen/255, tBlue/255, tAlpha/255 ]
 end handler
 
 end widget

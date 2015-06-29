@@ -74,7 +74,7 @@ public handler OnPaint()
    put my height into tHeight
 
    if mOnLight then
-      set the paint of this canvas to solid paint with color [0,0,0,0.2]
+      set the paint of this canvas to solid paint with color [0,0,0,0.16]
       fill rectangle path of my bounds on this canvas
 
       set the paint of this canvas to solid paint with stringToColor(mColor)
