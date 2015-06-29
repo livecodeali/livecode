@@ -107,7 +107,7 @@ public handler OnCreate()
     put [] into mDividePaths
     put the empty array into mListProperties
 
-   put 20 into mLineCount
+   put 0 into mLineCount
 
     put 64 into mRowHeight
 
@@ -375,7 +375,7 @@ private handler updateParameters() returns nothing
    ensureViewTopPosition()
    updateFirstDataItem()
 
-   updateViewCount(the ceiling of (mViewHeight / mRowHeight))
+   updateViewCount(the minimum of mLineCount and the ceiling of (mViewHeight / mRowHeight))
 
    updateChildren()
 
@@ -451,6 +451,12 @@ private handler scrollChildren(in pAmount as Number) returns nothing
 end handler
 
 private handler updateProperties(in pDisplayFrom as Number, in pDisplayTo as Number) returns nothing
+   if pDisplayFrom > mViewCount then
+      return
+   end if
+
+   put the minimum of mViewCount and pDisplayTo into pDisplayTo
+
    variable tDataNum as Number
    repeat with tDataNum from pDisplayFrom up to pDisplayTo
       variable tProperty as String
@@ -463,6 +469,10 @@ private handler updateProperties(in pDisplayFrom as Number, in pDisplayTo as Num
 end handler
 
 private handler updateListProperties() returns nothing
+   if mViewCount is 0 then
+      return
+   end if
+
    variable tDataNum as Number
    repeat with tDataNum from 1 up to mViewCount
       variable tProperty as String
@@ -584,9 +594,11 @@ private handler setDataCount(in pCount as Number)
 
    if pCount > mLineCount then
       put pCount into mLineCount
-      setLineProperties(mLineProperties)
+      repeat pCount - mLineCount times
+         push the empty array onto mLineProperties
+      end repeat
    else
-      delete element pCount to mLineCount  of mLineProperties
+      delete element pCount to mLineCount of mLineProperties
       put pCount into mLineCount
    end if
 

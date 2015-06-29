@@ -49,18 +49,15 @@ public handler OnCreate()
   set property "lineWidget" of mList to "com.livecode.widget.progressItem"
   place mList
   set the rectangle of mList to my bounds
+  set property "lineCount" of mList to 5
 
-  variable tLineProps as List
-  variable tLine as Array
-  put the empty array into tLine
-  repeat 5 times
-     put defaultPropsArray() into tLine
-     put "Title" into tLine["title"]
-     put "Subtitle" into tLine["subtitle"]
-     put "true" into tLine["showProgress"]
-     put "Start" into tLine["buttonLabel"]
-     put ""
+  variable tLineProps as Array
+  put the empty array into tLineProps
+  variable tItemNum as Number
+  repeat with tItemNum from 1 up to 5
+     put defaultPropsArray() into tLineProps[tItemNum formatted as string]
   end repeat
+  set property "lineProperties" of mList to tLineProps
 
    put false into mShowNext
    put true into mShowButton
@@ -78,14 +75,14 @@ end handler
 handler defaultPropsArray() returns Array
    variable tArray as Array
    put the empty array into tArray
-   put "" into tArray["title"]
-   put "" into tArray["subtitle"]
-   put "" into tArray["showProgress"]
+   put "Title" into tArray["title"]
+   put "Subtitle" into tArray["subtitle"]
+   put "true" into tArray["showProgress"]
    put 0 into tArray["progressRatio"]
    put "" into tArray["hintText"]
-   put "" into tArray["buttonLabel"]
-   put "" into tArray["buttonColor"]
-   put "" into tArray["buttonTextColor"]
+   put "Start" into tArray["buttonLabel"]
+   put "249,146,18" into tArray["buttonColor"]
+   put "255,255,255" into tArray["buttonTextColor"]
    put 14 into tArray["buttonTextSize"]
    return tArray
 end handler
@@ -128,6 +125,11 @@ handler buildLineProperties(in pExisting as Array) returns Array
             put pExisting[tKey][tProp] into tLineProps[tKey][tProp]
          else
             put tArray[tProp] into tLineProps[tKey][tProp]
+         end if
+
+         -- Work around for numeric properties coming in from LCS as strings.
+         if tProp is "progressRatio" or tProp is "buttonTextSize" then
+            put tLineProps[tKey][tProp] parsed as number into tLineProps[tKey][tProp]
          end if
       end repeat
    end repeat

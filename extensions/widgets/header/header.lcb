@@ -272,7 +272,7 @@ public handler OnSave(out rProperties as Array)
    put mActionColor into rProperties["actionColor"]
    put mShowSearchIcon into rProperties["showSearchIcon"]
 
-   return rProperties
+   return rProperties 
 end handler
 
 public handler OnLoad(in pProperties as Array)
