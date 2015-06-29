@@ -49,6 +49,21 @@ public handler OnCreate()
   set property "lineWidget" of mList to "com.livecode.widget.progressItem"
   place mList
   set the rectangle of mList to my bounds
+
+  variable tLineProps as List
+  variable tLine as Array
+  put the empty array into tLine
+  repeat 5 times
+     put defaultPropsArray() into tLine
+     put "Title" into tLine["title"]
+     put "Subtitle" into tLine["subtitle"]
+     put "true" into tLine["showProgress"]
+     put "Start" into tLine["buttonLabel"]
+     put ""
+  end repeat
+
+   put false into mShowNext
+   put true into mShowButton
 end handler
 
 public handler OnPaint()
@@ -71,22 +86,26 @@ handler defaultPropsArray() returns Array
    put "" into tArray["buttonLabel"]
    put "" into tArray["buttonColor"]
    put "" into tArray["buttonTextColor"]
-   put "" into tArray["buttonTextSize"]
+   put 14 into tArray["buttonTextSize"]
    return tArray
 end handler
 
 handler setShowNext(in pShow as Boolean)
    variable tArray as Array
    put property "listProperties" of mList into tArray
-   put pShow into tArray["showNextIcon"]
+   put pShow formatted as string into tArray["showNextIcon"]
    set property "listProperties" of  mList to tArray
+   put pShow into mShowNext
+   redraw all
 end handler
 
 handler setShowButton(in pShow as Boolean)
    variable tArray as Array
    put property "listProperties" of mList into tArray
-   put pShow into tArray["showButton"]
+   put pShow formatted as string into tArray["showButton"]
    set property "listProperties" of  mList to tArray
+   put pShow into mShowButton
+   redraw all
 end handler
 
 handler setLineProperties(in pProperties as Array)
@@ -115,7 +134,7 @@ handler buildLineProperties(in pExisting as Array) returns Array
    return tLineProps
 end handler
 
-handler getLineProperties()
+handler getLineProperties() returns Array
    variable tProps as Array
    put property "lineProperties" of mList into tProps
 

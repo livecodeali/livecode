@@ -107,20 +107,6 @@ public handler OnCreate()
     put [] into mDividePaths
     put the empty array into mListProperties
 
-    variable tWidgetNum as Number
-    variable tArray as Array
-    put the empty array into tArray
-    variable tProperties as Array
-    put the empty array into tProperties
-
-    variable tIconList as List
-    put iconList() into tIconList
-   repeat with tWidgetNum from 1 up to 20
-      put "Label" && tWidgetNum formatted as string into tArray["label"]
-      put element (((tWidgetNum - 1) mod (the number of elements in tIconList)) + 1) of tIconList into tArray["icon_name"]
-      put tArray into tProperties["navData"]
-      push tProperties onto mLineProperties
-   end repeat
    put 20 into mLineCount
 
     put 64 into mRowHeight
@@ -563,7 +549,10 @@ private handler setLineProperties(in pArray as Array)
 end handler
 
 private handler setListProperties(in pArray as Array)
-   put pArray into mListProperties
+   variable tProp as String
+   repeat for each key tProp in pArray
+      put pArray[tProp] into mListProperties[tProp]
+   end repeat
    updateListProperties()
    redraw all
 end handler
