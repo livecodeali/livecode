@@ -1,0 +1,305 @@
+/*
+Copyright (C) 2014-2015 Runtime Revolution Ltd.
+
+This file is part of LiveCode.
+
+LiveCode is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License v3 as published by the Free
+Software Foundation.
+
+LiveCode is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
+
+/*
+Used by the tutorial management system to display progress of different courses.
+Simple wrapper of the listWidget widget
+*/
+widget com.livecode.widget.progressList
+
+use com.livecode.canvas
+use com.livecode.widget
+
+metadata title is "Progress List"
+metadata author is "LiveCode"
+metadata version is "1.0.0"
+metadata preferredSize is "320,320"
+
+-- Per-line property setting
+property lineProperties    get getLineProperties      set setLineProperties
+metadata lineProperties.user_visible is "false"
+
+-- Set properties of lines and lineCount at the same times
+property lineData    get getLineData      set setLineData
+
+property lineCount      get getLineCount     set setLineCount
+
+property lineSelected      get getSelectedLine     set setSelectedLine
+
+property primaryColor   get getPrimaryColor    set setPrimaryColor
+metadata primaryColor.editor is "com.livecode.pi.color"
+
+property showNextIcon   get getShowNext     set setShowNext
+
+property showButton     get getShowButton      set setShowButton
+property buttonTextSize    get getButtonTextSize      set setButtonTextSize
+property buttonColor    get getButtonColor     set setButtonColor
+metadata buttonColor.editor is "com.livecode.pi.color"
+
+property buttonSelectedColor    get getButtonSelectedColor     set setButtonSelectedColor
+metadata buttonSelectedColor.editor is "com.livecode.pi.color"
+
+property buttonTextColor    get getButtonTextColor     set setButtonTextColor
+metadata buttonTextColor.editor is "com.livecode.pi.color"
+
+property buttonSelectedTextColor    get getButtonSelectedTextColor     set setButtonSelectedTextColor
+metadata buttonSelectedTextColor.editor is "com.livecode.pi.color"
+
+property borders   get getBorders    set   setBorders
+metadata borders.editor is "com.livecode.pi.border"
+metadata borders.default is "left,top,right,bottom"
+
+private variable mList as Widget
+
+public handler OnCreate()
+  put a new widget "com.livecode.widget.listWidget" into mList
+  set property "lineWidget" of mList to "com.livecode.widget.progressItem"
+  place mList
+  set the rectangle of mList to my bounds
+
+  variable tArray as Array
+  put the empty array into tArray
+  put "249,146,18" into tArray["buttonColor"]
+  put "255,255,255" into tArray["buttonTextColor"]
+  put "255,255,255" into tArray["buttonSelectedColor"]
+  put "0,0,0" into tArray["buttonSelectedTextColor"]
+  put 14 into tArray["buttonTextSize"]
+  put "false" into tArray["showNextIcon"]
+  put "true" into tArray["showButton"]
+  set property "listProperties" of mList to tArray
+end handler
+
+public handler OnSave(out rProperties as Array)
+   put property "widgetProperties" of mList into rProperties["properties"]
+end handler
+
+public handler OnLoad(in pProperties as Array)
+   set property "widgetProperties" of mList to pProperties["properties"]
+end handler
+
+public handler OnPaint()
+   -- does nothing
+end handler
+
+public handler OnGeometryChanged()
+  set the rectangle of mList to my bounds
+  redraw all
+end handler
+
+public handler OnButtonClicked(in pLine as Number, in pLabel as String)
+   post "lineActionClicked" with [pLine, pLabel]
+end handler
+
+public handler OnLineSelected(in pLine as Number)
+   post "lineSelected" with [pLine]
+end handler
+
+handler defaultPropsArray() returns Array
+   variable tArray as Array
+   put the empty array into tArray
+   put "Title" into tArray["title"]
+   put "Subtitle" into tArray["subtitle"]
+   put "true" into tArray["showProgress"]
+   put 0 into tArray["progressRatio"]
+   put "" into tArray["hintText"]
+   put "Start" into tArray["buttonLabel"]
+   return tArray
+end handler
+
+handler setListProperty(in pWhich as String, in pValue as any)
+   variable tArray as Array
+   put property "listProperties" of mList into tArray
+   put pValue into tArray[pWhich]
+   set property "listProperties" of  mList to tArray
+end handler
+
+handler getListProperty(in pWhich as String) returns any
+   variable tArray as Array
+   put property "listProperties" of mList into tArray
+   if pWhich is among the keys of tArray then
+      return tArray[pWhich]
+   else
+      return ""
+   end if
+end handler
+
+handler getShowNext() returns Boolean
+   return getListProperty("showNextIcon") parsed as boolean
+end handler
+
+handler setShowNext(in pShow as Boolean)
+   setListProperty("showNextIcon", pShow formatted as string)
+end handler
+
+handler getShowButton() returns Boolean
+   return getListProperty("showButton") parsed as boolean
+end handler
+
+handler setShowButton(in pShow as Boolean)
+   setListProperty("showButton", pShow formatted as string)
+end handler
+
+handler getButtonColor() returns String
+   return getListProperty("buttonColor")
+end handler
+
+handler setButtonColor(in pColor as String)
+   setListProperty("buttonColor", pColor)
+end handler
+
+handler getButtonSelectedColor() returns String
+   return getListProperty("buttonSelectedColor")
+end handler
+
+handler setButtonSelectedColor(in pColor as String)
+   setListProperty("buttonSelectedColor", pColor)
+end handler
+
+handler getButtonTextColor() returns String
+   return getListProperty("buttonTextColor")
+end handler
+
+handler setButtonTextColor(in pColor as String)
+   setListProperty("buttonTextColor", pColor)
+end handler
+
+handler getButtonSelectedTextColor() returns String
+   return getListProperty("buttonSelectedTextColor")
+end handler
+
+handler setButtonSelectedTextColor(in pColor as String)
+   setListProperty("buttonSelectedTextColor", pColor)
+end handler
+
+handler getButtonTextSize() returns Number
+   return getListProperty("buttonTextSize")
+end handler
+
+handler setButtonTextSize(in pSize as Number)
+   setListProperty("buttonTextSize", pSize)
+end handler
+
+handler convertLinePropertyStrings(inout xProperties as Array)
+   variable tKey as String
+   variable tNumericValueAsString as String
+   variable tNumericValue as Number
+   repeat for each key tKey in xProperties
+      -- Work around for numeric properties coming in from LCS as strings.
+      if "progressRatio" is among the keys of xProperties[tKey] and xProperties[tKey]["progressRatio"] is a string then
+         put xProperties[tKey]["progressRatio"] into tNumericValueAsString
+         put tNumericValueAsString parsed as number into tNumericValue
+         put tNumericValue into xProperties[tKey]["progressRatio"]
+      end if
+
+      if "buttonTextSize" is among the keys of xProperties[tKey] and xProperties[tKey]["buttonTextSize"] is a string then
+         put xProperties[tKey]["buttonTextSize"] into tNumericValueAsString
+         put tNumericValueAsString parsed as number into tNumericValue
+         put tNumericValue into xProperties[tKey]["buttonTextSize"]
+      end if
+   end repeat
+end handler
+
+handler setLineProperties(in pProperties as Array)
+   convertLinePropertyStrings(pProperties)
+   set property "lineProperties" of mList to buildLineProperties(pProperties)
+   redraw all
+end handler
+
+handler buildLineProperties(in pExisting as Array) returns Array
+   variable tArray as Array
+   put defaultPropsArray() into tArray
+
+   variable tLineProps as Array
+   put the empty array into tLineProps
+
+   variable tKey as String
+   variable tProp as String
+   repeat for each key tKey in pExisting
+      put the empty array into tLineProps[tKey]
+      repeat for each key tProp in tArray
+         if tProp is among the keys of pExisting[tKey] then
+            put pExisting[tKey][tProp] into tLineProps[tKey][tProp]
+         else
+            put tArray[tProp] into tLineProps[tKey][tProp]
+         end if
+      end repeat
+   end repeat
+   return tLineProps
+end handler
+
+handler getLineProperties() returns Array
+   variable tProps as Array
+   put property "lineProperties" of mList into tProps
+
+   return buildLineProperties(tProps)
+end handler
+
+handler getBorders() returns String
+   return property "borders" of mList
+end handler
+
+handler setBorders(in pBorders as String) returns nothing
+   set property "borders" of mList to pBorders
+end handler
+
+handler setLineCount(in pCount as Number) returns nothing
+   variable tCount as Number
+   put property "lineCount" of mList into tCount
+   set property "lineCount" of mList to pCount
+
+   if pCount > tCount then
+      variable tProps as Array
+      put property "lineData" of mList into tProps
+
+      variable tLine as Number
+      repeat with tLine from tCount + 1 up to pCount
+         put defaultPropsArray() into tProps[tLine formatted as string]
+      end repeat
+      set property "lineProperties" of mList to tProps
+   end if
+end handler
+
+handler getLineCount() returns Number
+   return property "lineCount" of mList
+end handler
+
+handler setLineData(in pArray as Array)
+   convertLinePropertyStrings(pArray)
+   set property "lineData" of mList to pArray
+end handler
+
+handler getLineData() returns Array
+   return getLineProperties()
+end handler
+
+handler setSelectedLine(in pLine as Number) returns nothing
+   set property "lineSelected" of mList to pLine
+end handler
+
+handler getSelectedLine() returns Number
+   return property "lineSelected" of mList
+end handler
+
+handler setPrimaryColor(in pColor as String) returns nothing
+   set property "primaryColor" of mList to pColor
+end handler
+
+handler getPrimaryColor() returns String
+   return property "primaryColor" of mList
+end handler
+
+end widget

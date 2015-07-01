@@ -1,0 +1,43 @@
+/*
+Copyright (C) 2014-2015 Runtime Revolution Ltd.
+
+This file is part of LiveCode.
+
+LiveCode is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License v3 as published by the Free
+Software Foundation.
+
+LiveCode is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
+
+widget com.livecode.widget.scrollbar
+
+use com.livecode.canvas
+use com.livecode.widget
+
+metadata title is "Scrollbar"
+metadata author is "LiveCode"
+metadata version is "1.0.0"
+
+property isVisible   get mVisible   set mVisible
+
+private variable mVisible as Boolean
+
+public handler OnCreate()
+   put false into mVisible
+end handler
+
+public handler OnPaint()
+  // Draw scrollbar if there is any need
+  if mVisible then
+      set the paint of this canvas to solid paint with color [0,0,0,50/255]
+      fill rounded rectangle path of rectangle [0, 0, my width, my height] with radius 3 on this canvas
+  end if
+end handler
+
+end widget
