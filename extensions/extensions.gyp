@@ -43,6 +43,12 @@
 				'widgets/svgpath/svgpath.lcb',
 				'widgets/switchbutton/switchbutton.lcb',
 				'widgets/treeview/treeview.lcb',
+				'widgets/scrollinglist/scrollinglist.lcb',
+				'widgets/scrollbar/scrollbar.lcb',
+				'widgets/progressbarforlist/progressbarforlist.lcb',
+				'widgets/badge/badge.lcb',
+				'widgets/progressitem/progressitem.lcb',
+				'widgets/progresslist/progresslist.lcb',
 			],
 			
 			'all_dependent_settings':
