@@ -1,0 +1,919 @@
+/*
+Copyright (C) 2014-2015 Runtime Revolution Ltd.
+
+This file is part of LiveCode.
+
+LiveCode is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License v3 as published by the Free
+Software Foundation.
+
+LiveCode is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
+
+widget com.livecode.widget.listWidget
+
+use com.livecode.canvas
+use com.livecode.widget
+use com.livecode.library.iconSVG
+
+metadata title is "List Widget"
+metadata author is "LiveCode"
+metadata version is "1.0.0"
+metadata preferredSize is "320,300"
+
+property lineWidget     get mWidgetKind      set setWidgetKind
+metadata lineWidget.editor is "com.livecode.pi.enum"
+metadata lineWidget.options is "execute:get the loadedExtensions; sort it"
+
+property borders   get getBorders    set   setBorders
+metadata borders.editor is "com.livecode.pi.border"
+metadata borders.default is "left,top,right,bottom"
+
+property lineData    get getLineProperties   set setLineData
+
+-- Per-line property setting
+property lineProperties    get getLineProperties      set setLineProperties
+
+property lineCount      get mLineCount    set setLineCount
+
+-- Global child widget property setting
+property listProperties    get mListProperties     set setListProperties
+
+property lineSelected      get mHiliteRow     set setSelectedLine
+
+property primaryColor   get mHiliteColor     set   setHiliteColor
+
+-- For saving and loading in the wrapper
+property widgetProperties  get getProperties    set setProperties
+metadata widgetProperties.user_visible is "false"
+
+// The list of widget properties
+private variable mLineProperties as List
+// The global list properties
+private variable mListProperties as Array
+
+// The total height of the displayed data
+private variable mDataHeight as Real
+// The height of each row
+private variable mRowHeight as Real
+// The number of items in the list
+private variable mLineCount as Number
+
+// The number of lines to be displayed
+private variable mViewCount as Integer
+// The height of the view area
+private variable mViewHeight as Real
+// The width of the view area
+private variable mViewWidth as Real
+
+// The first part of the data being displayed
+private variable mViewTopPosition as Real
+// The index in the display list corresponding the the top of the view
+private variable mFirstDataItem as Integer
+
+private variable mRecalculate as Boolean
+private variable mHoverRow as Integer
+
+private variable mWidgetKind as String
+private variable mWidgetList as List
+
+private variable mRowColor as String
+private variable mAlternateRowColor as String
+private variable mHiliteColor as String
+
+private variable mHiliteRow as Number
+
+private variable mDividePaths as List
+private variable mBackgroundRects as List
+private variable mBorders as List
+
+constant kScrollSpeed is 16
+
+public handler OnSave(out rProperties as Array) returns nothing
+   put getProperties() into rProperties
+end handler
+
+public handler OnLoad(in pProperties as Array) returns nothing
+   setProperties(pProperties)
+end handler
+
+public handler OnCreate()
+    put [] into mLineProperties
+    put [] into mWidgetList
+    put [] into mDividePaths
+    put the empty array into mListProperties
+
+   put 0 into mLineCount
+
+    put 64 into mRowHeight
+
+    put 0 into mViewHeight
+    put 0 into mViewWidth
+    put 0 into mViewCount
+
+    put 0 into mHoverRow
+    put 0 into mViewTopPosition
+    put 1 into mFirstDataItem
+
+    put 0 into mHiliteRow
+
+    put [true,true,true,true] into mBorders
+
+    put "com.livecode.widget.progressItem" into mWidgetKind
+
+    initialiseScrollbar()
+    put true into mRecalculate
+
+    put "255,255,255" into mAlternateRowColor
+    put "247,247,247" into mRowColor
+    put "47,165,198" into mHiliteColor
+end handler
+
+public handler OnPaint() returns nothing
+	// If anything has changed requiring a recalculation, update parameters
+	if mRecalculate then
+		updateParameters()
+	end if
+
+   variable tX as Integer
+   variable tTop as Real
+	repeat with tX from 1 up to mViewCount
+      -- draw the background colors
+      if mFirstDataItem + tX - 1 is mHiliteRow then
+         -- This is the selected row
+         set the paint of this canvas to getPaint("selectedrow")
+      else if (mFirstDataItem + tX - 1) mod 2 is 1 then
+         -- This row should have the main color
+         set the paint of this canvas to getPaint("row")
+      else
+         -- This row should have the alternate color
+         set the paint of this canvas to getPaint("altrow")
+      end if
+      fill rectangle path of mBackgroundRects[tX] on this canvas
+	end repeat
+
+   repeat with tX from 1 up to mViewCount
+      -- Draw the divides
+      set the opacity of this canvas to 1
+      set the paint of this canvas to getPaint("divide")
+      set the stroke width of this canvas to 0
+      stroke mDividePaths[tX] on this canvas
+   end repeat
+
+   -- Draw borders
+   set the paint of this canvas to getPaint("border")
+   set the stroke width of this canvas to 0
+    if mBorders[1] then
+      stroke getBorder("left") on this canvas
+   end if
+
+   if mBorders[2] then
+     stroke getBorder("top") on this canvas
+  end if
+
+  if mBorders[3] then
+    stroke getBorder("right") on this canvas
+  end if
+
+   if mBorders[4] then
+      stroke getBorder("bottom") on this canvas
+   end if
+end handler
+
+public handler OnGeometryChanged()
+   put true into mRecalculate
+end handler
+
+public handler OnMouseEnter()
+    if the target is not nothing then
+       -- log annotation "DisplayIndex" of the target
+    end if
+end handler
+
+handler getPaint(in pType as String) returns Paint
+   if pType is "row" then
+      return solid paint with stringToColor(mRowColor)
+   else if pType is "altrow" then
+      return solid paint with stringToColor(mAlternateRowColor)
+   else if pType is "selectedrow" then
+      return solid paint with stringToColor(mHiliteColor)
+   else if pType is "border" then
+      return solid paint with color [0,0,0,0.2]
+   else if pType is "divide" then
+      return solid paint with color [0,0,0,0.4]
+   end if
+
+   return solid paint with color [0,0,0]
+end handler
+
+handler getBorder(in pWhich as String) returns Path
+      if pWhich is "left" then
+         return line path from point [0.5, 0.5] to point [0.5, my height - 0.5]
+      else if pWhich is "top" then
+         return line path from point [0.5, 0.5] to point [my width - 0.5, 0.5]
+      else if pWhich is "right" then
+         return line path from point [my width - 0.5, 0.5] to point [my width - 0.5, my height - 0.5]
+      else if pWhich is "bottom" then
+         return line path from point [0.5, my height - 0.5] to point [my width - 0.5, my height - 0.5]
+      end if
+end handler
+--------------------------------------------------------------------------------
+--
+--		Mouse events
+--
+--------------------------------------------------------------------------------
+
+public handler OnMouseDown() returns nothing
+	if the target is not nothing then
+      if annotation "Name" of the target is "Scrollbar" then
+	        scrollbarMouseDown()
+       end if
+     end if
+end handler
+
+public handler OnMouseMove() returns nothing
+	if scrollDragging() then
+		variable tScrollPositionRatio as Real
+		scrollbarDrag(mViewHeight)
+		put scrollRatio(mViewHeight) into tScrollPositionRatio
+
+		// Calculate the new top position of list
+		put (mDataHeight - mViewHeight) * tScrollPositionRatio into mViewTopPosition
+
+      put true into mRecalculate
+		redraw all
+	else
+        variable tRedraw as Boolean
+        put false into tRedraw
+		variable tNewHoverRow as Integer
+		put yPosToRowNumber(the y of the mouse position) into tNewHoverRow
+		if mHoverRow is not tNewHoverRow then
+			put tNewHoverRow into mHoverRow
+            put true into tRedraw
+		end if
+
+        if tRedraw then
+            redraw all
+        end if
+	end if
+end handler
+
+public handler OnMouseLeave() returns nothing
+	put 0 into mHoverRow
+	redraw all
+end handler
+
+public handler OnMouseUp() returns nothing
+	scrollbarMouseUp()
+
+   variable tClicked as optional Number
+   if the target is not nothing then
+      put annotation "DisplayIndex" of the target into tClicked
+      if tClicked is not nothing then
+         variable tIndex as Number
+            put mFirstDataItem + tClicked - 1 into tIndex
+            if mHiliteRow is tIndex then
+               setSelectedLine(0)
+            else
+               setSelectedLine(tIndex)
+            end if
+            redraw all
+      end if
+   end if
+end handler
+
+public handler OnMouseCancel() returns nothing
+	scrollbarMouseUp()
+end handler
+
+public handler OnMouseScroll(in pDeltaX as Real, in pDeltaY as Real) returns nothing
+	if mViewHeight < mDataHeight then
+      if pDeltaY > 0 then
+         add kScrollSpeed to mViewTopPosition
+      else
+         subtract kScrollSpeed from mViewTopPosition
+      end if
+      put true into mRecalculate
+		redraw all
+    end if
+end handler
+
+-- Posted from list items
+public handler OnChildMessage(in pMessageName as String, in pParams as List)
+   if the target is not nothing then
+      variable tTarget as optional Number
+      put annotation "DisplayIndex" of the target into tTarget
+      if tTarget is not nothing then
+         push (tTarget + mFirstDataItem - 1) onto front of pParams
+         post pMessageName with pParams
+      end if
+   end if
+end handler
+
+--------------------------------------------------------------------------------
+--
+--		Display calculations
+--
+--------------------------------------------------------------------------------
+
+private handler yPosToRowNumber(in pYPos as Number) returns Integer
+	return the floor of ((mViewTopPosition + pYPos) / mRowHeight + 1)
+end handler
+
+// Clamp mViewTopPosition
+private handler ensureViewTopPosition()
+	variable tMinTop as Real
+	put 0 into tMinTop
+
+	// Make sure we don't try to scroll above 0
+	if mViewTopPosition < tMinTop then
+		put tMinTop into mViewTopPosition
+	// Make sure we don't try to scroll past the last displayable item
+	else if mDataHeight > mViewHeight and mViewTopPosition > mDataHeight - mViewHeight then
+		put mDataHeight - mViewHeight into mViewTopPosition
+	else if mDataHeight < mViewHeight then
+		put tMinTop into mViewTopPosition
+	end if
+end handler
+
+handler updateScroll()
+   variable tOldFirstItem as Number
+   put mFirstDataItem into tOldFirstItem
+
+   ensureViewTopPosition()
+   updateFirstDataItem()
+   updateViewCount()
+
+   if mFirstDataItem is not tOldFirstItem then
+      scrollChildren(mFirstDataItem - tOldFirstItem)
+   end if
+
+   updateChildren()
+
+   updateScrollbar(mViewWidth, mViewHeight, mDataHeight, mViewTopPosition)
+end handler
+
+// Calculate mFirstDataItem from the view position
+private handler updateFirstDataItem()
+	put the floor of (mViewTopPosition / mRowHeight) + 1 into mFirstDataItem
+	if mFirstDataItem < 1 then
+		put 1 into mFirstDataItem
+	end if
+end handler
+
+private handler updateParameters() returns nothing
+	put my height into mViewHeight
+	put my width into mViewWidth
+
+   put mRowHeight *  mLineCount into mDataHeight
+
+   updateScroll()
+
+	put false into mRecalculate
+end handler
+
+--Iterate from the first data item setting the rects and annotations of the visible lines
+private handler updateChildren() returns nothing
+   variable tTop as Real
+   put 0 into tTop
+
+   variable tTopOffset
+   put mViewTopPosition mod mRowHeight into tTopOffset
+   subtract tTopOffset from tTop
+   variable tX as Number
+   put [] into mDividePaths
+   put [] into mBackgroundRects
+
+   -- Only offset the boundary of the children if there is a border
+   variable tOffsets as List
+   put [] into tOffsets
+   variable tElement as Boolean
+   repeat for each element tElement in mBorders
+      if tElement then
+         push 0.5 onto tOffsets
+      else
+         push 0 onto tOffsets
+      end if
+   end repeat
+
+   if mBorders[2] then
+      add tOffsets[2] + 0.5 to tTop
+   end if
+
+   variable tRect as Rectangle
+   repeat with tX from 1 up to mViewCount
+      put rectangle [tOffsets[1], tTop, mViewWidth - tOffsets[3], tTop + mRowHeight] into tRect
+      set the rectangle of mWidgetList[tX] to tRect
+      push tRect onto mBackgroundRects
+      set annotation "Display Index" of mWidgetList[tX] to tX
+      if (tX + mFirstDataItem - 1) is mHiliteRow then
+         set property "onLight" of mWidgetList[tX] to false
+         set property "selected" of mWidgetList[tX] to true
+      else
+         set property "onLight" of mWidgetList[tX] to true
+         set property "selected" of mWidgetList[tX] to false
+      end if
+      add mRowHeight to tTop
+      push line path from point [tOffsets[1], tTop + 0.5] to point [mViewWidth - tOffsets[3], tTop + 0.5] onto mDividePaths
+   end repeat
+end handler
+
+-- Move the bottom widget to the top, or top to the bottom, and set the properties accordingly
+-- Assumes the 'first data item' has already been updated
+private handler scrollChildren(in pAmount as Number) returns nothing
+
+   variable tRepeatCount as Number
+   put the abs of pAmount into tRepeatCount
+
+   -- Just set all the properties if the repeat count is sufficiently high
+   if tRepeatCount > mViewCount / 2 then
+      updateProperties(1, the minimum of mViewCount and mLineCount)
+      return
+   end if
+
+   variable tUp as Boolean
+   put pAmount < 0 into tUp
+
+   repeat tRepeatCount times
+      variable tWidget as Widget
+      variable tDataNum as Number
+      if tUp then
+         pop back of mWidgetList into tWidget
+         push tWidget onto front of mWidgetList
+         put mFirstDataItem into tDataNum
+      else
+         pop front of mWidgetList into tWidget
+         push tWidget onto back of mWidgetList
+         put mFirstDataItem + mViewCount - 1 into tDataNum
+      end if
+
+      variable tProperty as String
+      repeat for each key tProperty in mLineProperties[tDataNum]
+         set property tProperty of tWidget to mLineProperties[tDataNum][tProperty]
+      end repeat
+   end repeat
+end handler
+
+private handler updateProperties(in pDisplayFrom as Number, in pDisplayTo as Number) returns nothing
+   if pDisplayFrom > pDisplayTo then
+      return
+   end if
+
+   variable tDataNum as Number
+   repeat with tDataNum from pDisplayFrom up to pDisplayTo
+      variable tProperty as String
+      repeat for each key tProperty in mLineProperties[tDataNum + mFirstDataItem - 1]
+         set property tProperty of mWidgetList[tDataNum] to mLineProperties[tDataNum + mFirstDataItem - 1][tProperty]
+      end repeat
+   end repeat
+end handler
+
+private handler updateListProperties() returns nothing
+   if mViewCount is 0 then
+      return
+   end if
+
+   variable tDataNum as Number
+   repeat with tDataNum from 1 up to mViewCount
+      variable tProperty as String
+      repeat for each key tProperty in mListProperties
+         set property tProperty of mWidgetList[tDataNum] to mListProperties[tProperty]
+      end repeat
+   end repeat
+end handler
+
+-- Update the number of lines being displayed (and create or destroy widgets accordingly)
+private handler updateViewCount() returns nothing
+   -- The view count is the number of visible widgets,
+   -- i.e. the number that fit in the view space.
+   variable tViewCount as Number
+   put the ceiling of (mViewHeight / mRowHeight) into tViewCount
+   -- Buffer the view by 1 in case we have partial scrolling or partial visibility due to
+   -- the size of the view not being a multiple of the row height
+   add 1 to tViewCount
+   -- We want at most as many widgets as there are lines in the whole list
+   put the minimum of mLineCount and tViewCount into tViewCount
+
+   -- Index of last item in the view must be less than or equal to the line count
+   if mFirstDataItem + tViewCount - 1 > mLineCount then
+      put mLineCount - mFirstDataItem + 1 into tViewCount
+   end if
+
+   if tViewCount is mViewCount then
+      return
+   end if
+   variable tWidgetNum as Number
+   if tViewCount > mViewCount then
+      variable tWidget as Widget
+      repeat with tWidgetNum from mViewCount + 1 up to tViewCount
+         put a new widget mWidgetKind into tWidget
+         set annotation "DisplayIndex" of tWidget to tWidgetNum
+         place tWidget below mScrollbar
+         push tWidget onto mWidgetList
+      end repeat
+      updateProperties(mViewCount + 1, tViewCount)
+      put tViewCount into mViewCount
+      updateListProperties()
+   else
+      repeat with tWidgetNum from tViewCount + 1 up to mViewCount
+         unplace mWidgetList[tWidgetNum]
+      end repeat
+      delete element tViewCount + 1 to mViewCount of mWidgetList
+      put tViewCount into mViewCount
+   end if
+end handler
+
+--------------------------------------------------------------------------------
+--
+--		Properties
+--
+--------------------------------------------------------------------------------
+
+private handler listToArray(in pList as List) returns Array
+	variable tCount
+	variable tArray
+	put the empty array into tArray
+
+	variable tKey as String
+	repeat with tCount from 1 up to the number of elements in pList
+		put tCount formatted as string into tKey
+      put the empty array into tArray[tKey]
+		variable tProperty as String
+		repeat for each key tProperty in pList[tCount]
+			put pList[tCount][tProperty] into tArray[tKey][tProperty]
+		end repeat
+	end repeat
+	return tArray
+end handler
+
+private handler getLineProperties() returns Array
+	return listToArray(mLineProperties)
+end handler
+
+private handler setLineProperties(in pArray as Array)
+
+   variable tList as List
+   put the empty list into tList
+
+   variable tListNum as Number
+   repeat with tListNum from 1 up to mLineCount
+         push the empty array onto tList
+   end repeat
+
+   variable tKey
+   variable tNumericKey as Number
+   repeat for each key tKey in pArray
+      put tKey parsed as number into tNumericKey
+      if 0 < tNumericKey and tNumericKey <= mLineCount then
+            put pArray[tKey] into element tNumericKey of tList
+      end if
+   end repeat
+
+   put tList into mLineProperties
+   updateProperties(1, the minimum of mLineCount and mViewCount)
+   redraw all
+end handler
+
+private handler setListProperties(in pArray as Array)
+   variable tProp as String
+   repeat for each key tProp in pArray
+      put pArray[tProp] into mListProperties[tProp]
+   end repeat
+   updateListProperties()
+   redraw all
+end handler
+
+handler setLineData(in pArray as Array)
+   setLineCount(the number of elements in pArray)
+   put 0 into mHoverRow
+   setLineProperties(pArray)
+   put true into mRecalculate
+end handler
+
+private handler setWidgetKind(in pKind as String) returns nothing
+   if pKind is mWidgetKind then
+      return
+   end if
+
+   variable tWidget as Widget
+   repeat for each element tWidget in mWidgetList
+      unplace tWidget
+   end repeat
+   put the empty list into mWidgetList
+   put pKind into mWidgetKind
+
+   put 0 into mViewCount
+   -- Empty all the property data when the widget kind changes
+   setLineProperties(the empty array)
+   put the empty array into mListProperties
+   put true into mRecalculate
+   redraw all
+end handler
+
+private handler setLineCount(in pCount as Number)
+   if pCount is mLineCount then
+      return
+   end if
+
+   if pCount > mLineCount then
+      repeat pCount - mLineCount times
+         push the empty array onto mLineProperties
+      end repeat
+   else
+      delete element pCount + 1 to mLineCount of mLineProperties
+      if mHiliteRow > pCount then
+         put 0 into mHiliteRow
+      end if
+   end if
+   put pCount into mLineCount
+   put true into mRecalculate
+   redraw all
+end handler
+
+handler getBorders() returns String
+   variable tBorders as List
+   put [] into tBorders
+
+   if mBorders[1] then
+      push "left" onto tBorders
+   end if
+
+   if mBorders[2] then
+      push "top" onto tBorders
+   end if
+
+   if mBorders[3] then
+      push "right" onto tBorders
+   end if
+
+   if mBorders[4] then
+      push "bottom" onto tBorders
+   end if
+
+   variable tBorderString as String
+   combine tBorders with "," into tBorderString
+   return tBorderString
+end handler
+
+handler setBorders(in pBorders as String) returns nothing
+   variable tBorderList as List
+   split pBorders by "," into tBorderList
+
+   variable tBorders as List
+   put [false,false,false,false] into tBorders
+
+   variable tBorder as String
+   repeat for each element tBorder in tBorderList
+      if tBorder is "left" then
+         put true into tBorders[1]
+      else if tBorder is "top" then
+         put true into tBorders[2]
+      else if tBorder is "right" then
+         put true into tBorders[3]
+      else if tBorder is "bottom" then
+         put true into tBorders[4]
+      end if
+   end repeat
+
+   put tBorders into mBorders
+   updateChildren()
+   redraw all
+end handler
+
+handler setSelectedLine(in pLine as Number) returns nothing
+   if pLine is not mHiliteRow then
+      variable tDisplayIndex as Number
+      put mHiliteRow - mFirstDataItem + 1 into tDisplayIndex
+      if tDisplayIndex > 0 and tDisplayIndex <= mViewCount then
+         -- if visible, the existing hilite should be cleared
+         set property "onLight" of mWidgetList[tDisplayIndex] to true
+         set property "selected" of mWidgetList[tDisplayIndex] to false
+      end if
+
+      put pLine - mFirstDataItem + 1 into tDisplayIndex
+      if tDisplayIndex > 0 and tDisplayIndex <= mViewCount then
+         set property "onLight" of mWidgetList[tDisplayIndex] to false
+         set property "selected" of mWidgetList[tDisplayIndex] to true
+      end if
+      put pLine into mHiliteRow
+      post "lineSelected" with [pLine]
+      redraw all
+   end if
+end handler
+
+handler setHiliteColor(in pColor as String)
+   put pColor into mHiliteColor
+   redraw all
+end handler
+
+handler setProperties(in pProperties as Array)
+   put pProperties["lineProperties"] into mLineProperties
+   put pProperties["lineCount"] into mLineCount
+   put pProperties["listProperties"] into mListProperties
+   put pProperties["lineWidget"] into mWidgetKind
+   put pProperties["lineCount"] into mLineCount
+   put pProperties["hiliteColor"] into mHiliteColor
+   put pProperties["borders"] into mBorders
+   put true into mRecalculate
+   redraw all
+end handler
+
+handler getProperties() as Array
+   variable tProperties as Array
+   put the empty array into tProperties
+   put mLineProperties into tProperties["lineProperties"]
+   put mLineCount into tProperties["lineCount"]
+   put mListProperties into tProperties["listProperties"]
+   put mWidgetKind into tProperties["lineWidget"]
+   put mLineCount into tProperties["lineCount"]
+   put mHiliteColor into tProperties["hiliteColor"]
+   put mBorders into tProperties["borders"]
+   return tProperties
+end handler
+
+  --------------------------------------------------------------------------------
+  --
+  --		Scrollbar
+  --
+  --------------------------------------------------------------------------------
+
+  private variable mScrollbar as Widget
+  private variable mScrollbarRect as Rectangle
+
+  private variable mScrollbarHeight as Real
+  private variable mScrollbarY as Real
+
+  // Drag related
+  private variable mDragging as Boolean
+  private variable mDragStartLoc as Point
+  private variable mDragScrollbarOffset as Real
+
+  constant kScrollbarWidth is 5
+
+public handler initialiseScrollbar()
+   put false into mDragging
+   put a new widget "com.livecode.widget.scrollbar" into mScrollbar
+   set annotation "Name" of mScrollbar to "Scrollbar"
+   place mScrollbar
+end handler
+
+  public handler scrollbarMouseDown()
+  	if mScrollbarHeight > 0 then
+  		put the mouse position into mDragStartLoc
+        put true into mDragging
+        put the y of mDragStartLoc - the top of mScrollbarRect into mDragScrollbarOffset
+  	end if
+  end handler
+
+  public handler scrollbarMouseUp()
+  	put false into mDragging
+  end handler
+
+  private handler scrollbarYFromView(in pViewHeight as Real, in pDataHeight as Real, in pTopPosition as Real) returns Real
+  	variable tScrollPositionRatio as Real
+  	put pTopPosition / (pDataHeight - pViewHeight) into tScrollPositionRatio
+  	return (pViewHeight - mScrollbarHeight) * tScrollPositionRatio
+  end handler
+
+  private handler updateScrollbar(in pViewWidth as Real, in pViewHeight as Real, in pDataHeight as Real, in pTopPosition as Real)
+
+  	variable tScrollbarHeight as Real
+  	variable tScrollbarRatio as Real
+
+  	put pViewHeight / pDataHeight into tScrollbarRatio
+
+  	if tScrollbarRatio >= 1 or tScrollbarRatio <= 0 then
+  		put 0 into mScrollbarHeight
+      set property "isVisible" of mScrollbar to false
+  	else
+  		put pViewHeight * tScrollbarRatio into tScrollbarHeight
+
+  		if tScrollbarHeight < 25 then
+  			put 25 into mScrollbarHeight
+  		else
+  			put tScrollbarHeight into mScrollbarHeight
+  		end if
+
+  		variable tScrollbarY as Real
+  		put scrollbarYFromView(pViewHeight, pDataHeight, pTopPosition) into tScrollbarY
+
+  		put rectangle [pViewWidth - 10, 0, pViewWidth - 10 + kScrollbarWidth, mScrollbarHeight] into mScrollbarRect
+
+  		put 0 into mScrollbarY
+  		setScrollbarY(tScrollbarY)
+      set property "isVisible" of mScrollbar to true
+  	end if
+  end handler
+
+  private handler setScrollbarY(in pScrollbarY as Real)
+  	variable tScrollbarMove as Real
+  	put pScrollbarY - mScrollbarY into tScrollbarMove
+  	put pScrollbarY into mScrollbarY
+   put rectangle [the left of mScrollbarRect, the top of mScrollbarRect + tScrollbarMove,the right of mScrollbarRect, the bottom of mScrollbarRect + tScrollbarMove] into mScrollbarRect
+   set the rectangle of mScrollbar to mScrollbarRect
+   redraw all
+  end handler
+
+  private handler scrollbarDrag(in pViewHeight as Real)
+  	// Get the mouse y position
+  	variable tMouseY as Real
+  	put the y of the mouse position into tMouseY
+
+  	if tMouseY < mDragScrollbarOffset then
+  		put mDragScrollbarOffset into tMouseY
+  	else if tMouseY > mViewHeight + mDragScrollbarOffset - mScrollbarHeight then
+  		put mViewHeight + mDragScrollbarOffset - mScrollbarHeight into tMouseY
+  	end if
+
+  	// Set the y of the new middle of the scrollbar
+  	variable tScrollbarY as Real
+  	put tMouseY - mDragScrollbarOffset into tScrollbarY
+  	setScrollbarY(tScrollbarY)
+  end handler
+
+  public handler scrollbarWidth() returns Real
+  	if mScrollbarHeight is 0 then
+  		return 0
+  	end if
+  	return kScrollbarWidth + 10
+  end handler
+
+  private handler scrollbarY() returns Real
+  	return mScrollbarY
+  end handler
+
+  private handler scrollDragging() returns Boolean
+  	return mDragging
+  end handler
+
+  private handler scrollRatio(in pViewHeight as Real)
+  	// Get the scrollbar space
+  	variable tScrollbarSpace as Real
+  	variable tScrollbarSpaceTop as Real
+  	put pViewHeight - mScrollbarHeight into tScrollbarSpace
+
+  	return mScrollbarY / tScrollbarSpace
+  end handler
+
+-- COLOR UTILS
+
+  -- this handler converts a string of numbers to an RGBA color
+  private handler stringToColor(in pString as String) returns Color
+  	variable tRed as Real
+  	variable tGreen as Real
+  	variable tBlue as Real
+  	variable tAlpha as Real
+
+  	variable tComponentList as List
+  	split pString by "," into tComponentList
+
+  	variable tComponentCount
+  	put the number of elements in tComponentList into tComponentCount
+  	if tComponentCount is not 3 and tComponentCount is not 4 then
+  		// Invalid number of components detected
+  		throw "Invalid color"
+  	end if
+
+  	put (element 1 of tComponentList) parsed as number into tRed
+  	put (element 2 of tComponentList) parsed as number into tGreen
+  	put (element 3 of tComponentList) parsed as number into tBlue
+
+  	if tComponentCount is 4 then
+  		put (element 4 of tComponentList) parsed as number into tAlpha
+  	else
+  		put 255 into tAlpha
+  	end if
+
+  	return color [ tRed/255, tGreen/255, tBlue/255, tAlpha/255 ]
+  end handler
+  ----------
+
+  -- this handler converts an RGBA color to a string
+  private handler colorToString(in pColor as Color) returns String
+  	return stripZeros((the rounded of ((the red of pColor) * 255)) formatted as string) & "," & stripZeros((the rounded of ((the green of pColor) * 255)) formatted as string) & "," & stripZeros((the rounded of ((the blue of pColor) * 255)) formatted as string) & "," & stripZeros((the rounded of ((the alpha of pColor) * 255)) formatted as string)
+  end handler
+  ----------
+
+  -- this handler strips the zeros when a integer is formatted as a string
+  private handler stripZeros(in tString as String) returns String
+  	if tString contains "." then
+  		variable tCount as Integer
+  		repeat while ((the last char of tString) is in ".0")
+  			if the last char of tString is "." then
+  				delete the last char of tString
+  				exit repeat
+  			else
+  				delete the last char of tString
+  			end if
+  		end repeat
+  	end if
+  	return tString
+  end handler
+  ----------
+
+end widget
