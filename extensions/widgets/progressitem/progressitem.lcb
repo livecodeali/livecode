@@ -1,0 +1,437 @@
+/*
+Copyright (C) 2015 Runtime Revolution Ltd.
+
+This file is part of LiveCode.
+
+LiveCode is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License v3 as published by the Free
+Software Foundation.
+
+LiveCode is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
+
+
+widget com.livecode.widget.progressItem
+
+use com.livecode.canvas
+use com.livecode.widget
+use com.livecode.library.iconSVG
+
+metadata title is "Progress List Item"
+metadata author is "LiveCode"
+metadata version is "1.0.0"
+
+property showProgress   get mShowProgress    set setShowProgress
+property hintText   get mHint    set setHint
+property showNextIcon   get mShowNext     set setShowNext
+property title get mTitleString     set setTitleString
+property subtitle get mSubtitleString     set setSubtitleString
+property progressRatio    get getProgressRatio     set setProgressRatio
+
+property showButton     get mShowButton      set setShowButton
+property buttonLabel    get getButtonLabel     set setButtonLabel
+property buttonColor    get getButtonColor      set setButtonColor
+property buttonTextColor    get getButtonTextColor      set setButtonTextColor
+property buttonSelectedColor    get getButtonSelectedColor      set setButtonSelectedColor
+property buttonSelectedTextColor    get getButtonSelectedTextColor      set setButtonSelectedTextColor
+property buttonTextSize    get getButtonTextSize      set setButtonTextSize
+
+property onLight     get mOnLight    set setOnLight
+property selected    get mSelected  set setSelected
+
+private variable mShowProgress as Boolean
+private variable mProgressBar as Widget
+
+private variable mHint as String
+
+private variable mShowNext as Boolean
+
+private variable mTitleString as String
+private variable mSubtitleString as String
+
+private variable mShowButton as Boolean
+private variable mButton as Widget
+
+private variable mButtonColor as String
+private variable mButtonTextColor as String
+private variable mButtonSelectedColor as String
+private variable mButtonSelectedTextColor as String
+
+private variable mOnLight as Boolean
+private variable mSelected as Boolean
+
+constant kPadding is 16
+
+public handler OnCreate()
+   put "" into mTitleString
+   put "" into mSubtitleString
+
+   put true into mShowProgress
+   put true into mShowButton
+   put false into mShowNext
+
+   put "" into mHint
+
+   put "255,255,255" into mButtonSelectedColor
+   put "0,0,0" into mButtonSelectedTextColor
+
+   put "249,146,18" into mButtonColor
+   put "255,255,255" into mButtonTextColor
+
+   put a new widget "com.livecode.widget.badge" into mButton
+   set annotation "Name" of mButton to "Button"
+   place mButton
+
+   put a new widget "com.livecode.widget.progressBar" into mProgressBar
+   set annotation "Name" of mProgressBar to "Progress"
+   place mProgressBar
+
+   put true into mOnLight
+   put false into mSelected
+end handler
+
+public handler OnSave(out rProperties as Array)
+   put mShowProgress into rProperties["showProgress"]
+   put mShowNext into rProperties["showNextIcon"]
+   put mShowButton into rProperties["showButton"]
+   put mHint into rProperties["hintText"]
+   put mTitleString into rProperties["title"]
+   put mSubtitleString into rProperties["subtitle"]
+end handler
+
+public handler OnLoad(in pProperties as Array)
+   put pProperties["showProgress"] into mShowProgress
+   put pProperties["showNextIcon"] into mShowNext
+   put pProperties["showButton"] into mShowButton
+   put pProperties["hintText"] into mHint
+   put pProperties["title"] into mTitleString
+   put pProperties["subtitle"] into mSubtitleString
+end handler
+
+public handler OnPaint()
+   variable tWidth as Real
+   variable tHeight as Real
+   put my width into tWidth
+   put my height into tHeight
+
+   variable tRect as Rectangle
+
+   -- Draw title string
+   if mTitleString is not "" then
+      if mSubtitleString is not "" then
+         put rectangle [kPadding, tHeight / 4, tWidth * 2 / 3, tHeight / 2] into tRect
+      else
+         put rectangle [kPadding, 0, tWidth * 2 / 3, tHeight] into tRect
+      end if
+      set the paint of this canvas to getPaint("title")
+      set the font of this canvas to getFont("title")
+      fill text mTitleString at left of tRect on this canvas
+   end if
+
+   -- Set progress bar rect
+   variable tSubtitleLeft as Number
+   if mShowProgress then
+      set the rectangle of mProgressBar to rectangle [kPadding, tHeight / 2 + 10, kPadding + 53, tHeight / 2 + 15]
+      put kPadding + 60 into tSubtitleLeft
+   else
+      put kPadding into tSubtitleLeft
+   end if
+
+   -- Draw subtitle string
+   if mSubtitleString is not "" then
+      put rectangle [tSubtitleLeft, tHeight / 2 + 5,  tWidth * 2 / 3, tHeight / 2 + 20] into tRect
+      set the paint of this canvas to getPaint("subtitle")
+      set the font of this canvas to getFont("subtitle")
+      fill text mSubtitleString at left of tRect on this canvas
+   end if
+
+   -- Draw hint text
+   variable tButtonRight
+   if mHint is not "" then
+      put rectangle [tWidth - 120, tHeight / 2 - 15, tWidth - 30, tHeight / 2 +15] into tRect
+      set the paint of this canvas to getPaint("hint")
+      set the font of this canvas to getFont("hint")
+      fill text mHint at right of tRect on this canvas
+      put tWidth - 130 into tButtonRight
+   else
+      put tWidth - 30 into tButtonRight
+   end if
+
+   -- Set button rect
+   if mShowButton and not mShowNext then
+      set the rectangle of mButton to rectangle [tButtonRight - 70, tHeight / 4 + 5, tButtonRight, 3 * tHeight / 4 - 5]
+   end if
+
+   -- Draw next icon
+   if mShowNext then
+      set the paint of this canvas to getPaint("hint")
+      variable tIconPath as Path
+      put path iconSVGPathFromName("angle right") into tIconPath
+      put rectangle [tWidth - 10 - kPadding / 2, 10, tWidth - kPadding / 2, tHeight - 10] into tRect
+
+      setIconPath(tRect, tIconPath)
+      fill tIconPath on this canvas
+   end if
+end handler
+
+private handler getFont(in pType as String) returns Font
+	variable tFont as Font
+	put the font of this canvas into tFont
+
+	if pType is "title" then
+		set the size of tFont to 18
+	else if pType is "subtitle" then
+		set the size of tFont to 12
+   else if pType is "hint" then
+      set the size of tFont to 12
+   end if
+
+	return tFont
+end handler
+
+private handler getPaint(in pType as String) returns Paint
+   if pType is "title" then
+      if mOnLight then
+         return solid paint with color [0,0,0]
+      else
+         return solid paint with color [1,1,1]
+      end if
+   else if pType is "subtitle" then
+      if mOnLight then
+         return solid paint with color [0,0,0,0.6]
+      else
+         return solid paint with color [1,1,1,0.6]
+      end if
+   else if pType is "hint" then
+      if mOnLight then
+         return solid paint with color [0,0,0,0.6]
+      else
+         return solid paint with color [1,1,1,0.6]
+      end if
+   else if pType is "hint" then
+      if mOnLight then
+         return solid paint with color [0,0,0,0.6]
+      else
+         return solid paint with color [1,1,1,0.6]
+      end if
+   end if
+
+   return solid paint with color [0,0,0]
+end handler
+
+-- posted from badge widget
+public handler OnBadgeClicked(in pLabel as String) returns nothing
+   post "childMessage" with ["buttonClicked", [pLabel]]
+end handler
+
+handler updateColors()
+   if mSelected then
+      set property "badgeColor" of mButton to mButtonSelectedColor
+      set property "badgeTextColor" of mButton to mButtonSelectedTextColor
+   else
+      set property "badgeColor" of mButton to mButtonColor
+      set property "badgeTextColor" of mButton to mButtonTextColor
+   end if
+end handler
+
+-- Need to work around array values from lcs being strings
+handler setShowProgress(in pShow as String) returns nothing
+   variable tShow as Boolean
+   put pShow parsed as boolean into tShow
+   if tShow is mShowProgress then
+      return
+   end if
+
+   if tShow then
+      place mProgressBar
+   else
+      unplace mProgressBar
+   end if
+   put tShow into mShowProgress
+   redraw all
+end handler
+
+handler setShowNext(in pShow as String) returns nothing
+   put pShow parsed as boolean into mShowNext
+   redraw all
+end handler
+
+handler setHint(in pHint as String) returns nothing
+   put pHint into mHint
+   redraw all
+end handler
+
+handler setTitleString(in pTitle as String) returns nothing
+   put pTitle into mTitleString
+   redraw all
+end handler
+
+handler setSubtitleString(in pSubtitle as String) returns nothing
+   put pSubtitle into mSubtitleString
+   redraw all
+end handler
+
+handler getProgressRatio() returns Number
+   return property "progressRatio" of mProgressBar
+end handler
+
+handler setProgressRatio(in pProgress as Number)
+   set property "progressRatio" of mProgressBar to pProgress
+end handler
+
+handler getButtonTextSize() returns Number
+   return property "badgeTextSize" of mButton
+end handler
+
+handler setButtonTextSize(in pSize as Number)
+   set property "badgeTextSize" of mButton to pSize
+end handler
+
+handler setShowButton(in pShow as String) returns nothing
+   variable tShow as Boolean
+   put pShow parsed as boolean into tShow
+   if tShow is mShowButton then
+      return
+   end if
+
+   if tShow then
+      place mButton
+   else
+      unplace mButton
+   end if
+   put tShow into mShowButton
+   redraw all
+end handler
+
+handler getButtonLabel() returns String
+   return property "badgeLabel" of mButton
+end handler
+
+handler setButtonLabel(in pLabel as String)
+      set property "badgeLabel" of mButton to pLabel
+end handler
+
+handler getButtonColor() returns String
+   return mButtonColor
+end handler
+
+handler setButtonColor(in pColor as String)
+   put pColor into mButtonColor
+   updateColors()
+end handler
+
+handler getButtonTextColor() returns String
+   return mButtonTextColor
+end handler
+
+handler setButtonTextColor(in pColor as String)
+   put pColor into mButtonTextColor
+   updateColors()
+end handler
+
+handler getButtonSelectedColor() returns String
+   return mButtonSelectedColor
+end handler
+
+handler setButtonSelectedColor(in pColor as String)
+      put pColor into mButtonSelectedColor
+      updateColors()
+end handler
+
+handler getButtonSelectedTextColor() returns String
+   return mButtonSelectedTextColor
+end handler
+
+handler setButtonSelectedTextColor(in pColor as String)
+   put pColor into mButtonSelectedTextColor
+   updateColors()
+end handler
+
+handler setSelected(in pSelected as Boolean)
+   put pSelected into mSelected
+   updateColors()
+end handler
+
+handler setOnLight(in pLight as Boolean)
+   put pLight into mOnLight
+   set property "onLight" of mProgressBar to pLight
+end handler
+
+private handler setIconPath(in pTargetRect as Rectangle, inout xPath as Path)
+
+	-- Scale the icon
+	variable tBounds
+	put the bounding box of xPath into tBounds
+
+	-- Scale appropriately
+	variable tXScale as Real
+	variable tYScale as Real
+
+	put the width of pTargetRect / the width of tBounds into tXScale
+	put the height of pTargetRect / the height of tBounds into tYScale
+
+	if tXScale > tYScale then
+		put tYScale into tXScale
+	else
+		put tXScale into tYScale
+	end if
+
+   scale xPath by [tXScale, tYScale]
+
+	variable tXTranslate as Real
+	variable tYTranslate as Real
+
+   put the bounding box of xPath into tBounds
+
+	put the left of pTargetRect - the left of tBounds into tXTranslate
+	put the top of pTargetRect - the top of tBounds into tYTranslate
+
+    variable tXDiff as Real
+    variable tYDiff as Real
+
+    put the width of pTargetRect - the width of tBounds into tXDiff
+    put the height of pTargetRect - the height of tBounds into tYDiff
+
+	-- align center
+	divide tXDiff by 2
+	divide tYDiff by 2
+
+	translate xPath by [tXTranslate + tXDiff, tYTranslate + tYDiff]
+end handler
+
+-- this handler converts a string of numbers to an RGBA color
+private handler stringToColor(in pString as String) returns Color
+  variable tRed as Real
+  variable tGreen as Real
+  variable tBlue as Real
+  variable tAlpha as Real
+
+  variable tComponentList as List
+  split pString by "," into tComponentList
+
+  variable tComponentCount
+  put the number of elements in tComponentList into tComponentCount
+  if tComponentCount is not 3 and tComponentCount is not 4 then
+      // Invalid number of components detected
+      throw "Invalid color"
+  end if
+
+  put (element 1 of tComponentList) parsed as number into tRed
+  put (element 2 of tComponentList) parsed as number into tGreen
+  put (element 3 of tComponentList) parsed as number into tBlue
+
+  if tComponentCount is 4 then
+      put (element 4 of tComponentList) parsed as number into tAlpha
+  else
+      put 255 into tAlpha
+  end if
+
+  return color [ tRed/255, tGreen/255, tBlue/255, tAlpha/255 ]
+end handler
+
+end widget

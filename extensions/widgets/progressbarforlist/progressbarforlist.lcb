@@ -1,0 +1,143 @@
+/*
+Copyright (C) 2015 Runtime Revolution Ltd.
+
+This file is part of LiveCode.
+
+LiveCode is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License v3 as published by the Free
+Software Foundation.
+
+LiveCode is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
+
+-- declaring extension as widget, followed by identifier
+widget com.livecode.widget.progressBar
+--
+
+-- adding metadata to ensure extension displays correctly in livecode
+metadata title is "Progress Bar"
+metadata author is "LiveCode"
+metadata version is "1.0.0"
+--
+
+-- dependency declarations
+use com.livecode.canvas
+use com.livecode.widget
+--
+
+-- property declarations
+property progressRatio				get mProgress			set setProgress
+property onLight     get mOnLight      set setOnLight
+property mainColor      get mColor     set setColor
+property altColor      get mHiliteColor     set setHiliteColor
+--
+
+-- private instance variables
+private variable mProgress 			as Number
+private variable mOnLight 			as Boolean
+private variable mColor 			as String
+private variable mHiliteColor    as String
+
+--
+public handler OnSave(out rProperties as Array)
+	put mProgress into rProperties["progress"]
+   put mOnLight into rProperties["onLight"]
+   put mColor into rProperties["color"]
+   put mHiliteColor into rProperties["hilitecolor"]
+
+	return rProperties
+end handler
+
+public handler OnLoad(in pProperties as Array)
+	put pProperties["progress"] into mProgress
+   put pProperties["onLight"] into mOnLight
+   put pProperties["color"] into mColor
+   put pProperties["hilitecolor"] into mColor
+end handler
+
+public handler OnCreate()
+	put 0 into mProgress
+   put true into mOnLight
+   put "88,176,201" into mColor
+   put "215,237,243" into mHiliteColor
+end handler
+
+public handler OnPaint()
+   variable tWidth as Real
+   variable tHeight as Real
+   put my width into tWidth
+   put my height into tHeight
+
+   if mOnLight then
+      set the paint of this canvas to solid paint with color [0,0,0,0.16]
+      fill rectangle path of my bounds on this canvas
+
+      set the paint of this canvas to solid paint with stringToColor(mColor)
+      fill rectangle path of rectangle [0,0,tWidth * mProgress, tHeight] on this canvas
+   else
+      set the paint of this canvas to solid paint with color [1,1,1,0.2]
+      fill rectangle path of my bounds on this canvas
+
+      set the paint of this canvas to solid paint with stringToColor(mHiliteColor)
+      fill rectangle path of rectangle [0,0,tWidth * mProgress, tHeight] on this canvas
+   end if
+end handler
+
+public handler setProgress(in pProgress as Number) returns nothing
+	log "setting progress"
+	log pProgress
+	put pProgress into mProgress
+	redraw all
+end handler
+
+public handler setOnLight(in pOnLight as Boolean) returns nothing
+	put pOnLight into mOnLight
+	redraw all
+end handler
+
+public handler setColor(in pColor as String) returns nothing
+	put pColor into mColor
+	redraw all
+end handler
+
+public handler setHiliteColor(in pColor as String) returns nothing
+	put pColor into mHiliteColor
+	redraw all
+end handler
+
+-- this handler converts a string of numbers to an RGBA color
+private handler stringToColor(in pString as String) returns Color
+  variable tRed as Real
+  variable tGreen as Real
+  variable tBlue as Real
+  variable tAlpha as Real
+
+  variable tComponentList as List
+  split pString by "," into tComponentList
+
+  variable tComponentCount
+  put the number of elements in tComponentList into tComponentCount
+  if tComponentCount is not 3 and tComponentCount is not 4 then
+      // Invalid number of components detected
+      throw "Invalid color"
+  end if
+
+  put (element 1 of tComponentList) parsed as number into tRed
+  put (element 2 of tComponentList) parsed as number into tGreen
+  put (element 3 of tComponentList) parsed as number into tBlue
+
+  if tComponentCount is 4 then
+      put (element 4 of tComponentList) parsed as number into tAlpha
+  else
+      put 255 into tAlpha
+  end if
+
+  return color [ tRed/255, tGreen/255, tBlue/255, tAlpha/255 ]
+end handler
+
+end widget
