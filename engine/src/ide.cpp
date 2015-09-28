@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -319,10 +319,10 @@ bool MCIdeScriptAction::eval_target_range(MCExecContext& ctxt, MCExpression *p_s
     int4 t_end = 0;
     MCField *t_target = nil;
 
-    t_success = ctxt . EvalExprAsInt(p_start, EE_OBJECT_NAN, t_start);
+    t_success = ctxt . EvalExprAsStrictInt(p_start, EE_OBJECT_NAN, t_start);
 
     if (t_success)
-        t_success = ctxt . EvalExprAsInt(p_end, EE_OBJECT_NAN, t_end);
+        t_success = ctxt . EvalExprAsStrictInt(p_end, EE_OBJECT_NAN, t_end);
 
     if (t_success)
         t_success = eval_target(ctxt, p_target, t_target);
@@ -1011,14 +1011,14 @@ static void tokenize(const unsigned char *p_text, uint4 p_length, uint4 p_in_nes
 	if (t_nesting > 0)
 	{
 		while(t_nesting > 0 && t_index < p_length - 1)
-		{
+        {
 			uindex_t t_new_index = t_index;
-			if (t_char == '/' && next_valid_char(p_text, t_new_index) == '*')
+            /*if (t_char == '/' && next_valid_char(p_text, t_new_index) == '*')
 			{
 				t_nesting += 1;
 				t_index = t_new_index;
-			}
-			else if (t_char == '*' && next_valid_char(p_text, t_new_index) == '/')
+            }
+            else */if (t_char == '*' && next_valid_char(p_text, t_new_index) == '/')
 			{
 				t_nesting -= 1;
 				t_index = t_new_index;
@@ -1843,8 +1843,13 @@ void MCIdeScriptReplace::exec_ctxt(MCExecContext & ctxt)
 
         // MW-2014-10-24: [[ Bug 13598 ]] If we are passed (0,0) then treat this as (1,1) - i.e
         //   first char of field.
-        if (t_start_index == 0 && t_end_index == 0)
-            t_start_index = 1, t_end_index = 1;
+        // SN-2014-11-11: [[ Bug 13900 ]] We want to avoid any issue with a 0 start index.
+        //  If we get so, that was given for the first line, and the end index is offset by 1 as well.
+        if (t_start_index == 0)
+        {
+            t_start_index = 1;
+            t_end_index++;
+        }
 
         t_start_index -= 1;
 
@@ -1886,10 +1891,13 @@ void MCIdeScriptReplace::exec_ctxt(MCExecContext & ctxt)
     t_start_index = t_start;
     t_end_index = t_end;
 
-    // MW-2014-10-24: [[ Bug 13598 ]] If we are passed (0,0) then treat this as (1,1) - i.e
-    //   first char of field.
-    if (t_start_index == 0 && t_end_index == 0)
-        t_start_index = 1, t_end_index = 1;
+    // SN-2014-11-11: [[ Bug 13900 ]] We want to avoid any issue with a 0 start index.
+    //  If we get so, that was given for the first line, and the end index is offset by 1 as well.
+    if (t_start_index == 0)
+    {
+        t_start_index = 1;
+        t_end_index++;
+    }
     
     t_start_index -= 1;
 

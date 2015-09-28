@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -16,7 +16,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "core.h"
 
-#include "external.h"
+#include <revolution/external.h>
 
 #include "cefbrowser.h"
 
@@ -513,3 +513,11 @@ bool MCCefWin32Browser::PlatformGetAuthCredentials(bool p_is_proxy, const CefStr
 
 	return t_success;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+// AL-2015-02-17: [[ SB Inclusions ]] Work around problems linking to MCU_ functions from CEF
+#include <stdlib.h>
+#include <stdio.h>
+#include <cstring>
+

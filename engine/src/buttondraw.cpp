@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -375,7 +375,9 @@ void MCButton::draw(MCDC *dc, const MCRectangle& p_dirty, bool p_isolated, bool 
 		Boolean icondrawed = False;
 		
         // SN-2014-08-12: [[ Bug 13155 ]] Don't try to draw the icons if the button has not got any
-		if (icons != NULL && m_icon_gravity != kMCGravityNone)
+        // SN-2014-12-17: [[ Bug 14249 ]] Do not try to draw the curicon if there is no current
+        //  icon (as it may after loading a stack).
+		if (icons != NULL && icons -> curicon && m_icon_gravity != kMCGravityNone)
 		{
 			// MW-2014-06-19: [[ IconGravity ]] Use iconGravity to place the icon.
 			int t_left, t_top, t_right, t_bottom;
@@ -527,14 +529,10 @@ void MCButton::draw(MCDC *dc, const MCRectangle& p_dirty, bool p_isolated, bool 
                 if (IsMacLFAM() && MCmajorosversion >= 0x10A0 && MCaqua
                     && !(flags & F_DISABLED) && isstdbtn && getstyleint(flags) == F_STANDARD
                     && ((state & CS_HILITED) || (state & CS_SHOW_DEFAULT))
-                    && rect.height <= 24 && MCappisactive
-                    && !(MCbuttonstate && MCmousestackptr && MCmousestackptr == getstack()
-                        && MCmousestackptr->getcard()->getmfocused() != nil
-                        && MCmousestackptr->getcard()->getmfocused() != this
-                        && MCmousestackptr->getcard()->getmfocused()->gettype() == CT_BUTTON))
+                    && rect.height <= 24 && MCappisactive)
                     setforeground(dc, DI_BACK, False, True);
-                else
-                    setforeground(dc, DI_FORE, False);
+                // PM-2014-11-26: [[ Bug 14070 ]] [Removed code] Make sure text color in menuButton inverts when hilited
+        
 #endif
 				drawlabel(dc, sx + loff, sy + loff, twidth, shadowrect, line, fontstyle, t_mnemonic);
 
@@ -1719,9 +1717,24 @@ void MCButton::drawstandardbutton(MCDC *dc, MCRectangle &srect)
 				// if the mouse button is down after clicking on a button, don't draw the default button animation
 				MCControl *t_control = MCmousestackptr->getcard()->getmfocused();
 				if (MCbuttonstate && t_control && t_control->gettype() == CT_BUTTON)
-					winfo.state |= WTHEME_STATE_SUPPRESSDEFAULT;
+                {
+                    // FG-2014-11-05: [[ Bugfix 13909 ]]
+                    // Don't suppress the default on OSX Yosemite if it is this
+                    // button being pressed but the mouse is outside the button.
+                    if (rect.x > MCmousex && MCmousex >= rect.x+rect.width
+                              && rect.y > MCmousey && MCmousey >= rect.y+rect.height)
+                        winfo.state |= WTHEME_STATE_SUPPRESSDEFAULT;
+                }
 			}
-			
+	
+            // On Yosemite, the default button theme is only suppressed when the
+            // app is not active.
+            if (getflag(F_DEFAULT) && IsMacLFAM() && MCaqua && MCmajorosversion >= 0x10A0)
+            {
+                winfo.state &= ~WTHEME_STATE_SUPPRESSDEFAULT;
+                winfo.state |= WTHEME_STATE_HASDEFAULT;
+            }
+            
 #ifdef _MACOSX
 			// MW-2010-12-05: [[ Bug 9210 ]] Make sure we disable the default look when the app is
 			//   in the background.
@@ -1736,13 +1749,11 @@ void MCButton::drawstandardbutton(MCDC *dc, MCRectangle &srect)
                 // MM-2014-07-31: [[ ThreadedRendering ]] Make sure only a single thread posts the timer message (i.e. the first that gets here)
                 if (!m_animate_posted)
                 {
-                    MCThreadMutexLock(MCanimationmutex);
                     if (!m_animate_posted)
                     {
                         m_animate_posted = true;
                         MCscreen->addtimer(this, MCM_internal, THROB_RATE);
                     }
-                    MCThreadMutexUnlock(MCanimationmutex);
                 }
 			}
 			else

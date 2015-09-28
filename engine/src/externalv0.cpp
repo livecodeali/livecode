@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -62,7 +62,10 @@ extern MCExecContext *MCECptr;
 
 // IM-2014-03-06: [[ revBrowserCEF ]] Add revision number to v0 external interface
 // SN-2014-07-08: [[ UnicodeExternalsV0 ]] Bump revision number after unicode update
-#define EXTERNAL_INTERFACE_VERSION 2
+// AL-2015-02-06: [[ SB Inclusions ]] Increment revision number of v0 external interface
+// SN-2015-03-12: [[ Bug 14413 ]] Increment revision number, for the addition of
+//  UTF-8 <-> native string functions.
+#define EXTERNAL_INTERFACE_VERSION 4
 
 typedef struct _Xternal
 {
@@ -546,18 +549,18 @@ static char *eval_expr(const char *arg1, const char *arg2,
 	MCAutoStringRef t_string;
 	MCAutoValueRef t_result;
 	/* UNCHECKED */ MCStringCreateWithCString(arg1, &t_string);
-	MCECptr->GetHandler()->eval(*MCECptr, *t_string, &t_result);
+    MCECptr->eval(*MCECptr, *t_string, &t_result);
 	
 	if (MCECptr->HasError())
 	{
 		*retval = xresFail;
 		return NULL;
-	}
+    }
 	
 	MCAutoStringRef t_return;
 	/* UNCHECKED */ MCECptr->ConvertToString(*t_result, &t_return);
 	*retval = xresSucc;
-	return MCStringGetOldString(*t_return).clone();
+    return MCStringGetOldString(*t_return).clone();
 }
 
 static char *get_global(const char *arg1, const char *arg2,
@@ -1077,7 +1080,7 @@ static char *eval_expr_utf8(const char *arg1, const char *arg2,
 	MCAutoStringRef t_string;
 	MCAutoValueRef t_result;
 	/* UNCHECKED */ MCStringCreateWithBytes((byte_t*)arg1, strlen(arg1), kMCStringEncodingUTF8, false, &t_string);
-	MCECptr->GetHandler()->eval(*MCECptr, *t_string, &t_result);
+    MCECptr->eval(*MCECptr, *t_string, &t_result);
 	
 	if (MCECptr->HasError())
 	{
@@ -1625,8 +1628,8 @@ static char *set_array_utf8_binary(const char *arg1, const char *arg2,
 static char *stack_to_window_rect(const char *arg1, const char *arg2,
 									   const char *arg3, int *retval)
 {
-	uintptr_t t_win_id;
-	t_win_id = uintptr_t(arg1);
+    uintptr_t t_win_id;
+    t_win_id = (uintptr_t)arg1;
 
 	MCStack *t_stack;
 	t_stack = MCdispatcher->findstackwindowid(t_win_id);
@@ -1677,8 +1680,93 @@ static char *window_to_stack_rect(const char *arg1, const char *arg2,
 	return nil;
 }
 
+// AL-2015-02-10: [[ SB Inclusions ]] Add module loading callbacks to ExternalV0 interface
+static char *load_module(const char *arg1, const char *arg2,
+                         const char *arg3, int *retval)
+{
+    MCSysModuleHandle *t_result;
+    t_result = (MCSysModuleHandle *)arg2;
+    
+    *t_result = (MCSysModuleHandle)MCU_loadmodule(arg1);
+    
+    if (*t_result == nil)
+        *retval = xresFail;
+    else
+        *retval = xresSucc;
+    
+    return nil;
+}
+
+static char *unload_module(const char *arg1, const char *arg2,
+                          const char *arg3, int *retval)
+{
+    MCU_unloadmodule((MCSysModuleHandle)arg1);
+    *retval = xresSucc;
+    return nil;
+}
+
+static char *resolve_symbol_in_module(const char *arg1, const char *arg2,
+                                      const char *arg3, int *retval)
+{
+    void** t_resolved;
+    t_resolved = (void **)arg3;
+    *t_resolved = MCU_resolvemodulesymbol((MCSysModuleHandle)arg1, arg2);
+    
+    if (*t_resolved == nil)
+        *retval = xresFail;
+    else
+        *retval = xresSucc;
+    
+    return nil;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//  V4: UTF-8 <-> Native string conversion
+// arg1 contains the string to convert, for both of the functions.
+static char *convert_from_native_to_utf8(const char *arg1, const char *arg2,
+                           const char *arg3, int *retval)
+{
+    MCAutoStringRef t_input;
+    char* t_utf8_string;
+    if (arg1 == NULL
+            || !MCStringCreateWithNativeChars((char_t*)arg1, strlen(arg1), &t_input)
+            || !MCStringConvertToUTF8String(*t_input, t_utf8_string))
+    {
+        *retval = xresFail;
+        return nil;
+    }
+    
+    *retval = xresSucc;
+	// Return a string owned by the engine, to avoid the release issue
+	MCExternalAddAllocatedString(MCexternalallocpool, t_utf8_string);
+    return t_utf8_string;
+}
+
+static char *convert_to_native_from_utf8(const char *arg1, const char *arg2,
+                                         const char *arg3, int *retval)
+{
+    MCAutoStringRef t_input;
+    char *t_native_string;
+    
+    if (arg1 == NULL
+            || !MCStringCreateWithBytes((byte_t*)arg1, strlen(arg1), kMCStringEncodingUTF8, false, &t_input)
+            || !MCStringConvertToCString(*t_input, t_native_string))
+    {
+        *retval = xresFail;
+        return nil;
+    }
+    
+    *retval = xresSucc;
+	// Return a string owned by the engine, to avoid the release issue
+	MCExternalAddAllocatedString(MCexternalallocpool, t_native_string);
+    return t_native_string;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 // IM-2014-03-06: [[ revBrowserCEF ]] Add externals extension to the callback list
 // SN-2014-07-08: [[ UnicodeExternalsV0 ]] Add externals extension to handle UTF8-encoded parameters
+// AL-2015-02-06: [[ SB Inclusions ]] Add new callbacks for resource loading.
 XCB MCcbs[] =
 {
 	// Externals interface V0 functions
@@ -1741,6 +1829,14 @@ XCB MCcbs[] =
 	set_array_utf8_text,
 	set_array_utf8_binary,
 
+    // AL-2015-02-10: [[ SB Inclusions ]] Externals interface V3 functions
+    /* V3 */ load_module,
+    /* V3 */ unload_module,
+    /* V3 */ resolve_symbol_in_module,
+    
+    /* V4 */ convert_from_native_to_utf8,
+    /* V4 */ convert_to_native_from_utf8,
+    
 	NULL
 };
 

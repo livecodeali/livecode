@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -71,12 +71,18 @@ static bool s_lock_responder_change = false;
 // The default implementation doesn't allow borderless windows to become key.
 - (BOOL)canBecomeKeyWindow
 {
-	return m_can_become_key;
+	if ([NSApp pseudoModalFor] != nil)
+        return NO;
+    
+    return m_can_become_key;
 }
 
 - (BOOL)makeFirstResponder: (NSResponder *)p_responder
 {
-	NSResponder *t_previous;
+	if ([NSApp pseudoModalFor] != nil)
+        return NO;
+    
+    NSResponder *t_previous;
 	t_previous = [self firstResponder];
     
 	if (![super makeFirstResponder: p_responder])
@@ -165,12 +171,18 @@ static bool s_lock_responder_change = false;
 // The default implementation doesn't allow borderless windows to become key.
 - (BOOL)canBecomeKeyWindow
 {
-	return m_can_become_key;
+	if ([NSApp pseudoModalFor] != nil)
+        return NO;
+    
+    return m_can_become_key;
 }
 
 - (BOOL)makeFirstResponder: (NSResponder *)p_responder
 {
-	NSResponder *t_previous;
+	if ([NSApp pseudoModalFor] != nil)
+        return NO;
+    
+    NSResponder *t_previous;
 	t_previous = [self firstResponder];
 
 	if (![super makeFirstResponder: p_responder])
@@ -440,29 +452,42 @@ static bool s_lock_responder_change = false;
 }
 
 // MW-2014-07-22: [[ Bug 12720 ]] Mark the period we are inside a focus event handler.
+// SN-2015-05-20: [[ Bug 15208 ]] Renamed to better reflect the functions action
 - (void)windowDidBecomeKey:(NSNotification *)notification
 {
     if (s_inside_focus_event)
-        m_window -> ProcessDidBecomeKey();
+        m_window -> ProcessGainedMainFocus();
     else
     {
         s_inside_focus_event = true;
-        m_window -> ProcessDidBecomeKey();
+        m_window -> ProcessGainedMainFocus();
         s_inside_focus_event = false;
     }
 }
 
 // MW-2014-07-22: [[ Bug 12720 ]] Mark the period we are inside a focus event handler.
+// SN-2015-05-20: [[ Bug 15208 ]] If we are not the KeyWindow, we can still be
+//  the MainWindow, and in that case we keep the focus.
 - (void)windowDidResignKey:(NSNotification *)notification
 {
-    if (s_inside_focus_event)
-        m_window -> ProcessDidBecomeKey();
-    else
-    {
-        s_inside_focus_event = true;
-        m_window -> ProcessDidResignKey();
-        s_inside_focus_event = false;
-    }
+}
+
+// SN-2015-05-20: [[ Bug 15208 ]] A main window is not necessarily the key window
+// (see https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/WinPanel/Concepts/ChangingMainKeyWindow.html)
+//  We do no want to unfocus the active field if a utility window (such as Color
+//  Picker or Character Viewer) is opened, or that can lead to a crash since we
+//  might want to insert text in this field (it is not properly speaking unfocusing).
+//  That leads to a not-so-nice blinking cursor on the message box when using
+//     answer color
+//  but there might not be any other option to avoid the Character Viewer crash.
+- (void)windowDidBecomeMain:(NSNotification *)notification
+{
+    m_window -> ProcessGainedMainFocus();
+}
+
+- (void)windowDidResignMain:(NSNotification *)notification
+{
+    m_window -> ProcessLostMainFocus();
 }
 
 - (void)windowDidChangeBackingProperties:(NSNotification *)notification
@@ -556,11 +581,17 @@ static bool s_lock_responder_change = false;
 
 - (BOOL)canBecomeKeyView
 {
-	return YES;
+	if ([NSApp pseudoModalFor] != nil)
+        return NO;
+    
+    return YES;
 }
 
 - (BOOL)acceptsFirstMouse:(NSEvent *)theEvent
 {
+    if ([NSApp pseudoModalFor] != nil)
+        return NO;
+    
     // MW-2014-04-23: [[ CocoaBackdrop ]] This method is called after the window has
     //   been re-ordered but before anything else - an ideal time to sync the backdrop.
     MCMacPlatformSyncBackdrop();
@@ -569,12 +600,18 @@ static bool s_lock_responder_change = false;
 
 - (BOOL)acceptsFirstResponder
 {
-	return YES;
+	if ([NSApp pseudoModalFor] != nil)
+        return NO;
+    
+    return YES;
 }
 
 - (BOOL)becomeFirstResponder
 {
-	//MCPlatformCallbackSendViewFocus([(MCWindowDelegate *)[[self window] delegate] platformWindow]);
+	if ([NSApp pseudoModalFor] != nil)
+        return NO;
+    
+    //MCPlatformCallbackSendViewFocus([(MCWindowDelegate *)[[self window] delegate] platformWindow]);
 	return YES;
 }
 
@@ -600,7 +637,10 @@ static bool s_lock_responder_change = false;
 
 - (void)mouseDown: (NSEvent *)event
 {
-	if ([self useTextInput])
+	if ([NSApp pseudoModalFor] != nil)
+        return;
+    
+    if ([self useTextInput])
 		if ([[self inputContext] handleEvent: event])
 			return;
 	
@@ -609,7 +649,10 @@ static bool s_lock_responder_change = false;
 
 - (void)mouseUp: (NSEvent *)event
 {
-	if ([self useTextInput])
+    if ([NSApp pseudoModalFor] != nil)
+        return;
+    
+    if ([self useTextInput])
 		if ([[self inputContext] handleEvent: event])
 			return;
 	
@@ -618,12 +661,18 @@ static bool s_lock_responder_change = false;
 
 - (void)mouseMoved: (NSEvent *)event
 {
-	[self handleMouseMove: event];
+    if ([NSApp pseudoModalFor] != nil)
+        return;
+    
+    [self handleMouseMove: event];
 }
 
 - (void)mouseDragged: (NSEvent *)event
 {
-	if ([self useTextInput])
+    if ([NSApp pseudoModalFor] != nil)
+        return;
+    
+    if ([self useTextInput])
 		if ([[self inputContext] handleEvent: event])
 			return;
 	
@@ -632,6 +681,9 @@ static bool s_lock_responder_change = false;
 
 - (void)rightMouseDown: (NSEvent *)event
 {
+    if ([NSApp pseudoModalFor] != nil)
+        return;
+    
     // [[ Bug ]] When a sheet is shown, for some reason we get rightMouseDown events.
     if ([[self window] attachedSheet] != nil)
         return;
@@ -641,6 +693,9 @@ static bool s_lock_responder_change = false;
 
 - (void)rightMouseUp: (NSEvent *)event
 {
+    if ([NSApp pseudoModalFor] != nil)
+    return;
+    
     // [[ Bug ]] When a sheet is shown, for some reason we get rightMouseDown events.
     if ([[self window] attachedSheet] != nil)
         return;
@@ -650,16 +705,25 @@ static bool s_lock_responder_change = false;
 
 - (void)rightMouseMoved: (NSEvent *)event
 {
-	[self handleMouseMove: event];
+    if ([NSApp pseudoModalFor] != nil)
+        return;
+    
+    [self handleMouseMove: event];
 }
 
 - (void)rightMouseDragged: (NSEvent *)event
 {
-	[self handleMouseMove: event];
+    if ([NSApp pseudoModalFor] != nil)
+        return;
+    
+    [self handleMouseMove: event];
 }
 
 - (void)otherMouseDown: (NSEvent *)event
 {
+    if ([NSApp pseudoModalFor] != nil)
+        return;
+    
     // [[ Bug ]] When a sheet is shown, for some reason we get rightMouseDown events.
     if ([[self window] attachedSheet] != nil)
         return;
@@ -669,6 +733,9 @@ static bool s_lock_responder_change = false;
 
 - (void)otherMouseUp: (NSEvent *)event
 {
+    if ([NSApp pseudoModalFor] != nil)
+        return;
+    
     // [[ Bug ]] When a sheet is shown, for some reason we get rightMouseDown events.
     if ([[self window] attachedSheet] != nil)
         return;
@@ -678,12 +745,18 @@ static bool s_lock_responder_change = false;
 
 - (void)otherMouseMoved: (NSEvent *)event
 {
-	[self handleMouseMove: event];
+    if ([NSApp pseudoModalFor] != nil)
+        return;
+    
+    [self handleMouseMove: event];
 }
 
 - (void)otherMouseDragged: (NSEvent *)event
 {
-	[self handleMouseMove: event];
+    if ([NSApp pseudoModalFor] != nil)
+        return;
+    
+    [self handleMouseMove: event];
 }
 
 - (void)mouseEntered: (NSEvent *)event
@@ -696,7 +769,10 @@ static bool s_lock_responder_change = false;
 
 - (void)mouseExited: (NSEvent *)event
 {
-	[self handleMouseMove: event];
+    if ([NSApp pseudoModalFor] != nil)
+        return;
+    
+    [self handleMouseMove: event];
 }
 
 - (void)flagsChanged: (NSEvent *)event
@@ -709,12 +785,19 @@ static bool s_lock_responder_change = false;
 static void map_key_event(NSEvent *event, MCPlatformKeyCode& r_key_code, codepoint_t& r_mapped, codepoint_t& r_unmapped)
 {
 	MCMacPlatformMapKeyCode([event keyCode], [event modifierFlags], r_key_code);
-	
-    // MW-2014-06-26: [[ Bug 12681 ]] Special case numeric keypad keys so they are processed
-    //   in the correct way.
-    if (r_key_code > 0xff00 && r_key_code <= 0xffff &&
-        (r_key_code < kMCPlatformKeyCodeKeypadSpace || r_key_code > kMCPlatformKeyCodeKeypadEqual || r_key_code == kMCPlatformKeyCodeKeypadEnter
-         ))
+    
+    // SN-2014-12-08: [[ Bug 14067 ]] If the key pressed was a numpad key, then we
+    // do not produce a mapped char. That will allow a different treatment, as we
+    // do not want to use the numeric value of the native char to get the rawKeyDown
+    // parameter.
+    if (([event modifierFlags] & NSNumericPadKeyMask) != 0)
+    {
+        MCMacMapNSStringToCodepoint([event characters], r_unmapped);
+        r_mapped = r_unmapped;
+        return;
+    }
+    
+    if (r_key_code > 0xff00 && r_key_code <= 0xffff)
     {
         r_mapped = r_unmapped = 0xffffffffU;
         return;
@@ -795,11 +878,8 @@ static void map_key_event(NSEvent *event, MCPlatformKeyCode& r_key_code, codepoi
 {
 	MCMacPlatformHandleModifiersChanged(MCMacPlatformMapNSModifiersToModifiers([event modifierFlags]));
 	
-	if ([self useTextInput])
-	{
-		//if ([[self inputContext] handleEvent: event])
-		return;
-	}
+    // SN-2014-10-31: [[ Bug 13832 ]] We want the rawKeyUp and keyUp messages to be sent in their due course when
+    //  useTextInput is true, since the key messages have been enqueued appropriately
 	[self handleKeyPress: event isDown: NO];
 }
 
@@ -878,7 +958,9 @@ static void map_key_event(NSEvent *event, MCPlatformKeyCode& r_key_code, codepoi
 	if (m_input_method_event != nil)
 	{
 		[self handleKeyPress: m_input_method_event isDown: YES];
-		[self handleKeyPress: m_input_method_event isDown: NO];
+        // SN-2014-11-03: [[ Bug 13832 ]] keyUp will be called, and the message will have been queued.
+//		[self handleKeyPress: m_input_method_event isDown: NO];
+        
         // PM-2014-09-15: [[ Bug 13442 ]] Set m_input_method_event to nil to prevent rawKeyDown from firing twice when altKey is down
         m_input_method_event = nil;
 	}
@@ -1559,6 +1641,7 @@ MCMacPlatformWindow::MCMacPlatformWindow(void)
 	m_shadow_changed = false;
 	m_synchronizing = false;
 	m_has_sheet = false;
+	m_frame_locked = false;
 	
 	m_parent = nil;
 }
@@ -1623,6 +1706,14 @@ void MCMacPlatformWindow::ProcessDidMove(void)
 	if (m_synchronizing)
 		return;
 	
+	// IM-2015-01-30: [[ Bug 14140 ]] Reset any rect changes while the frame is locked.
+	if (m_frame_locked)
+	{
+		m_changes.content_changed = true;
+		DoSynchronize();
+		return;
+	}
+	
 	// Get the window's new content rect.
 	NSRect t_new_cocoa_content;
 	t_new_cocoa_content = [m_window_handle contentRectForFrameRect: [m_window_handle frame]];
@@ -1657,12 +1748,13 @@ void MCMacPlatformWindow::ProcessDidDeminiaturize(void)
 	HandleUniconify();
 }
 
-void MCMacPlatformWindow::ProcessDidBecomeKey(void)
+// SN-2015-05-20: [[ Bug 15208 ]] Renamed to better reflect the functions action
+void MCMacPlatformWindow::ProcessGainedMainFocus(void)
 {
-	HandleFocus();
+    HandleFocus();
 }
 
-void MCMacPlatformWindow::ProcessDidResignKey(void)
+void MCMacPlatformWindow::ProcessLostMainFocus(void)
 {
     HandleUnfocus();
 }
@@ -1694,6 +1786,13 @@ void MCMacPlatformWindow::ProcessKeyDown(MCPlatformKeyCode p_key_code, codepoint
 void MCMacPlatformWindow::ProcessKeyUp(MCPlatformKeyCode p_key_code, codepoint_t p_mapped_char, codepoint_t p_unmapped_char)
 {
 	HandleKeyUp(p_key_code, p_mapped_char, p_unmapped_char);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void MCMacPlatformWindow::SetFrameLocked(bool p_locked)
+{
+	m_frame_locked = p_locked;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1951,7 +2050,9 @@ void MCMacPlatformWindow::DoHide(void)
 		if ([m_window_handle parentWindow] != nil)
 			[[m_window_handle parentWindow] removeChildWindow: m_window_handle];
 	
-		[m_window_handle orderOut: nil];
+		// CW-2015-09-21: [[ Bug 15979 ]] Call close instead of orderOut here to properly close
+		// windows that have been iconified.
+		[m_window_handle close];
 	}
 	
 	MCMacPlatformHandleMouseAfterWindowHidden();
@@ -2166,7 +2267,8 @@ void MCPlatformWindowMaskRelease(MCPlatformWindowMaskRef p_mask)
 	
 	if (t_mask->references > 1)
 	{
-		t_mask->references++;
+        // PM-2015-02-13: [[ Bug 14588 ]] Decrease ref count
+		t_mask->references--;
 		return;
 	}
 	

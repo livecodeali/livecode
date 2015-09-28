@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -165,24 +165,26 @@ bool MCStringsSplit(MCStringRef p_string, MCStringRef p_separator, MCStringRef*&
 
 void MCStringsEvalToLower(MCExecContext& ctxt, MCStringRef p_string, MCStringRef& r_lower)
 {
-	MCAutoStringRef t_string;
-	if (MCStringMutableCopy(p_string, &t_string) &&
-		MCStringLowercase(*t_string, kMCSystemLocale) &&
-		MCStringCopy(*t_string, r_lower))
-		return;
-
-	ctxt.Throw();
+	MCStringRef t_string = nil;
+	if (!MCStringMutableCopy(p_string, t_string) ||
+		!MCStringLowercase(t_string, kMCSystemLocale) ||
+		!MCStringCopyAndRelease(t_string, r_lower))
+	{
+		MCValueRelease(t_string);
+		ctxt.Throw();
+	}
 }
 
 void MCStringsEvalToUpper(MCExecContext& ctxt, MCStringRef p_string, MCStringRef& r_upper)
 {
-	MCAutoStringRef t_string;
-	if (MCStringMutableCopy(p_string, &t_string) &&
-		MCStringUppercase(*t_string, kMCSystemLocale) &&
-		MCStringCopy(*t_string, r_upper))
-		return;
-
-	ctxt.Throw();
+	MCStringRef t_string = nil;
+	if (!MCStringMutableCopy(p_string, t_string) ||
+		!MCStringUppercase(t_string, kMCSystemLocale) ||
+		!MCStringCopyAndRelease(t_string, r_upper))
+	{
+		MCValueRelease(t_string);
+		ctxt.Throw();
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1110,14 +1112,29 @@ void MCStringsEvalFormat(MCExecContext& ctxt, MCStringRef p_format, MCValueRef* 
 			bool useShort = false;
 			uinteger_t whichValue = PTR_VALUE;
 			const char *end;
-
+            const char_t *prefix_zero;
+            prefix_zero = nil;
+            
+            bool t_zero_pad;
+            t_zero_pad = false;
+            
             *dptr++ = *t_native_format++;
             while (*t_native_format == '-' || *t_native_format == '#' || *t_native_format == '0'
                 || *t_native_format == ' ' || *t_native_format == '+')
+            {
+                // AL-2014-11-19: [[ Bug 14059 ]] Record position of last zero.
+                if (*t_native_format == '0')
+                    prefix_zero = t_native_format;
                 *dptr++ = *t_native_format++;
+            }
             if (isdigit((uint1)*t_native_format))
 			{
                 width = strtol((const char*)t_native_format, (char **)&end, 10);
+                
+                // AL-2014-11-19: [[ Bug 14059 ]] If last zero was immediately before the first non-zero digit then pad with zeroes.
+                if (prefix_zero == t_native_format - 1)
+                    t_zero_pad = true;
+                
                 t_native_format = (char_t*)end;
 			}
             else if (*t_native_format == '*')
@@ -1182,6 +1199,15 @@ void MCStringsEvalFormat(MCExecContext& ctxt, MCStringRef p_format, MCValueRef* 
 				whichValue = INT_VALUE;
 				break;
 			case 's':
+                // If there is a zero width, then remove it.
+                if (prefix_zero != nil)
+                {
+                    dptr -= 1;
+                    dptr[0] = '\0';
+                }
+                // AL-2014-10-30: [[ Bug 13876 ]] Use internal MCStringRef format specifier (%@) when %s is used
+                //  to preserve non-native chars in string.
+                dptr[-1] = '@';
 				break;
 			case 'e':
 			case 'E':
@@ -1225,11 +1251,36 @@ void MCStringsEvalFormat(MCExecContext& ctxt, MCStringRef p_format, MCValueRef* 
 					ctxt.LegacyThrow(EE_FORMAT_BADSOURCE, t_value);
 					return;
 				}
-
-                MCAutoStringRefAsCString t_cstring;
-                t_success = t_cstring . Lock(*t_string);
+                    
                 if (t_success)
-                    t_success = MCStringAppendFormat(*t_result, newFormat, *t_cstring);
+                {
+                    // AL-2014-10-30: If there is a width parameter, we need to jump through some hoops to make
+                    //  sure the correct result is returned for non-native strings - namely pad the string with enough
+                    //  spaces so that the result has the specified number of graphemes.
+                    if (width != 0)
+                    {
+                        uindex_t t_length = MCStringGetLength(*t_string);
+                        MCRange t_range;
+                        t_range = MCRangeMake(0, t_length);
+                        // Find the grapheme length of 
+                        MCStringUnmapGraphemeIndices(*t_string, kMCBasicLocale, t_range, t_range);
+                        
+                        // If the width sub-specifier is greater than the grapheme length of the string, then pad appropriately
+                        if (width > t_range . length)
+                        {
+                            // AL-2014-11-19: [[ Bug 14059 ]] Pad with zeroes if the appropriate specifier flag was used
+                            if (t_zero_pad)
+                                t_success = MCStringAppendFormat(*t_result, "%0*s%@", width - t_range . length, "", *t_string);
+                            else
+                                t_success = MCStringAppendFormat(*t_result, "%*s%@", width - t_range . length, "", *t_string);
+                        }
+                        else
+                            t_success = MCStringAppendFormat(*t_result, "%@", *t_string);
+                    }
+                    else
+                        // AL-2014-10-30: [[ Bug 13876 ]] Don't convert to cstring for format
+                        t_success = MCStringAppendFormat(*t_result, newFormat, *t_string);
+                }
 				break;
 			}
 
@@ -1342,17 +1393,14 @@ bool MCStringsMerge(MCExecContext& ctxt, MCStringRef p_format, MCStringRef& r_st
 				MCerrorlock++;
 				if (t_is_expression)
 				{
-					if (ctxt . GetHandler() != nil)
-						ctxt.GetHandler()->eval(t_ctxt, *t_expression, &t_value);
-					else
-						ctxt.GetHandlerList()->eval(t_ctxt, *t_expression, &t_value);
+                    // SN-2015-06-03: [[ Bug 11277 ]] MCHandler::eval refactored
+                    ctxt.eval(t_ctxt, *t_expression, &t_value);
 				}
 				else
-				{
-					if (ctxt . GetHandler() != nil)
-						ctxt.GetHandler()->doscript(t_ctxt, *t_expression);
-					else
-						ctxt.GetHandlerList()->doscript(t_ctxt, *t_expression);
+                {
+                    // SN-2015-06-03: [[ Bug 11277 ]] MCHandler::doscript refactored
+                    ctxt.doscript(t_ctxt, *t_expression, 0, 0);
+
 					t_value = MCresult->getvalueref();
                     // SN-2014-08-11: [[ Bug 13139 ]] The result must be emptied after a doscript()
                     ctxt . SetTheResultToEmpty();
@@ -1396,35 +1444,53 @@ void MCStringsEvalMerge(MCExecContext& ctxt, MCStringRef p_format, MCStringRef& 
 
 bool MCStringsConcatenate(MCStringRef p_left, MCStringRef p_right, MCStringRef& r_result)
 {
-	MCAutoStringRef t_string;
-	return MCStringMutableCopy(p_left, &t_string) &&
-		MCStringAppend(*t_string, p_right) &&
-		MCStringCopy(*t_string, r_result);
+	MCStringRef t_string = nil;
+	if (!MCStringMutableCopy(p_left, t_string) ||
+		!MCStringAppend(t_string, p_right) ||
+		!MCStringCopyAndRelease(t_string, r_result))
+	{
+		MCValueRelease(t_string);
+		return false;
+	}
+	return true;
 }
 
 bool MCStringsConcatenateWithChar(MCStringRef p_left, MCStringRef p_right, unichar_t p_char, MCStringRef& r_result)
 {
-	MCAutoStringRef t_string;
-	return MCStringMutableCopy(p_left, &t_string) &&
-		MCStringAppendChar(*t_string, p_char) &&
-		MCStringAppend(*t_string, p_right) &&
-		MCStringCopy(*t_string, r_result);
+	MCStringRef t_string = nil;
+	if (!MCStringMutableCopy(p_left, t_string) ||
+		!MCStringAppendChar(t_string, p_char) ||
+		!MCStringAppend(t_string, p_right) ||
+		!MCStringCopyAndRelease(t_string, r_result))
+	{
+		MCValueRelease(t_string);
+		return false;
+	}
+	return true;
 }
 
 void MCStringsEvalConcatenate(MCExecContext& ctxt, MCStringRef p_left, MCStringRef p_right, MCStringRef& r_result)
 {
 	if (MCStringsConcatenate(p_left, p_right, r_result))
 		return;
-
-	ctxt.Throw();
+    
+    // SN-2015-01-13: [[ Bug 14354 ]] To reproduce the previous behaviour, we want to abort
+    // any loop if in case of a memory error.
+    ctxt . LegacyThrow(EE_NO_MEMORY);
+    MCabortscript = True;
 }
 
 bool MCDataConcatenate(MCDataRef p_left, MCDataRef p_right, MCDataRef& r_result)
 {
-	MCAutoDataRef t_string;
-	return MCDataMutableCopy(p_left, &t_string) &&
-    MCDataAppend(*t_string, p_right) &&
-    MCDataCopy(*t_string, r_result);
+	MCDataRef t_string = nil;
+	if (!MCDataMutableCopy(p_left, t_string) ||
+		!MCDataAppend(t_string, p_right) ||
+		!MCDataCopyAndRelease(t_string, r_result))
+	{
+		MCValueRelease(t_string);
+		return false;
+	}
+	return true;
 }
 
 void MCStringsEvalConcatenate(MCExecContext& ctxt, MCDataRef p_left, MCDataRef p_right, MCDataRef& r_result)
@@ -1432,23 +1498,32 @@ void MCStringsEvalConcatenate(MCExecContext& ctxt, MCDataRef p_left, MCDataRef p
 	if (MCDataConcatenate(p_left, p_right, r_result))
 		return;
     
-	ctxt.Throw();
+    // SN-2015-01-13: [[ Bug 14354 ]] To reproduce the previous behaviour, we want to abort
+    // any loop if in case of a memory error.
+    ctxt . LegacyThrow(EE_NO_MEMORY);
+    MCabortscript = True;
 }
 
 void MCStringsEvalConcatenateWithSpace(MCExecContext& ctxt, MCStringRef p_left, MCStringRef p_right, MCStringRef& r_result)
 {
 	if (MCStringsConcatenateWithChar(p_left, p_right, ' ', r_result))
 		return;
-
-	ctxt.Throw();
+    
+    // SN-2015-01-13: [[ Bug 14354 ]] To reproduce the previous behaviour, we want to abort
+    // any loop if in case of a memory error.
+    ctxt . LegacyThrow(EE_NO_MEMORY);
+    MCabortscript = True;
 }
 
 void MCStringsEvalConcatenateWithComma(MCExecContext& ctxt, MCStringRef p_left, MCStringRef p_right, MCStringRef& r_result)
 {
 	if (MCStringsConcatenateWithChar(p_left, p_right, ',', r_result))
-		return;
-
-	ctxt.Throw();
+        return;
+    
+    // SN-2015-01-13: [[ Bug 14354 ]] To reproduce the previous behaviour, we want to abort
+    // any loop if in case of a memory error.
+    ctxt . LegacyThrow(EE_NO_MEMORY);
+    MCabortscript = True;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1768,13 +1843,15 @@ void MCStringsEvalOffset(MCExecContext& ctxt, MCStringRef p_chunk, MCStringRef p
 {
 	MCStringOptions t_options = ctxt.GetStringComparisonType();
     uindex_t t_offset;
+    MCRange t_char_range, t_cu_range;
+    // AL-2015-05-07: [[ Bug 15327 ]] Start offset is grapheme offset not codeunit, so map to grapheme offset first.
+    MCStringMapIndices(p_string, kMCCharChunkTypeGrapheme, MCRangeMake(0, p_start_offset), t_cu_range);
     // AL-2014-05-27: [[ Bug 12517 ]] Offset should be 0 for an empty input string
 	if (MCStringIsEmpty(p_chunk) || !MCStringFirstIndexOf(p_string, p_chunk, p_start_offset, t_options, t_offset))
 		r_result = 0;
 	else
     {
         // We want to get the grapheme length, not the codeunit one
-        MCRange t_cu_range, t_char_range;
         t_cu_range . offset = 0;
         t_cu_range . length = t_offset;
         MCStringUnmapIndices(p_string, kMCCharChunkTypeGrapheme, t_cu_range, t_char_range);

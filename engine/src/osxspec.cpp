@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -37,7 +37,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "card.h"
 #include "group.h"
 #include "button.h"
-#include "control.h"
+#include "mccontrol.h"
 #include "param.h"
 #include "securemode.h"
 #include "license.h"
@@ -1576,28 +1576,9 @@ Boolean MCS_poll(real8 delay, int fd)
 			maxfd = MCshellfd;
 	}
 
-	uint2 i;
-	for (i = 0 ; i < MCnsockets ; i++)
-	{
-		int fd = MCsockets[i]->fd;
-		if (!fd || MCsockets[i]->resolve_state == kMCSocketStateResolving ||
-				MCsockets[i]->resolve_state == kMCSocketStateError)
-			continue;
-		if (MCsockets[i]->connected && !MCsockets[i]->closing
-		        && !MCsockets[i]->shared || MCsockets[i]->accepting)
-			FD_SET(fd, &rmaskfd);
-		if (!MCsockets[i]->connected || MCsockets[i]->wevents != NULL)
-			FD_SET(fd, &wmaskfd);
-		FD_SET(fd, &emaskfd);
-		if (fd > maxfd)
-			maxfd = fd;
-		if (MCsockets[i]->added)
-		{
-			delay = 0.0;
-			MCsockets[i]->added = False;
-			handled = True;
-		}
-	}
+    handled = MCSocketsAddToFileDescriptorSets(maxfd, rmaskfd, wmaskfd, emaskfd);
+    if (handled)
+        delay = 0.0;
 
 	struct timeval timeoutval;
 	timeoutval.tv_sec = (long)delay;
@@ -1612,33 +1593,7 @@ Boolean MCS_poll(real8 delay, int fd)
 	if (MCshellfd != -1 && FD_ISSET(MCshellfd, &rmaskfd))
 		return True;
 
-	for (i = 0 ; i < MCnsockets ; i++)
-	{
-		int fd = MCsockets[i]->fd;
-		if (FD_ISSET(fd, &emaskfd) && fd != 0)
-		{
-
-			if (!MCsockets[i]->waiting)
-			{
-				MCsockets[i]->error = strclone("select error");
-				MCsockets[i]->doclose();
-			}
-
-		}
-		else
-		{
-			if (FD_ISSET(fd, &rmaskfd) && !MCsockets[i]->shared)
-			{
-				MCsockets[i]->readsome();
-			}
-			if (FD_ISSET(fd, &wmaskfd))
-			{
-				MCsockets[i]->writesome();
-			}
-		}
-		MCsockets[i]->setselect();
-	}
-
+    MCSocketsHandleFileDescriptorSets(rmaskfd, wmaskfd, emaskfd);
 	return True;
 }
 
@@ -2166,6 +2121,11 @@ OSErr MCS_pathtoref(const char *p_path, FSRef *r_ref)
 {
 	char *t_resolved_path;
 	t_resolved_path = MCS_resolvepath(p_path);
+    
+    // SN-2015-01-16: [[ Bug 14392 ]] We want to apply the redirection
+    //   since few engine functions (and LiveCode 'launch')
+    //   are using MCS_pathtoref
+    MCS_apply_redirect(t_resolved_path, true);
 	
 	char *t_utf8_path;
 	t_utf8_path = path2utf(t_resolved_path);

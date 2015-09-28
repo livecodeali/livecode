@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -59,6 +59,9 @@ class MCDispatch : public MCObject
 
     static MCPropertyInfo kProperties[];
 	static MCObjectPropertyTable kPropertyTable;
+
+    // AL-2015-02-10: [[ Standalone Inclusions ]] Add resource mapping array to MCDispatch object.
+    MCArrayRef m_library_mapping;
 public:
 	MCDispatch();
 	// virtual functions from MCObject
@@ -202,11 +205,13 @@ public:
 	MCStack *findstackname(MCNameRef);
 	MCStack *findstackid(uint4 fid);
 	// IM-2014-07-09: [[ Bug 12225 ]] Find the stack by window ID
-	MCStack *findstackwindowid(uint32_t p_win_id);
+	MCStack *findstackwindowid(uintptr_t p_win_id);
 	MCStack *findstackd(Window w);
 	
 	// IM-2014-07-23: [[ Bug 12930 ]] Replace findchildstack method with iterating method
 	bool foreachchildstack(MCStack *p_stack, MCStackForEachCallback p_callback, void *p_context);
+    
+	bool foreachstack(MCStackForEachCallback p_callback, void *p_context);
 	
 	MCObject *getobjid(Chunk_term type, uint4 inid);
 	MCObject *getobjname(Chunk_term type, MCNameRef);
@@ -248,6 +253,11 @@ public:
 	void GetDefaultBackColor(MCExecContext& ctxt, MCInterfaceNamedColor& r_color);
     
 	void GetDefaultPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
+    
+    // AL-2015-02-10: [[ Standalone Inclusions ]] Add functions to fetch relative paths present
+    //  in the resource mapping array of MCdispatcher.
+    void addlibrarymapping(MCStringRef p_mapping);
+    bool fetchlibrarymapping(MCStringRef p_name, MCStringRef &r_path);
     
 private:
 	// MW-2012-02-17: [[ LogFonts ]] Actual method which performs a load stack. This

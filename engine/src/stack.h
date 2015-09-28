@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -131,6 +131,21 @@ typedef bool (*MCStackUpdateCallback)(MCStackSurface *p_surface, MCRegionRef p_r
 
 typedef bool (*MCStackForEachCallback)(MCStack *p_stack, void *p_context);
 
+enum MCStackAttachmentEvent
+{
+    kMCStackAttachmentEventDeleting,
+    kMCStackAttachmentEventRealizing,
+    kMCStackAttachmentEventUnrealizing,
+    kMCStackAttachmentEventToolChanged,
+};
+typedef void (*MCStackAttachmentCallback)(void *context, MCStack *stack, MCStackAttachmentEvent event);
+struct MCStackAttachment
+{
+    MCStackAttachment *next;
+    void *context;
+    MCStackAttachmentCallback callback;
+};
+
 class MCStack : public MCObject
 {
 	friend class MCHcstak;
@@ -213,9 +228,6 @@ protected:
 	
 	// MW-2012-10-10: [[ IdCache ]]
 	MCStackIdCache *m_id_cache;
-    
-    // MM-2014-07-31: [[ ThreadedRendering ]] Used to ensure only a single thread mutates the ID cache at a time.
-    MCThreadMutexRef m_id_cache_lock;
 	
 	// MW-2011-11-24: [[ UpdateScreen ]] If true, then updates to this stack should only
 	//   be flushed at the next updateScreen point.
@@ -274,6 +286,8 @@ protected:
 	// IM-2014-05-27: [[ Bug 12321 ]] Indicate if we need to purge fonts when reopening the window
 	bool m_purge_fonts;
 
+    MCStackAttachment *m_attachments;
+    
 public:
 	Boolean menuwindow;
 
@@ -583,8 +597,11 @@ public:
 	bool resolve_filename(MCStringRef filename, MCStringRef& r_resolved);
 	
 	// IM-2013-10-30: [[ FullscreenMode ]] Resolve the given path relative to the location of the stack file
-	// - Will return a path regardless of whether or not the file exists.
-	bool resolve_relative_path(MCStringRef p_path, MCStringRef& r_resolved);
+    // - Will return a path regardless of whether or not the file exists.
+    bool resolve_relative_path(MCStringRef p_path, MCStringRef& r_resolved);
+    
+    // PM-2015-01-26: [[ Bug 14435 ]] Make possible to set the filename using a relative path to the default folder
+    bool resolve_relative_path_to_default_folder(MCStringRef p_path, MCStringRef &r_resolved);
 
 	void setopacity(uint1 p_value);
 	
@@ -609,6 +626,7 @@ public:
 
 	Window getwindow();
 	Window getparentwindow();
+    Window getwindowalways() { return window; }
 	
 	// IM-2014-07-23: [[ Bug 12930 ]] Set the stack whose window is parent to this stack
 	void setparentstack(MCStack *p_parent);
@@ -814,11 +832,13 @@ public:
 	void effectrect(const MCRectangle &drect, Boolean &abort);
 	
 	// IM-2014-07-09: [[ Bug 12225 ]] Find the stack by window ID
-	MCStack *findstackwindowid(uint32_t p_win_id);
+	MCStack *findstackwindowid(uintptr_t p_win_id);
 	MCStack *findstackd(Window w);
 	
 	// IM-2014-07-23: [[ Bug 12930 ]] Replace findchildstack method with iterating method
 	bool foreachchildstack(MCStackForEachCallback p_callback, void *p_context);
+    
+	bool foreachstack(MCStackForEachCallback p_callback, void *p_context);
 	
 	void realize();
 	void sethints();
@@ -995,6 +1015,10 @@ public:
 	void enablewindow(bool p_enable);
 	bool haswindow(void);
 
+    bool attach(void *ctxt, MCStackAttachmentCallback callback);
+    void detach(void *ctxt, MCStackAttachmentCallback callback);
+    void notifyattachments(MCStackAttachmentEvent event);
+    
 	void mode_openasmenu(MCStack *grab);
 	void mode_closeasmenu(void);
 

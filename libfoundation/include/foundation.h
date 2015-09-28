@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -76,8 +76,10 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #undef __SPARC__
 // __SPARC_64__ will be defined if the target processor is Sparc-64.
 #undef __SPARC_64__
-// __ARM__ will be defined if the target processor is ARM.
+// __ARM__ will be defined if the target processor is 32-bit ARM.
 #undef __ARM__
+// __ARM64__ will be defined if the target processor is 64-bit ARM.
+#undef __ARM64__
 
 // __SMALL__ will be defined if pointers are 32-bit and indicies are 32-bit.
 #undef __SMALL__
@@ -121,11 +123,13 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #define __32_BIT__ 1 
 #define __LITTLE_ENDIAN__ 1
 #define __I386__ 1
+#define __LP32__ 1
 #define __SMALL__ 1
 #elif defined(_M_X64)
 #define __64_BIT__ 1
 #define __LITTLE_ENDIAN__ 1
 #define __X86_64__ 1
+#define __LLP64__ 1
 #define __HUGE__ 1
 #else
 #error Unknown target architecture
@@ -157,17 +161,20 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #define __32_BIT__ 1
 #define __LITTLE_ENDIAN__ 1
 #define __I386__ 1
+#define __LP32__ 1
 #define __SMALL__ 1
 #elif defined(__ppc__)
 #define __32_BIT__ 1 
 #define __BIG_ENDIAN__ 1 
 #define __PPC__ 1
+#define __LP32__ 1
 #define __SMALL__ 1
 #elif defined(__x86_64__)
 #define __64_BIT__ 1
 #define __LITTLE_ENDIAN__ 1
 #define __X86_64__ 1
-#define __HUGE__ 1 
+#define __LP64__ 1
+#define __HUGE__ 1
 #endif
 
 // Native char set
@@ -199,16 +206,19 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #define __32_BIT__
 #define __LITTLE_ENDIAN__
 #define __I386__
+#define __LP32__ 1
 #define __SMALL__
 #elif defined(__x86_64__)
 #define __64_BIT__
 #define __LITTLE_ENDIAN__
 #define __X86_64__
+#define __LP64__ 1
 #define __HUGE__
 #elif defined(__arm__)
 #define __32_BIT__
 #define __LITTLE_ENDIAN__
 #define __ARM__
+#define __LP32__ 1
 #define __SMALL__
 #endif
 
@@ -238,22 +248,32 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #define __32_BIT__ 1
 #define __LITTLE_ENDIAN__ 1
 #define __I386__ 1
+#define __LP32__ 1
 #define __SMALL__ 1
 #elif defined(__ppc__)
 #define __32_BIT__ 1 
 #define __BIG_ENDIAN__ 1 
 #define __PPC__ 1
+#define __LP32__ 1
 #define __SMALL__ 1
 #elif defined(__x86_64__)
 #define __64_BIT__ 1
 #define __LITTLE_ENDIAN__ 1
 #define __X86_64__ 1
+#define __LP64__ 1
 #define __HUGE__ 1
 #elif defined(__arm__)
 #define __32_BIT__ 1
 #define __LITTLE_ENDIAN__ 1
 #define __ARM__ 1
+#define __LP32__ 1
 #define __SMALL__ 1 
+#elif defined(__arm64__)
+#define __64_BIT__ 1
+#define __LITTLE_ENDIAN__ 1
+#define __ARM64__
+#define __LP64__ 1
+#define __HUGE__ 1
 #endif
 
 // Native char set
@@ -285,16 +305,19 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #define __32_BIT__
 #define __LITTLE_ENDIAN__
 #define __I386__
+#define __LP32__ 1
 #define __SMALL__
 #elif defined(__x86_64__)
 #define __64_BIT__
 #define __LITTLE_ENDIAN__
 #define __X86_64__
+#define __LP64__ 1
 #define __HUGE__
 #elif defined(__arm__)
 #define __32_BIT__
 #define __LITTLE_ENDIAN__
 #define __ARM__
+#define __LP32__ 1
 #define __SMALL__
 #endif
 
@@ -324,6 +347,15 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 //  FIXED WIDTH INTEGER TYPES
 //
 
+#if !defined(__VISUALC__)
+#	define __HAVE_STDDEF_H__
+#	include <stddef.h>
+#	define __HAVE_STDINT_H__
+#	define __STDC_LIMIT_MACROS
+#	include <stdint.h>
+#endif
+
+#if !defined(__HAVE_STDINT_H__)
 typedef unsigned char uint8_t;
 typedef signed char int8_t;
 typedef unsigned short uint16_t;
@@ -333,6 +365,7 @@ typedef signed int int32_t;
 
 // MDW-2013-04-15: [[ x64 ]] added 64-bit-safe typedefs
 #if !defined(uint64_t)
+#define _UINT64_T
 #ifndef __LP64__
 typedef unsigned long long int uint64_t;
 #else
@@ -340,6 +373,7 @@ typedef unsigned long int uint64_t;
 #endif
 #endif
 #if !defined(int64_t)
+#define _INT64_T
 #ifndef __LP64__
 typedef signed long long int int64_t;
 #else
@@ -347,25 +381,27 @@ typedef signed long int int64_t;
 #endif
 #endif
 
-#define UINT8_MIN (0U)
 #define UINT8_MAX (255U)
 #define INT8_MIN (-128)
 #define INT8_MAX (127)
 
-#define UINT16_MIN (0U)
 #define UINT16_MAX (65535U)
 #define INT16_MIN (-32768)
 #define INT16_MAX (32767)
 
-#define UINT32_MIN (0U)
 #define UINT32_MAX (4294967295U)
 #define INT32_MIN (-2147483647 - 1L)
 #define INT32_MAX (2147483647)
 
-#define UINT64_MIN (0ULL)
 #define UINT64_MAX (18446744073709551615ULL)
 #define INT64_MIN (-9223372036854775808LL)
 #define INT64_MAX (9223372036854775807LL)
+#endif /* !__HAVE_STDINT_H__ */
+
+#define UINT8_MIN (0U)
+#define UINT16_MIN (0U)
+#define UINT32_MIN (0U)
+#define UINT64_MIN (0ULL)
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -380,35 +416,46 @@ typedef uint32_t uinteger_t;
 typedef int32_t intenum_t;
 typedef uint32_t intset_t;
 
-#if defined(__WINDOWS__)
+#if !defined(__HAVE_STDDEF_H__)
+#	if defined(__WINDOWS__)
+typedef unsigned int size_t;
+#	elif defined(__LINUX__) || defined(__ANDROID__)
+typedef unsigned int size_t;
+#	else
+typedef unsigned long size_t;
+#   endif
+#endif /* !__HAVE_STDDEF_H__ */
+
+#if !defined(__HAVE_STDINT_H__)
+#	if defined(__WINDOWS__)
 typedef signed int intptr_t;
 typedef unsigned int uintptr_t;
-typedef unsigned int size_t;
-#elif defined(__LINUX__)
+#	elif defined(__LINUX__)
 typedef signed int intptr_t;
 typedef unsigned int uintptr_t;
-typedef unsigned int size_t;
-#elif defined(__ANDROID__)
+#	elif defined(__ANDROID__)
 typedef signed int intptr_t;
 typedef unsigned int uintptr_t;
-typedef unsigned int size_t;
-#else
+#	else
 typedef long signed int intptr_t;
 typedef long unsigned int uintptr_t;
-typedef unsigned long size_t;
-#endif
-
-#define INTPTR_MIN INT32_MIN
-#define INTPTR_MAX INT32_MAX
-#define UINTPTR_MIN UINT32_MIN
-#define UINTPTR_MAX UINT32_MAX
+#	endif
+#endif /* !__HAVE_STDINT_H__ */
 
 #define INTEGER_MIN INT32_MIN
 #define INTEGER_MAX INT32_MAX
 #define UINTEGER_MIN UINT32_MIN
 #define UINTEGER_MAX UINT32_MAX
 
-#else
+#define UINTPTR_MIN UINT32_MIN
+
+#if !defined(__HAVE_STDINT_H__)
+#define INTPTR_MIN INT32_MIN
+#define INTPTR_MAX INT32_MAX
+#define UINTPTR_MAX UINT32_MAX
+#endif /* !__HAVE_STDINT_H__ */
+
+#else /* !__32_BIT__ */
 
 typedef int32_t integer_t;
 typedef uint32_t uinteger_t;
@@ -416,36 +463,40 @@ typedef uint32_t uinteger_t;
 typedef int32_t intenum_t;
 typedef uint32_t intset_t;
 
-// MDW-2013-04-15: [[ x64 ]] added 64-bit-safe typedefs
-#ifndef _UINTPTR_T
-#define _UINTPTR_T
-#ifdef __LP64__
+#if !defined(__HAVE_STDINT_H__)
+#	ifndef _UINTPTR_T
+#		define _UINTPTR_T
+#		ifdef __LP64__
 typedef uint64_t uintptr_t;
-#else
+#		else
 typedef uint32_t uintptr_t;
-#endif
-#endif
+#		endif
+#	endif
 
-#ifndef _INTPTR_T
-#define _INTPTR_T
-#ifdef __LP64__
+#	ifndef _INTPTR_T
+#		define _INTPTR_T
+#		ifdef __LP64__
 typedef int64_t intptr_t;
-#else
+#		else
 typedef int32_t intptr_t;
-#endif
-#endif
-
-#define INTPTR_MIN INT64_MIN
-#define INTPTR_MAX INT64_MAX
-#define UINTPTR_MIN UINT64_MIN
-#define UINTPTR_MAX UINT64_MAX
+#		endif
+#	endif
+#endif /* !__HAVE_STDINT_H__ */
 
 #define INTEGER_MIN INT32_MIN
 #define INTEGER_MAX INT32_MAX
 #define UINTEGER_MIN UINT32_MIN
 #define UINTEGER_MAX UINT32_MAX
 
-#endif
+#define UINTPTR_MIN UINT64_MIN
+
+#if !defined(__HAVE_STDINT_H__)
+#define INTPTR_MIN INT64_MIN
+#define INTPTR_MAX INT64_MAX
+#define UINTPTR_MAX UINT64_MAX
+#endif /* !__HAVE_STDINT_H__ */
+
+#endif /* !__32_BIT__ */
 
 #if defined(__SMALL__) || defined(__MEDIUM__)
 
@@ -531,7 +582,21 @@ typedef const struct __CFData *CFDataRef;
 //  POINTER TYPES
 //
 
-#define nil 0
+#if defined(__cplusplus) /* C++ */
+#	if defined(__GCC__)
+#		define nil __null
+#	else
+#		define nil uintptr_t(0)
+#	endif
+
+#else /* C */
+#	if defined(__GCC__)
+#		define nil __null
+#	else
+#		define nil ((void*)0)
+#	endif
+
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -624,15 +689,14 @@ inline compare_t MCSgn(int64_t a) { return a < 0 ? -1 : (a > 0 ? 1 : 0); }
 //  COMPARE FUNCTIONS
 //
 
-inline compare_t MCCompare(int32_t a, int32_t b) { return a < b ? -1 : (a > b ? 1 : 0); }
-inline compare_t MCCompare(uint32_t a, uint32_t b) { return a < b ? -1 : (a > b ? 1 : 0); }
-inline compare_t MCCompare(int64_t a, int64_t b) { return a < b ? -1 : (a > b ? 1 : 0); }
-inline compare_t MCCompare(uint64_t a, uint64_t b) { return a < b ? -1 : (a > b ? 1 : 0); }
+// SN-2015-01-07: [[ iOS-64bit ]] Update the MCCompare functions
+inline compare_t MCCompare(int a, int b) { return a < b ? -1 : (a > b ? 1 : 0); }
+inline compare_t MCCompare(unsigned int a, unsigned int b) { return a < b ? -1 : (a > b ? 1 : 0); }
+inline compare_t MCCompare(long a, long b) { return a < b ? -1 : (a > b ? 1 : 0); }
+inline compare_t MCCompare(unsigned long a, unsigned long b) { return a < b ? -1 : (a > b ? 1 : 0); }
+inline compare_t MCCompare(long long a, long long b) { return a < b ? -1 : (a > b ? 1 : 0); }
+inline compare_t MCCompare(unsigned long long a, unsigned long long b) { return a < b ? -1 : (a > b ? 1 : 0); }
 
-#if !defined(__WINDOWS__) && !defined(__LINUX__) && !defined(__ANDROID__)
-inline compare_t MCCompare(intptr_t a, intptr_t b) { return a < b ? -1 : (a > b ? 1 : 0); }
-inline compare_t MCCompare(uintptr_t a, uintptr_t b) { return a < b ? -1 : (a > b ? 1 : 0); }
-#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -874,6 +938,14 @@ inline bool MCMemoryEqual(const void *left, const void *right, size_t size) { re
 // depending on whether left < right, left == right or left > right when
 // compared using byte-wise lexicographic ordering.
 inline compare_t MCMemoryCompare(const void *left, const void *right, size_t size) { return memcmp(left, right, size); }
+
+//////////
+
+// Clear the memory of the given structure to all 0's
+template <typename T> void inline MCMemoryClear(T&p_struct)
+{
+	MCMemoryClear(&p_struct, sizeof(T));
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -1404,7 +1476,7 @@ bool MCStringCreateWithNativeCharsAndRelease(char_t *chars, uindex_t char_count,
 
 // Create an immutable string from the given (native) c-string.
 bool MCStringCreateWithCString(const char *cstring, MCStringRef& r_string);
-bool MCStringCreateWithCStringAndRelease(char_t *cstring, MCStringRef& r_string);
+bool MCStringCreateWithCStringAndRelease(char *cstring, MCStringRef& r_string);
 
 #ifdef __HAS_CORE_FOUNDATION__
 // Create a string from a CoreFoundation string object.
@@ -1412,7 +1484,7 @@ bool MCStringCreateWithCFString(CFStringRef cf_string, MCStringRef& r_string);
 bool MCStringCreateWithCFStringAndRelease(CFStringRef cf_string, MCStringRef& r_string);
 #endif
 
-#ifdef __LINUX__
+#if !defined(__WINDOWS__)
 // Create a string from a C string in the system encoding
 bool MCStringCreateWithSysString(const char *sys_string, MCStringRef &r_string);
 #endif
@@ -1432,6 +1504,10 @@ bool MCStringEncodeAndRelease(MCStringRef string, MCStringEncoding encoding, boo
 // Decode the given data, intepreting in the given encoding.
 bool MCStringDecode(MCDataRef data, MCStringEncoding encoding, bool is_external_rep, MCStringRef& r_string);
 bool MCStringDecodeAndRelease(MCDataRef data, MCStringEncoding encoding, bool is_external_rep, MCStringRef& r_string);
+
+// SN-2015-07-27: [[ Bug 15379 ]] We can need to build a string from data,
+//  without any ASCII value conversion.
+bool MCStringCreateUnicodeStringFromData(MCDataRef p_data, bool p_is_external_rep, MCStringRef& r_string);
 
 /////////
 
@@ -1480,7 +1556,7 @@ bool MCStringIsEmpty(MCStringRef string);
 bool MCStringCanBeNative(MCStringRef string);
 
 // Returns true if under the given comparison conditions, string cannot be represented natively.
-bool MCStringCantBeNative(MCStringRef string, MCStringOptions p_options);
+bool MCStringCantBeEqualToNative(MCStringRef string, MCStringOptions p_options);
 
 // Returns true if the string is stored as native chars.
 bool MCStringIsNative(MCStringRef string);
@@ -1537,6 +1613,9 @@ uindex_t MCStringGetNativeChars(MCStringRef string, MCRange range, char_t *chars
 
 // Nativize self
 void MCStringNativize(MCStringRef string);
+
+// Create a native copy of p_string
+bool MCStringNativeCopy(MCStringRef p_string, MCStringRef& r_copy);
 
 // Maps from a codepoint (character) range to a code unit (StringRef) range
 bool MCStringMapCodepointIndices(MCStringRef, MCRange p_codepoint_range, MCRange& r_string_range);
@@ -1637,9 +1716,12 @@ bool MCStringConvertToCFStringRef(MCStringRef string, CFStringRef& r_cfstring);
 bool MCStringConvertToBSTR(MCStringRef string, BSTR& r_bstr);
 #endif
 
-#ifdef __LINUX__
-bool MCStringConvertToSysString(MCStringRef string, const char *&sys_string);
-#endif
+// Converts the given string ref to a string in the system encoding.
+// Note that the 'bytes' ptr is typed as 'char', however it should be considered
+// as an opaque sequence of bytes with an 'unknowable' encoding.
+// Note that the output string is allocated with an implicit NUL byte, but this
+// is not included in the byte_count.
+bool MCStringConvertToSysString(MCStringRef string, char*& r_bytes, size_t& r_byte_count);
 
 /////////
 
@@ -1858,6 +1940,8 @@ extern MCDataRef kMCEmptyData;
 bool MCDataCreateWithBytes(const byte_t *p_bytes, uindex_t p_byte_count, MCDataRef& r_data);
 bool MCDataCreateWithBytesAndRelease(byte_t *p_bytes, uindex_t p_byte_count, MCDataRef& r_data);
 
+bool MCDataConvertStringToData(MCStringRef string, MCDataRef& r_data);
+
 bool MCDataIsEmpty(MCDataRef p_data);
 
 uindex_t MCDataGetLength(MCDataRef p_data);
@@ -1895,8 +1979,11 @@ bool MCDataPrependBytes(MCDataRef r_data, const byte_t *p_bytes, uindex_t p_byte
 bool MCDataPrependByte(MCDataRef r_data, byte_t p_byte);
 
 bool MCDataInsert(MCDataRef r_data, uindex_t p_at, MCDataRef p_new_data);
+bool MCDataInsertBytes(MCDataRef self, uindex_t p_at, const byte_t *p_bytes, uindex_t p_byte_count);
+
 bool MCDataRemove(MCDataRef r_data, MCRange p_range);
 bool MCDataReplace(MCDataRef r_data, MCRange p_range, MCDataRef p_new_data);
+bool MCDataReplaceBytes(MCDataRef r_data, MCRange p_range, const byte_t *p_new_data, uindex_t p_byte_count);
 
 bool MCDataPad(MCDataRef data, byte_t byte, uindex_t count);
 

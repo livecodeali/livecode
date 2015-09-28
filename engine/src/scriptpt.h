@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -146,6 +146,7 @@ public:
 	Parse_stat nexttoken();
 	void cleartoken(void);
 	Parse_stat lookup(Script_point, const LT *&);
+    bool lookupconstantvalue(const char*& r_value);
 	Parse_stat lookupconstant(MCExpression **);
 	Parse_stat skip_token(Script_point, Token_type, uint2 n = 0);
 	MCExpression *insertfactor(MCExpression *nfact, MCExpression *&cfact,

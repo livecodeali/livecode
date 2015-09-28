@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -83,16 +83,11 @@ MCScreenDC::MCScreenDC()
 	
 	backdrop_hard = false;
 	backdrop_active = false;
-    
-    m_im_context = NULL;
-
-	MCNotifyInitialize();
+	m_im_context = NULL;
 }
 
 MCScreenDC::~MCScreenDC()
 {
-	MCNotifyFinalize();
-
 	if (opened)
 		close(True);
 	if (ncolors != 0)
@@ -108,6 +103,7 @@ MCScreenDC::~MCScreenDC()
 		delete allocs;
 	}
 	
+    MCNameDelete(vendorname);
 	
 	while (pendingevents != NULL)
 	{

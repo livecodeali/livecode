@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -32,7 +32,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "chunk.h"
 #include "mcerror.h"
 #include "object.h"
-#include "control.h"
+#include "mccontrol.h"
 #include "aclip.h"
 #include "vclip.h"
 #include "eps.h"
@@ -5404,8 +5404,9 @@ void MCSecure::exec_ctxt(MCExecContext& ctxt)
         return;
 	
 	// MM-2014-06-13: [[ Bug 12567 ]] Added passing through the host name to verify against.
+    // SN-2015-05-05: [[ Bug 15314 ]] The host name should be initialised.
 	MCNewAutoNameRef t_host_name;
-    if (!ctxt . EvalOptionalExprAsNullableNameRef(m_verify_host_name, EE_SECURE_BADHOST, &t_host_name))
+    if (!ctxt . EvalOptionalExprAsNameRef(m_verify_host_name, kMCEmptyName, EE_SECURE_BADHOST, &t_host_name))
         return;
 
     MCSecurityExecSecureSocket(ctxt, *t_name, secureverify == True, *t_host_name);

@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -121,21 +121,21 @@ MCPropertyInfo MCObject::kProperties[] =
 	DEFINE_RO_OBJ_EFFECTIVE_CUSTOM_PROPERTY(P_FOCUS_COLOR, InterfaceNamedColor, MCObject, FocusColor)
 
 	DEFINE_RW_OBJ_NON_EFFECTIVE_PROPERTY(P_FORE_PATTERN, OptionalUInt32, MCObject, ForePattern)
-	DEFINE_RO_OBJ_EFFECTIVE_PROPERTY(P_FORE_PATTERN, UInt32, MCObject, ForePattern)
+	DEFINE_RO_OBJ_EFFECTIVE_PROPERTY(P_FORE_PATTERN, OptionalUInt32, MCObject, ForePattern)
 	DEFINE_RW_OBJ_NON_EFFECTIVE_PROPERTY(P_BACK_PATTERN, OptionalUInt32, MCObject, BackPattern)
-	DEFINE_RO_OBJ_EFFECTIVE_PROPERTY(P_BACK_PATTERN, UInt32, MCObject, BackPattern)
+	DEFINE_RO_OBJ_EFFECTIVE_PROPERTY(P_BACK_PATTERN, OptionalUInt32, MCObject, BackPattern)
 	DEFINE_RW_OBJ_NON_EFFECTIVE_PROPERTY(P_HILITE_PATTERN, OptionalUInt32, MCObject, HilitePattern)
-	DEFINE_RO_OBJ_EFFECTIVE_PROPERTY(P_HILITE_PATTERN, UInt32, MCObject, HilitePattern)
+	DEFINE_RO_OBJ_EFFECTIVE_PROPERTY(P_HILITE_PATTERN, OptionalUInt32, MCObject, HilitePattern)
 	DEFINE_RW_OBJ_NON_EFFECTIVE_PROPERTY(P_BORDER_PATTERN, OptionalUInt32, MCObject, BorderPattern)
-	DEFINE_RO_OBJ_EFFECTIVE_PROPERTY(P_BORDER_PATTERN, UInt32, MCObject, BorderPattern)
+	DEFINE_RO_OBJ_EFFECTIVE_PROPERTY(P_BORDER_PATTERN, OptionalUInt32, MCObject, BorderPattern)
 	DEFINE_RW_OBJ_NON_EFFECTIVE_PROPERTY(P_TOP_PATTERN, OptionalUInt32, MCObject, TopPattern)
-	DEFINE_RO_OBJ_EFFECTIVE_PROPERTY(P_TOP_PATTERN, UInt32, MCObject, TopPattern)
+	DEFINE_RO_OBJ_EFFECTIVE_PROPERTY(P_TOP_PATTERN, OptionalUInt32, MCObject, TopPattern)
 	DEFINE_RW_OBJ_NON_EFFECTIVE_PROPERTY(P_BOTTOM_PATTERN, OptionalUInt32, MCObject, BottomPattern)
-	DEFINE_RO_OBJ_EFFECTIVE_PROPERTY(P_BOTTOM_PATTERN, UInt32, MCObject, BottomPattern)
+	DEFINE_RO_OBJ_EFFECTIVE_PROPERTY(P_BOTTOM_PATTERN, OptionalUInt32, MCObject, BottomPattern)
 	DEFINE_RW_OBJ_NON_EFFECTIVE_PROPERTY(P_SHADOW_PATTERN, OptionalUInt32, MCObject, ShadowPattern)
-	DEFINE_RO_OBJ_EFFECTIVE_PROPERTY(P_SHADOW_PATTERN, UInt32, MCObject, ShadowPattern)
+	DEFINE_RO_OBJ_EFFECTIVE_PROPERTY(P_SHADOW_PATTERN, OptionalUInt32, MCObject, ShadowPattern)
 	DEFINE_RW_OBJ_NON_EFFECTIVE_PROPERTY(P_FOCUS_PATTERN, OptionalUInt32, MCObject, FocusPattern)
-	DEFINE_RO_OBJ_EFFECTIVE_PROPERTY(P_FOCUS_PATTERN, UInt32, MCObject, FocusPattern)
+	DEFINE_RO_OBJ_EFFECTIVE_PROPERTY(P_FOCUS_PATTERN, OptionalUInt32, MCObject, FocusPattern)
 
 	DEFINE_RW_OBJ_NON_EFFECTIVE_PROPERTY(P_COLORS, String, MCObject, Colors)
 	DEFINE_RO_OBJ_EFFECTIVE_PROPERTY(P_COLORS, String, MCObject, Colors)
@@ -581,9 +581,13 @@ Exec_stat MCObject::getprop_legacy(uint4 parid, Properties which, MCExecPoint &e
 			MCParentScript *t_parent;
 			t_parent = parent_script -> GetParent();
  
-			ep . setstringf("button id %d of stack \"%@\"",
-								t_parent -> GetObjectId(),
-								MCNameGetString(t_parent -> GetObjectStack()));
+            if (t_parent -> GetObjectId() != 0)
+                ep . setstringf("button id %d of stack \"%s\"",
+                                    t_parent -> GetObjectId(),
+                                    MCNameGetCString(t_parent -> GetObjectStack()));
+            else
+                ep . setstringf("stack \"%s\"",
+                                    MCNameGetCString(t_parent -> GetObjectStack()));
 		}
 	}
 	break;
@@ -1234,11 +1238,13 @@ Exec_stat MCObject::setparentscriptprop(MCExecPoint& ep)
 	uint32_t t_part_id;
 	if (t_stat == ES_NORMAL)
 		t_stat = t_chunk -> getobj(ep2, t_object, t_part_id, False);
-
-	// Check that the object is a button
-	if (t_stat == ES_NORMAL && t_object -> gettype() != CT_BUTTON)
-		t_stat = ES_ERROR;
 	
+	// Check that the object is a button or a stack.
+	if (t_stat == ES_NORMAL &&
+        t_object -> gettype() != CT_BUTTON &&
+        t_object -> gettype() != CT_STACK)
+		t_stat = ES_ERROR;
+    
 	// MW-2013-07-18: [[ Bug 11037 ]] Make sure the object isn't in the hierarchy
 	//   of the parentScript.
 	bool t_is_cyclic;
@@ -1280,7 +1286,11 @@ Exec_stat MCObject::setparentscriptprop(MCExecPoint& ep)
 			//
 			uint32_t t_id;
 			t_id = t_object -> getid();
-
+            
+            // If the object is a stack, then the id should be 0.
+            if (t_object -> gettype() == CT_STACK)
+                t_id = 0;
+                
 			MCNameRef t_stack;
 			t_stack = t_object -> getstack() -> getname();
 
@@ -1315,7 +1325,7 @@ Exec_stat MCObject::setparentscriptprop(MCExecPoint& ep)
 			//   is because the inheritence hierarchy has been updated and so the
 			//   super_use chains need to be remade.
 			MCParentScript *t_this_parent;
-			if (getstate(CS_IS_PARENTSCRIPT))
+			if (m_is_parent_script)
 			{
 				t_this_parent = MCParentScript::Lookup(this);
 				if (t_this_parent != nil)
@@ -1583,17 +1593,17 @@ Exec_stat MCObject::sendsetprop(MCExecContext& ctxt, MCNameRef p_set_name, MCNam
 
 bool MCObject::setcustomprop(MCExecContext& ctxt, MCNameRef p_set_name, MCNameRef p_prop_name, MCExecValue p_value)
 {
-    MCValueRef t_value;
-    MCExecTypeConvertAndReleaseAlways(ctxt, p_value . type, &p_value , kMCExecValueTypeValueRef, &t_value);
+    MCAutoValueRef t_value;
+    MCExecTypeConvertAndReleaseAlways(ctxt, p_value . type, &p_value , kMCExecValueTypeValueRef, &(&t_value));
     
 	Exec_stat t_stat;
-	t_stat = sendsetprop(ctxt, p_set_name, p_prop_name, t_value);
+	t_stat = sendsetprop(ctxt, p_set_name, p_prop_name, *t_value);
     
 	if (t_stat == ES_PASS || t_stat == ES_NOT_HANDLED)
 	{
 		MCObjectPropertySet *p;
 		/* UNCHECKED */ ensurepropset(p_set_name, false, p);
-		if (!p -> storeelement(ctxt, p_prop_name, t_value))
+		if (!p -> storeelement(ctxt, p_prop_name, *t_value))
 			return false;
 		return true;
 	}

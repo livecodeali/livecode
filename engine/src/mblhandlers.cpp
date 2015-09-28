@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -582,13 +582,16 @@ Exec_stat MCHandleMakePurchase(void *context, MCParameter *p_parameters)
     MCAutoStringRef t_quantity;
     MCAutoStringRef t_payload;
     MCPurchase *t_purchase = nil;
+    uint32_t t_id;
     
     if (t_success)
         t_success = MCParseParameters(p_parameters, "xxx", &(&t_prod_id), &(&t_quantity), &(&t_payload));
     
     MCExecContext ctxt(nil, nil, nil);
-    //if (t_success)
-    //t_success = MCStoreMakePurchase(t_purchase);
+    
+    if (t_success)
+        MCStoreExecCreatePurchase(ctxt, *t_prod_id, t_id);
+   
     if (t_success)
         MCStoreExecMakePurchase(ctxt, *t_prod_id, *t_quantity, *t_payload);
     
@@ -865,6 +868,82 @@ Exec_stat MCHandlePurchaseVerify(void *context, MCParameter *p_parameters)
         return ES_NORMAL;
     
     return ES_ERROR;
+}
+
+Exec_stat MCHandleGetPurchaseProperty(void *context, MCParameter *p_parameters)
+{
+#ifdef /* MCHandleGetPurchaseProperty */ LEGACY_EXEC
+    bool t_success = true;
+	
+	char *t_product_id = nil;
+    char *t_prop_name = nil;
+    const char *t_prop_value = nil;
+    
+	if (t_success)
+        t_success = MCParseParameters(p_parameters, "ss", &t_product_id, &t_prop_name);
+	if (t_success)
+        t_prop_value = MCStoreGetPurchaseProperty(t_product_id, t_prop_name);
+    
+    MCCStringFree(t_product_id);
+    MCCStringFree(t_prop_name);
+    
+    MCresult -> sets(t_prop_value);
+    return ES_NORMAL;
+#endif /* MCHandleGetPurchaseProperty */
+
+    bool t_success = true;
+    MCAutoStringRef t_product_id, t_prop_name, t_prop_value;
+    MCExecContext ctxt(nil,nil,nil);
+    
+    if (t_success)
+        t_success = MCParseParameters(p_parameters, "xx", &(&t_product_id), &(&t_prop_name));
+    
+    if (t_success)
+        MCStoreGetPurchaseProperty(ctxt, *t_product_id, *t_prop_name, &t_prop_value);
+    
+    if (!ctxt.HasError())
+    {
+        ctxt.SetTheResultToValue(*t_prop_value);
+        return ES_NORMAL;
+    }
+    
+    return ES_ERROR;
+}
+
+Exec_stat MCHandleSetPurchaseProperty(void *context, MCParameter *p_parameters)
+{
+#ifdef /* MCHandleSetPurchaseProperty */ LEGACY_EXEC
+    bool t_success = true;
+    char *t_product_id = nil;
+    char *t_prop_name = nil;
+    char *t_prop_value = nil;
+    
+    if (t_success)
+        t_success = MCParseParameters(p_parameters, "sss", &t_product_id, &t_prop_name, &t_prop_value);
+    if (t_success)
+        t_success = MCStoreSetPurchaseProperty(t_product_id, t_prop_name, t_prop_value);
+    
+    MCCStringFree(t_product_id);
+    MCCStringFree(t_prop_name);
+    MCCStringFree(t_prop_value);
+    
+    return ES_NORMAL;
+#endif /* MCHandleSetPurchaseProperty */
+
+    bool t_success = true;
+    MCAutoStringRef t_product_id, t_prop_name, t_prop_value;
+    MCExecContext ctxt(nil,nil,nil);
+    
+    if (t_success)
+        t_success = MCParseParameters(p_parameters, "xxx", &(&t_product_id), &(&t_prop_name), &(&t_prop_value));
+    if (t_success)
+        MCStoreSetPurchaseProperty(ctxt, *t_product_id, *t_prop_name, *t_prop_value);
+    
+    if (ctxt.HasError())
+        return ES_ERROR;
+    
+    return ES_NORMAL;
+    
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1192,6 +1271,8 @@ Exec_stat MCHandleCanSendMail(void *context, MCParameter *p_parameters)
         ctxt . SetTheResultToValue(kMCTrue);
     else
         ctxt . SetTheResultToValue(kMCFalse);
+    
+    return ES_NORMAL;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1218,8 +1299,7 @@ Exec_stat MCHandleStartTrackingSensor(void *p_context, MCParameter *p_parameters
     }
     
     MCExecContext t_ctxt(ep);
-	t_ctxt . SetTheResultToEmpty();
-    
+
     if (t_sensor != kMCSensorTypeUnknown)
     {
         MCSensorExecStartTrackingSensor(t_ctxt, t_sensor, t_loosely);
@@ -1245,8 +1325,14 @@ Exec_stat MCHandleStartTrackingSensor(void *p_context, MCParameter *p_parameters
     if (p_parameters)
     {
         MCAutoValueRef t_value;
+        MCAutoBooleanRef t_bool;
         p_parameters->eval(ctxt, &t_value);
-        t_loosely = MCValueIsEqualTo(*t_value, kMCTrue);
+        // PM-2015-03-11: [[ Bug 14855 ]] Evaluate correctly the second param
+        if (ctxt . ConvertToBoolean(*t_value, &t_bool))
+            t_loosely = MCValueIsEqualTo(*t_bool, kMCTrue);
+        // if conversion fails, keep the same behaviour as in LC 6.7
+        else
+            t_loosely = false;
     }
     
 	ctxt . SetTheResultToEmpty();
@@ -1493,8 +1579,14 @@ Exec_stat MCHandleSensorReading(void *p_context, MCParameter *p_parameters)
     if (p_parameters)
     {
         MCAutoValueRef t_value;
+        MCAutoBooleanRef t_bool;
         p_parameters->eval(ctxt, &t_value);
-        t_detailed = MCValueIsEqualTo(*t_value, kMCTrue);
+        // PM-2015-03-11: [[ Bug 14855 ]] Evaluate correctly the second param
+        if(ctxt . ConvertToBoolean(*t_value, &t_bool))
+            t_detailed = MCValueIsEqualTo(*t_bool, kMCTrue);
+        // if conversion fails, keep the same behaviour as in LC 6.7
+        else
+            t_detailed = false;
     }
     
     ctxt . SetTheResultToEmpty();
@@ -1555,6 +1647,28 @@ Exec_stat MCHandleSensorReading(void *p_context, MCParameter *p_parameters)
 		return ES_NORMAL;
 
 	return ES_ERROR;
+}
+
+// SN-2014-12-11: [[ Merge-6.7.1-rc-4 ]]
+// PM-2014-12-08: [[ Bug 13659 ]] New function to detect if Voice Over is turned on (iOS only)
+Exec_stat MCHandleIsVoiceOverRunning(void *context, MCParameter *p_parameters)
+{
+#ifdef /* MCHandleIsVoiceOverRunning */ MLEGACY_EXEC
+    MCresult -> sets(UIAccessibilityIsVoiceOverRunning() ? MCtruestring : MCfalsestring);
+    return ES_NORMAL;
+#endif /* MCHandleIsVoiceOverRunning */
+    MCExecContext ctxt(nil, nil, nil);
+
+    bool t_is_vo_running;
+    MCMiscGetIsVoiceOverRunning(ctxt, t_is_vo_running);
+
+    if (!ctxt . HasError())
+    {
+        ctxt . SetTheResultToBool(t_is_vo_running);
+        return ES_NORMAL;
+    }
+
+    return ES_ERROR;
 }
 
 // MM-2012-02-11: Added support old style sensor syntax (iPhoneGetCurrentLocation etc)
@@ -1675,8 +1789,7 @@ Exec_stat MCHandleHeadingCalibrationTimeout(void *p_context, MCParameter *p_para
     int t_timeout;
     MCSensorGetLocationCalibrationTimeout(ctxt, t_timeout);
     MCresult->setnvalue(t_timeout);
-    
-    ctxt . SetTheResultToEmpty();
+
 	if (!ctxt . HasError())
 		return ES_NORMAL;
 
@@ -1937,7 +2050,8 @@ Exec_stat MCHandleUpdateContact(void *context, MCParameter *p_parameters) // ABU
 	MCAutoStringRef t_message;
 	MCAutoStringRef t_alternate_name;
 
-	if (MCParseParameters(p_parameters, "axxx", &(&t_contact), &(&t_title), &(&t_message), &(&t_alternate_name)))
+    // PM-2015-05-21: [[ Bug 14792 ]] Make sure params are parsed properly
+	if (MCParseParameters(p_parameters, "a|xxx", &(&t_contact), &(&t_title), &(&t_message), &(&t_alternate_name)))
 	    MCAddressBookExecUpdateContact(ctxt, *t_contact, *t_title, *t_message, *t_alternate_name);
     
 	if (!ctxt . HasError())
@@ -3190,7 +3304,8 @@ Exec_stat MCHandleStartBusyIndicator(void *p_context, MCParameter *p_parameters)
         t_success = MCParseParameters(p_parameters, "x", &(&t_label));
     
     intenum_t t_indicator;
-    if (t_success)
+    // PM-2014-11-21: [[ Bug 14068 ]] Nil check to prevent a crash
+    if (t_success && p_parameters)
         t_success = MCBusyIndicatorTypeFromString(*t_indicator_string);
     
     int32_t t_opacity = -1;
@@ -4167,6 +4282,24 @@ Exec_stat MCHandleGetLaunchUrl (void *context, MCParameter *p_parameters)
     return ES_ERROR;
 }
 
+Exec_stat MCHandleGetLaunchData(void *context, MCParameter *p_parameters)
+{
+	MCExecContext ctxt(nil, nil, nil);
+	
+	MCAutoArrayRef t_data;
+	
+	MCMiscGetLaunchData(ctxt, &t_data);
+	
+	if (!ctxt.HasError())
+	{
+		ctxt.SetTheResultToValue(*t_data);
+		return ES_NORMAL;
+	}
+	
+	ctxt.SetTheResultToEmpty();
+	return ES_ERROR;
+}
+
 Exec_stat MCHandleBeep(void *p_context, MCParameter *p_parameters)
 {
 #ifdef /* MCHandleBeep */ LEGACY_EXEC
@@ -4367,17 +4500,32 @@ Exec_stat MCHandleSetStatusBarStyle(void *context, MCParameter *p_parameters)
 #ifdef /* MCHandleSetStatusBarStyle */ LEGACY_EXEC
 	MCExecPoint ep(nil, nil, nil);
 	
-	UIStatusBarStyle t_style;
-	t_style = UIStatusBarStyleDefault;
-	if (p_parameters != nil)
-	{
-		p_parameters -> eval_argument(ep);
-		if (ep . getsvalue() == "default")
-			t_style = UIStatusBarStyleDefault;
-		else if (ep . getsvalue() == "translucent")
-			t_style = UIStatusBarStyleBlackTranslucent;
-		else if (ep . getsvalue() == "opaque")
-			t_style = UIStatusBarStyleBlackOpaque;
+    UIStatusBarStyle t_style;
+    t_style = UIStatusBarStyleDefault;
+    if (p_parameters != nil)
+    {
+        p_parameters -> eval_argument(ep);
+        if (ep . getsvalue() == "default")
+        {
+            t_style = UIStatusBarStyleDefault;
+            [MCIPhoneGetApplication() setStatusBarSolid:NO];
+        }
+        else if (ep . getsvalue() == "translucent")
+        {
+            t_style = UIStatusBarStyleBlackTranslucent;
+            [MCIPhoneGetApplication() setStatusBarSolid:NO];
+        }
+        else if (ep . getsvalue() == "opaque")
+        {
+            t_style = UIStatusBarStyleBlackOpaque;
+            [MCIPhoneGetApplication() setStatusBarSolid:NO];
+        }
+        // PM-2015-02-17: [[ Bug 14482 ]] "solid" status bar style means opaque and automatically shift down the app view by 20 pixels
+        else if (ep . getsvalue() == "solid")
+        {
+            t_style = UIStatusBarStyleBlackOpaque;
+            [MCIPhoneGetApplication() setStatusBarSolid:YES];
+        }
 	}
 	
 	[MCIPhoneGetApplication() switchToStatusBarStyle: t_style];
@@ -5515,24 +5663,30 @@ Exec_stat MCHandlePick(void *context, MCParameter *p_parameters)
             }
         }
     }
-    
-    MCPickButtonType t_type = kMCPickButtonNone;
-    // now process any additional parameters
-    while (t_success && t_has_buttons && p_parameters != nil)
+	
+    // PM-2015-09-01: [[ Bug 15816 ]] Process any additional parameters correctly
+    while (t_success && t_has_buttons && t_string_param != nil)
     {
         if (MCStringIsEqualToCString(t_string_param, "checkmark", kMCCompareCaseless))
             t_use_checkmark = true;
         else if (MCStringIsEqualToCString(t_string_param, "cancel", kMCCompareCaseless))
-            t_type = kMCPickButtonCancel;
+			t_use_cancel = true;
         else if (MCStringIsEqualToCString(t_string_param, "done", kMCCompareCaseless))
-            t_type = kMCPickButtonDone;
+			t_use_done = true;
         else if (MCStringIsEqualToCString(t_string_param, "canceldone", kMCCompareCaseless))
-            t_type = kMCPickButtonCancelAndDone;
+		{
+			t_use_cancel = true;
+			t_use_done = true;
+		}
         else if (MCStringIsEqualToCString(t_string_param, "picker", kMCCompareCaseless))
             t_use_picker = true;
         
         MCValueRelease(t_string_param);
-        t_success = MCParseParameters(p_parameters, "x", &t_string_param);
+		t_string_param = nil;
+		
+		if (p_parameters != nil)
+			t_success = MCParseParameters(p_parameters, "x", &t_string_param);
+		
     }
     
     ctxt.SetTheResultToEmpty();
@@ -6454,6 +6608,11 @@ Exec_stat MCHandleControlDo(void *context, MCParameter *p_parameters)
 
 	if (t_success)
 		MCNativeControlExecDo(ctxt, *t_control_name, *t_property, t_params . Ptr(), t_params . Size());
+
+    
+    // SN-2014-11-20: [[ Bug 14062 ]] Cleanup the memory
+    for (uint32_t i = 0; i < t_params . Size(); ++i)
+        MCValueRelease(t_params[i]);
 	
 	return ES_NORMAL;
 }
@@ -6468,6 +6627,8 @@ Exec_stat MCHandleControlTarget(void *context, MCParameter *p_parameters)
     MCNativeControlIdentifierFree(ctxt, t_identifier);
     if (*t_string != nil)
         ctxt . SetTheResultToValue(*t_string);
+    
+    return ES_NORMAL;
 }
 
 bool list_native_controls(void *context, MCNativeControl* p_control)
@@ -6591,6 +6752,11 @@ Exec_stat MCHandleSetRemoteControlDisplay(void *context, MCParameter *p_paramete
     
     if (t_success)
         MCMiscSetRemoteControlDisplayProperties(ctxt, *t_props);
+    
+    if (t_success)
+        return ES_NORMAL;
+    else
+        return ES_ERROR;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -6733,6 +6899,8 @@ static MCPlatformMessageSpec s_platform_messages[] =
     {false, "iphoneGetDeviceToken", MCHandleGetDeviceToken, nil},
     {false, "iphoneGetLaunchUrl", MCHandleGetLaunchUrl, nil},
 	
+	{false, "mobileGetLaunchData", MCHandleGetLaunchData, nil},
+	
 	{false, "iphoneSetStatusBarStyle", MCHandleSetStatusBarStyle, nil},
 	{false, "iphoneShowStatusBar", MCHandleShowStatusBar, nil},
 	{false, "iphoneHideStatusBar", MCHandleHideStatusBar, nil},
@@ -6780,7 +6948,7 @@ static MCPlatformMessageSpec s_platform_messages[] =
     {false, "mobileStoreRestorePurchases", MCHandleRestorePurchases, nil},
     {false, "mobileStoreMakePurchase", MCHandleMakePurchase, nil},
     {false, "mobileStoreConfirmPurchase", MCHandleConfirmPurchase, nil},
-//    {false, "mobileStoreProductProperty", MCHandleGetPurchaseProperty, nil},
+    {false, "mobileStoreProductProperty", MCHandleGetPurchaseProperty, nil},
     {false, "mobileStoreSetProductType", MCHandleProductSetType, nil},
     {false, "mobileStoreRequestProductDetails", MCHandleRequestProductDetails, nil},
     {false, "mobileStoreConsumePurchase", MCHandleConsumePurchase, nil},
@@ -6792,14 +6960,14 @@ static MCPlatformMessageSpec s_platform_messages[] =
 	{false, "iphoneControlDelete", MCHandleControlDelete, nil},
 	{false, "iphoneControlSet", MCHandleControlSet, nil},
 	{false, "iphoneControlGet", MCHandleControlGet, nil},
-	{false, "iphoneControlDo", MCHandleControlDo, nil},
+	{true, "iphoneControlDo", MCHandleControlDo, nil},
 	{false, "iphoneControlTarget", MCHandleControlTarget, nil},
 	{false, "iphoneControls", MCHandleControlList, nil},
 	{false, "mobileControlCreate", MCHandleControlCreate, nil},
 	{false, "mobileControlDelete", MCHandleControlDelete, nil},
 	{false, "mobileControlSet", MCHandleControlSet, nil},
 	{false, "mobileControlGet", MCHandleControlGet, nil},
-	{false, "mobileControlDo", MCHandleControlDo, nil},
+	{true, "mobileControlDo", MCHandleControlDo, nil},
 	{false, "mobileControlTarget", MCHandleControlTarget, nil},
 	{false, "mobileControls", MCHandleControlList, nil},
 	
@@ -6920,7 +7088,6 @@ bool MCIsPlatformMessage(MCNameRef handler_name)
     
     for(uint32_t i = 0; s_platform_messages[i] . message != nil; i++)
     {
-        const char* t_message = s_platform_messages[i].message;
 		if (MCNameIsEqualToCString(handler_name, s_platform_messages[i].message, kMCCompareCaseless))
 			found = true;
     }
@@ -6946,39 +7113,43 @@ static void invoke_platform(void *p_context)
 
 extern void MCIPhoneCallOnMainFiber(void (*)(void *), void *);
 
-Exec_stat MCHandlePlatformMessage(MCNameRef p_message, MCParameter *p_parameters)
+bool MCDoHandlePlatformMessage(bool p_waitable, MCPlatformMessageHandler p_handler, void *p_context, MCParameter *p_parameters, Exec_stat& r_result)
+{
+    // MW-2012-07-31: [[ Fibers ]] If the method doesn't need script / wait, then
+    //   jump to the main fiber for it.
+    if (!p_waitable)
+    {
+        handle_context_t ctxt;
+        ctxt . handler = p_handler;
+        ctxt . context = p_context;
+        ctxt . parameters = p_parameters;
+        MCIPhoneCallOnMainFiber(invoke_platform, &ctxt);
+        r_result = ctxt . result;
+        return true;
+    }
+    
+    // Execute the method as normal, in this case the method will have to jump
+    // to the main fiber to do any system stuff.
+    r_result = p_handler(p_context, p_parameters);
+    return true;
+    
+}
+#else // Android
+bool MCDoHandlePlatformMessage(bool p_waitable, MCPlatformMessageHandler p_handler, void *p_context, MCParameter *p_parameters, Exec_stat& r_result)
+{
+    r_result = p_handler(p_context, p_parameters);
+    return true;
+}
+#endif
+
+bool MCHandlePlatformMessage(MCNameRef p_message, MCParameter *p_parameters, Exec_stat& r_result)
 {
 	for(uint32_t i = 0; s_platform_messages[i] . message != nil; i++)
 		if (MCNameIsEqualToCString(p_message, s_platform_messages[i] . message, kMCCompareCaseless))
 		{
-			// MW-2012-07-31: [[ Fibers ]] If the method doesn't need script / wait, then
-			//   jump to the main fiber for it.
-			if (!s_platform_messages[i] . waitable)
-			{
-				handle_context_t ctxt;
-				ctxt . handler = s_platform_messages[i] . handler;
-				ctxt . context = s_platform_messages[i] . context;
-				ctxt . parameters = p_parameters;
-				MCIPhoneCallOnMainFiber(invoke_platform, &ctxt);
-				return ctxt . result;
-			}
-			
-			// Execute the method as normal, in this case the method will have to jump
-			// to the main fiber to do any system stuff.
-			return s_platform_messages[i] . handler(s_platform_messages[i] . context, p_parameters);
+            return MCDoHandlePlatformMessage(s_platform_messages[i] . waitable, s_platform_messages[i] . handler, s_platform_messages[i] . context, p_parameters, r_result);
 		}
 	
-	return ES_NOT_HANDLED;
+    r_result = ES_NOT_HANDLED;
+	return false;
 }
-#else // Android
-Exec_stat MCHandlePlatformMessage(MCNameRef p_message, MCParameter *p_parameters)
-{
-	for(uint32_t i = 0; s_platform_messages[i] . message != nil; i++)
-    {
-		if (MCNameIsEqualToCString(p_message, s_platform_messages[i] . message, kMCCompareCaseless))
-			return s_platform_messages[i] . handler(s_platform_messages[i] . context, p_parameters);
-    }
-	
-	return ES_NOT_HANDLED;
-}
-#endif

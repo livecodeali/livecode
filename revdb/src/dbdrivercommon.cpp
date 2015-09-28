@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -15,6 +15,12 @@ You should have received a copy of the GNU General Public License
 along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "dbdrivercommon.h"
+
+#if defined(_WINDOWS) || defined(_WINDOWS_SERVER)
+#define LIBRARY_EXPORT __declspec(dllexport)
+#else
+#define LIBRARY_EXPORT __attribute__((__visibility__("default")))
+#endif
 
 // Default implementations for DBField
 DBField::DBField()
@@ -452,3 +458,34 @@ void CDBCursor::FreeFields()
 	fields = NULL;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+static DBcallbacks *dbcallbacks = NULL;
+
+extern "C" LIBRARY_EXPORT void setcallbacksref(DBcallbacks *callbacks)
+{
+    dbcallbacks = callbacks;
+}
+
+extern "C" void *MCU_loadmodule(const char *p_path)
+{
+    if (dbcallbacks == NULL)
+        return NULL;
+    return dbcallbacks -> load_module(p_path);
+}
+
+extern "C" void MCU_unloadmodule(void *p_handle)
+{
+    if (dbcallbacks == NULL)
+        return;
+    dbcallbacks -> unload_module(p_handle);
+}
+
+extern "C" void *MCU_resolvemodulesymbol(void *p_handle, const char *p_symbol)
+{
+    if (dbcallbacks == NULL)
+        return NULL;
+    return dbcallbacks -> resolve_symbol_in_module(p_handle, p_symbol);
+}
+
+////////////////////////////////////////////////////////////////////////////////

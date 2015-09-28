@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -29,7 +29,7 @@ public:
 
 	//
 
-	MCPrinterResult Start(HDC p_dc, const char *p_document_name, const char *p_output_file);
+	MCPrinterResult Start(HDC p_dc, const wchar_t *p_document_name, const wchar_t *p_output_file);
 	MCPrinterResult Finish(void);
 
 	//

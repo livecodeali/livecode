@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -51,6 +51,9 @@ MCBlock::MCBlock(void)
     origin = 0;
     tabpos = 0;
     direction_level = 0;
+
+    // SN-2014-12-16: [[ Bug 14227 ]] Make sure to initialise the segment to nil.
+    segment = nil;
 
 	// MW-2012-02-14: [[ FontRefs ]] The font for the block starts off nil.
 	m_font = nil;
@@ -105,6 +108,9 @@ MCBlock::MCBlock(const MCBlock &bref) : MCDLlist(bref)
     origin = 0;
     tabpos = 0;
     direction_level = bref.direction_level;
+
+    // SN-2014-12-16: [[ Bug 14227 ]] Make sure to initialise the segment to nil.
+    segment = nil;
 
 	// MW-2012-02-14: [[ FontRefs ]] The font for the block starts off nil.
 	m_font = nil;
@@ -360,6 +366,13 @@ IO_stat MCBlock::save(IO_handle stream, uint4 p_part)
 		t_is_unicode = true;
         flags |= F_HAS_UNICODE;
 	}
+
+    // SN-2014-12-04: [[ Bug 14149 ]] Add the F_HAS_TAB flag, for legacy saving
+    if (MCstackfileversion < 7000)
+    {
+        if (segment && segment != segment -> next())
+            flags |= F_HAS_TAB;
+    }
 	
 	// MW-2012-02-17: [[ SplitTextAttrs ]] If we have unicode, or one of the font attr are
 	//   set then we must serialize a font.
@@ -740,27 +753,41 @@ bool MCBlock::fit(coord_t x, coord_t maxwidth, findex_t& r_break_index, bool& r_
 		codepoint_t t_this_char;
         bool t_end_of_block;
         t_end_of_block = false;
-		while(i < m_index + m_size)
-		{
-			t_this_char = t_next_char;
-			
-			i = parent->IncrementIndex(i);
-		
-			if (i < m_index + m_size)
-				t_next_char = parent->GetCodepointAtIndex(i);
-			else
+        
+        // If this is the first block of a segment that was created by a tab,
+        // we can use the first position in the block as a break position,
+        // unless this is the first segment on a line.
+        if (!t_can_fit
+            && this == segment->GetFirstBlock()
+            && i == m_index
+            && segment->GetParent()->GetFirstSegment() != segment
+            && parent->GetCodepointAtIndex(i - 1) == '\t')
+        {
+            t_can_fit = t_can_break = true;
+        }
+        else
+        {
+            while(i < m_index + m_size)
             {
-                t_next_char = t_next_block_char;
-                t_end_of_block = true;
+                t_this_char = t_next_char;
+                
+                i = parent->IncrementIndex(i);
+            
+                if (i < m_index + m_size)
+                    t_next_char = parent->GetCodepointAtIndex(i);
+                else
+                {
+                    t_next_char = t_next_block_char;
+                    t_end_of_block = true;
+                }
+                
+                if (t_next_char == -1 ||
+                    MCUnicodeCanBreakBetween(t_this_char, t_next_char))
+                {
+                    t_can_break = true;
+                    break;
+                }
             }
-			
-			if (t_this_char == '\t' ||
-				t_next_char == -1 ||
-				MCUnicodeCanBreakBetween(t_this_char, t_next_char))
-			{
-				t_can_break = true;
-				break;
-			}
 		}
 
 		// MW-2013-11-07: [[ Bug 11393 ]] Previous per-platform implementations all fold into the optimized
@@ -1000,7 +1027,8 @@ void MCBlock::drawstring(MCDC *dc, coord_t x, coord_t p_cell_left, coord_t p_cel
 
 			// MW-2012-02-09: [[ ParaStyles ]] Compute the cell clip, taking into account padding.
             // SN-2014-08-14: [[ Bug 13106 ]] Fix for the cell clipping and update to GetInnerWidth
-            t_cell_clip . x = p_cell_left - 1;
+            // SN-2015-09-07: [[ Bug 15273 ]] We clip from the origin of the block
+            t_cell_clip . x = p_cell_left + origin - 1;
             // AL-2014-07-29: [[ Bug 12952 ]] Clip to segment boundaries
 			t_cell_clip . width = MCU_max(segment -> GetInnerWidth() - origin, 0.0f);
 
@@ -2185,13 +2213,41 @@ void MCBlock::importattrs(const MCFieldCharacterStyle& p_style)
 		setshift(p_style . text_shift);
 }
 
+// SN-2014-10-31: [[ Bug 13879 ]] Update the way the string is measured.
 uint32_t measure_stringref(MCStringRef p_string)
 {
-	if (MCStringIsNative(p_string))
-        return 2 + MCU_min(MCStringGetLength(p_string) + 1, MAXUINT2);
-    else
-        return 2 + MCU_min((MCStringGetLength(p_string) + 1) * sizeof(unichar_t), MAXUINT2);
+    MCStringEncoding t_encoding;
+    uint32_t t_additional_bytes = 0;
+    
 
+    if (MCstackfileversion < 7000)
+        t_encoding = kMCStringEncodingNative;
+    else
+        t_encoding = kMCStringEncodingUTF8;
+   
+    // Encode the string to get the right length
+    MCAutoDataRef t_data;
+    /* UNCHECKED */ MCStringEncode(p_string, t_encoding, false, &t_data);
+    uint32_t t_length;
+    t_length = MCDataGetLength(*t_data);
+    
+    if (MCstackfileversion < 7000)
+    {
+        // Full string is written in 5.5 format:
+        //  - length is written as a uint2
+        //  - NULL char is included
+        t_additional_bytes = 2 + 1;
+    }
+    else
+    {
+        // 7.0 format may write the length as a uint4
+        if (t_length < 16384)
+            t_additional_bytes = 2;
+        else
+            t_additional_bytes = 4;
+    }
+    
+    return t_length + t_additional_bytes;
 }
 
 // MW-2012-03-04: [[ StackFile5500 ]] Utility routine for computing the length of

@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -98,6 +98,11 @@ MCPropertyInfo MCGroup::kProperties[] =
     DEFINE_RW_OBJ_PROPERTY(P_LOCK_UPDATES, Bool, MCGroup, LockUpdates)
     // MERG-2013-08-12: [[ ClipsToRect ]] If true group clips to the set rect rather than the rect of children
     DEFINE_RW_OBJ_PROPERTY(P_CLIPS_TO_RECT, Bool, MCGroup, ClipsToRect)
+    // PM-2015-07-02: [[ Bug 13262 ]] Make sure we attach/detach the player when showing/hiding a group that has a player
+#ifdef PLATFORM_PLAYER
+    DEFINE_WO_OBJ_PART_PROPERTY(P_VISIBLE, Bool, MCGroup, Visible)
+    DEFINE_WO_OBJ_PART_PROPERTY(P_INVISIBLE, Bool, MCGroup, Invisible)
+#endif
 };
 
 MCObjectPropertyTable MCGroup::kPropertyTable =
@@ -1420,6 +1425,39 @@ Exec_stat MCGroup::setprop_legacy(uint4 parid, Properties p, MCExecPoint &ep, Bo
         return t_stat;
     }
     break;
+
+			// PM-2015-07-02: [[ Bug 13262 ]] Make sure we attach/detach the player when showing/hiding a group that has a player
+#ifdef FEATURE_PLATFORM_PLAYER
+	case P_INVISIBLE:
+	case P_VISIBLE:
+	{
+		Exec_stat t_stat;
+		Boolean t_show;
+		Boolean t_invisible;
+		t_invisible = (p == P_INVISIBLE);
+		
+		t_stat = ep.getboolean(t_show, 0, 0, EE_PROPERTY_NAB);
+		if (t_stat == ES_NORMAL)
+		{
+			for(MCPlayer *t_player = MCplayers; t_player != nil; t_player = t_player -> getnextplayer())
+			{
+				if (t_player -> getparent() == this)
+				{
+					if ((t_show && !t_invisible) || (!t_show && t_invisible))
+						t_player -> attachplayer();
+					else
+						t_player -> detachplayer();
+				}
+			}
+			
+			return MCControl::setprop(parid, p, ep, effective);
+		}
+		return t_stat;
+		
+	}
+	break;
+#endif
+			
 #endif /* MCGroup::setprop */
 	default:
 		return MCControl::setprop_legacy(parid, p, ep, effective);
@@ -2070,7 +2108,10 @@ MCControl *MCGroup::getchild(Chunk_term etype, const MCString &expression,
 		count(otype, NULL, num);
 		// MW-2007-08-30: [[ Bug 4152 ]] If we're counting groups, we get one too many as it
 		//   includes the owner - thus we adjust (this means you can do 'the last group of group ...')
-		if (otype == CT_GROUP)
+		
+		// PM-2015-08-31: [[ Bug 15763 ]] Same as above - If we're counting controls, we get one too many as it
+		//   includes the owner - thus we adjust (this means you can do 'the last control of group ...')
+		if (otype == CT_GROUP || otype == CT_LAYER)
 			num--;
 		switch (etype)
 		{
@@ -3635,4 +3676,39 @@ void MCGroup::relayercontrol_insert(MCControl *p_control, MCControl *p_target)
 
 	if (!computeminrect(False))
 		p_control -> layer_redrawall();
+}
+
+void MCGroup::scheduledelete(bool p_is_child)
+{
+    MCControl::scheduledelete(p_is_child);
+    
+	if (controls != NULL)
+	{
+		MCControl *t_control;
+		t_control = controls;
+		do
+		{   t_control -> scheduledelete(true);
+			t_control = t_control -> next();
+		}
+		while(t_control != controls);
+	}
+}
+
+// PM-2015-07-02: [[ Bug 13262 ]] Make sure we attach/detach the player when
+//  showing/hiding a group that has a player
+void MCGroup::SetVisibility(MCExecContext &ctxt, uinteger_t part, bool flag, bool visible)
+{
+    MCControl::SetVisibility(ctxt, part, flag, visible);
+#ifdef PLATFORM_PLAYER
+    for(MCPlayer *t_player = MCplayers; t_player != nil; t_player = t_player -> getnextplayer())
+    {
+        if (t_player -> getparent() == this)
+        {
+            if (flag && visible || !flag && !visible)
+                t_player -> attachplayer();
+            else
+                t_player -> detachplayer();
+        }
+    }
+#endif
 }

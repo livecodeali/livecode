@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -1284,7 +1284,8 @@ Exec_stat MCImage::setprop_legacy(uint4 parid, Properties p, MCExecPoint &ep, Bo
 			MCImageBitmap *t_copy = nil;
 			if (m_rep != nil)
 			{
-				t_success = copybitmap(false, t_copy);
+                // PM-2015-02-09: [[ Bug 14483 ]] Reverted patch for bugfix 13938
+                t_success = copybitmap(false, t_copy);
 			}
 			else
 			{
@@ -1292,12 +1293,13 @@ Exec_stat MCImage::setprop_legacy(uint4 parid, Properties p, MCExecPoint &ep, Bo
 				if (t_success)
 					MCImageBitmapSet(t_copy, MCGPixelPackNative(0, 0, 0, 255)); // set to opaque black
 			}
-
+            
 			if (t_success)
 			{
 				MCImageSetMask(t_copy, (uint8_t*)data.getstring(), data.getlength(), true);
+                // PM-2015-02-09: [[ Bug 14483 ]] Reverted patch for bugfix 14347
 				setbitmap(t_copy, 1.0);
-			}
+            }
 
 			MCImageFreeBitmap(t_copy);
 
@@ -1671,8 +1673,11 @@ IO_stat MCImage::extendedsave(MCObjectOutputStream& p_stream, uint4 p_part)
 	if (s_have_control_colors)
 	{
 		t_flags |= IMAGE_EXTRA_CONTROLCOLORS;
+        // increase t_length to accommodate s_control_color_count and s_control_color_flags
 		t_length += sizeof(uint16_t) + sizeof(uint16_t);
-		t_length += s_control_color_count * 3 * sizeof(uint16_t);
+        // increase t_length to accommodate the color
+        t_length += s_control_color_count * 3 * sizeof(uint16_t);
+        
 		for (uint16_t i = 0; i < s_control_color_count; i++)
 			if (s_control_color_names[i] != nil)
             {
@@ -1682,7 +1687,8 @@ IO_stat MCImage::extendedsave(MCObjectOutputStream& p_stream, uint4 p_part)
                 t_length += p_stream . MeasureStringRefNew(s_control_color_names[i], MCstackfileversion >= 7000);
             }
 			else
-				t_length += 1;
+                // AL-2014-11-07: [[ Bug 13851 ]] Measure empty string if the color name is nil
+                t_length += p_stream . MeasureStringRefNew(kMCEmptyString, MCstackfileversion >= 7000);
 	
 		t_length += sizeof(uint16_t);
 		t_length += s_control_pixmap_count * sizeof(uint4);
@@ -2274,13 +2280,11 @@ void MCImage::apply_transform()
 	else
 		m_has_transform = false;
 	
-	MCThreadMutexLock(MCimagerepmutex);
 	if (m_resampled_rep != nil && !(m_has_transform && MCGAffineTransformIsRectangular(m_transform) && m_resampled_rep->Matches(rect.width, rect.height, m_transform.a == -1.0, m_transform.d == -1.0, m_rep)))
 	{
 		m_resampled_rep->Release();
 		m_resampled_rep = nil;
 	}
-	MCThreadMutexUnlock(MCimagerepmutex);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -2758,7 +2762,8 @@ bool MCImage::copybitmap(bool p_premultiplied, MCImageBitmap *&r_bitmap)
 	MCImageBitmap *t_bitmap;
 	t_bitmap = nil;
 
-	t_success = lockbitmap(t_bitmap, true);
+    // PM-2014-11-05: [[ Bug 13938 ]] Make sure new alphaData does not add to previous one
+	t_success = lockbitmap(t_bitmap, p_premultiplied);
 
 	if (t_success)
 	{
@@ -2823,12 +2828,26 @@ MCString MCImage::getrawdata()
 {
 	if (m_rep == nil || m_rep->GetType() != kMCImageRepResident)
 		return MCString(nil, 0);
-	
+
 	void *t_data;
 	uindex_t t_size;
-	static_cast<MCResidentImageRep*>(m_rep)->GetData(t_data, t_size);
-	
-	return MCString((char*)t_data, t_size);
+    static_cast<MCResidentImageRep*>(m_rep)->GetData(t_data, t_size);
+
+    return MCString((char*)t_data, t_size);
+}
+
+// PM-2014-12-12: [[ Bug 13860 ]] Allow exporting referenced images to album
+MCString MCImage::getimagefilename(void)
+{
+    if (m_rep == nil || m_rep->GetType() != kMCImageRepReferenced)
+		return MCString(nil, 0);
+    
+    const char *t_filename;
+    t_filename = static_cast<MCReferencedImageRep*>(m_rep)->GetSearchKey();
+    
+    return MCString(t_filename);
+
+    
 }
 #endif 
 
@@ -2845,6 +2864,24 @@ void MCImage::getrawdata(MCDataRef& r_data)
 	
 	/* UNCHECKED */ MCDataCreateWithBytes((const byte_t*)t_data, t_size, r_data);
 }
+// PM-2014-12-12: [[ Bug 13860 ]] Allow exporting referenced images to album
+void MCImage::getimagefilename(MCStringRef &r_filename)
+{
+    MCStringRef t_filename;
+    if (m_rep == nil || m_rep->GetType() != kMCImageRepReferenced)
+        r_filename = MCValueRetain(kMCEmptyString);
+    
+    t_filename = static_cast<MCReferencedImageRep*>(m_rep)->GetSearchKey();
+    
+    MCStringCopy(t_filename, r_filename);
+    
+}
+
+bool MCImage::isReferencedImage()
+{
+    return m_rep->GetType() == kMCImageRepReferenced;
+}
+
 
 bool MCImage::getsourcegeometry(uint32_t &r_pixwidth, uint32_t &r_pixheight)
 {

@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -246,7 +246,7 @@ const char *MCDeployErrorToString(MCDeployError p_error)
 		case kMCDeployErrorNoStackfile:
 			return "could not open stackfile";
 		case kMCDeployErrorNoAuxStackfile:
-			return "could not open auxillary stackfile";
+			return "could not open auxiliary stackfile";
 		case kMCDeployErrorNoOutput:
 			return "could not open output file";
 		case kMCDeployErrorNoSpill:

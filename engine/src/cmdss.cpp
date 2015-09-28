@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -545,7 +545,10 @@ MCStack *MCGo::findstack(MCExecContext &ctxt, MCStringRef p_value, Chunk_term et
 	MCObject *objptr;
 	MCChunk *tchunk = new MCChunk(False);
 	MCerrorlock++;
-    MCScriptPoint sp(p_value);
+    // AL-2014-11-10: [[ Bug 13972 ]] Parsing the chunk without passing through the context results
+    //  in a parse error for unquoted stack and card names, since there is then no handler in which to
+    //  create a new unquoted literal variable.
+    MCScriptPoint sp(ctxt, p_value);
 	Parse_stat stat = tchunk->parse(sp, False);
 	if (stat == PS_NORMAL)
 	{
@@ -828,7 +831,7 @@ void MCGo::exec_ctxt(MCExecContext &ctxt)
 				MCeerror->add(EE_GO_BADWINDOWEXP, line, pos);
 				return ES_ERROR;
 			}
-			if (ep.ton() == ES_NORMAL && MCscreen->uint4towindow(ep.getuint4(), w))
+			if (ep.ton() == ES_NORMAL && MCscreen->uinttowindow(ep.getuint4(), w))
 				oldstack = MCdispatcher->findstackd(w);
 			else
 				oldstack = ep.getobj()->getstack()->findstackname(ep.getsvalue());
@@ -1010,7 +1013,7 @@ void MCGo::exec_ctxt(MCExecContext &ctxt)
             else if (stack -> etype == CT_ID)
             {
                 uinteger_t t_stack_id;
-                if (!ctxt . EvalExprAsUInt(stack -> startpos, EE_GO_BADSTACKEXP, t_stack_id))
+                if (!ctxt . EvalExprAsStrictUInt(stack -> startpos, EE_GO_BADSTACKEXP, t_stack_id))
                     return;
 
                 sptr = MCdefaultstackptr->findstackid(t_stack_id);
@@ -1031,7 +1034,7 @@ void MCGo::exec_ctxt(MCExecContext &ctxt)
 				case CT_ID:
                 {
                     uinteger_t t_stack_id;
-                    if (!ctxt . EvalExprAsUInt(stack -> next -> startpos, EE_CHUNK_BADSTACKEXP, t_stack_id))
+                    if (!ctxt . EvalExprAsStrictUInt(stack -> next -> startpos, EE_CHUNK_BADSTACKEXP, t_stack_id))
                         return;
 
                     sptr = sptr -> findsubstackid(t_stack_id);

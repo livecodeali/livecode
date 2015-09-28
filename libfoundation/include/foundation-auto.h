@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -166,6 +166,14 @@ public:
 
 		return true;
 	}
+    
+    bool Push(T p_value)
+    {
+        if (!Extend(m_value_count + 1))
+            return false;
+        m_values[m_value_count - 1] = MCValueRetain(p_value);
+        return true;
+    }
 
 	//////////
 
@@ -339,13 +347,13 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifdef __LINUX__
 class MCAutoStringRefAsSysString
 {
 public:
     MCAutoStringRefAsSysString()
     {
-        m_sysstring = nil;
+        m_bytes = nil;
+        m_byte_count = 0;
     }
 
     ~MCAutoStringRefAsSysString()
@@ -355,31 +363,40 @@ public:
 
     bool Lock(MCStringRef p_string)
     {
-        bool t_success =  MCStringConvertToSysString(p_string, m_sysstring);
-        if (!t_success)
-        {
-            int x = 42;
-        }
-        return t_success;
+        MCAssert(m_bytes == nil);
+        return MCStringConvertToSysString(p_string, m_bytes, m_byte_count);
     }
 
     void Unlock()
     {
-        if (m_sysstring != nil)
-            free((void*)m_sysstring);
-        m_sysstring = nil;
+        if (m_bytes != nil)
+        {
+            free(m_bytes);
+            m_bytes = nil;
+            m_byte_count = 0;
+        }
     }
 
-    const char * operator * () const
+    const char *operator * () const
     {
-        return m_sysstring;
+        return Ptr();
+    }
+    
+    const char *Ptr(void) const
+    {
+        MCAssert(m_bytes != nil);
+        return m_bytes;
+    }
+    
+    size_t Size(void) const
+    {
+        return m_byte_count;
     }
 
 private:
-    const char *m_sysstring;
+    char *m_bytes;
+    size_t m_byte_count;
 };
-
-#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -846,8 +863,9 @@ public:
 
 	bool CreateStringAndRelease(MCStringRef& r_string)
 	{
-		if (MCStringCreateWithNativeCharsAndRelease(m_chars, m_char_count, r_string))
+		if (MCStringCreateWithNativeChars(m_chars, m_char_count, r_string))
 		{
+            MCMemoryDeleteArray(m_chars);
 			m_chars = nil;
 			m_char_count = 0;
 			return true;

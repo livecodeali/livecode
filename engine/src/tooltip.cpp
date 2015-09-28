@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -124,7 +124,9 @@ void MCTooltip::settip(MCStringRef p_tip)
 
 void MCTooltip::opentip()
 {
-	if (MCStringIsEmpty(tip) || card == NULL)
+    // PM-2015-07-02: [[ Bug 15561 ]] Tooltip should not appear for controls out of the visible window
+    if (MCStringIsEmpty(tip) || card == NULL
+             || !MCU_point_in_rect(card -> getrect(), mx, my))
 		return;
 
 	MCStack *sptr = card->getstack();

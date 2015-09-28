@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -175,7 +175,8 @@ void MCFontRelease(MCFontRef self)
 bool MCFontHasPrinterMetrics(MCFontRef self)
 {
 	// MW-2013-12-19: [[ Bug 11559 ]] If the font has a nil font, do nothing.
-	if (self -> fontstruct == nil)
+    // PM-2015-04-16: [[ Bug 14244 ]] If the font is nil, do nothing
+	if (self == nil || self -> fontstruct == nil)
 		return false;
 	
 	return (self -> style & kMCFontStylePrinterMetrics) != 0;
@@ -184,7 +185,8 @@ bool MCFontHasPrinterMetrics(MCFontRef self)
 int32_t MCFontGetAscent(MCFontRef self)
 {
 	// MW-2013-12-19: [[ Bug 11559 ]] If the font has a nil font, do nothing.
-	if (self -> fontstruct == nil)
+    // PM-2015-04-16: [[ Bug 14244 ]] If the font is nil, do nothing
+	if (self == nil || self -> fontstruct == nil)
 		return 0;
 	
 	return self -> fontstruct -> ascent;
@@ -193,7 +195,8 @@ int32_t MCFontGetAscent(MCFontRef self)
 int32_t MCFontGetDescent(MCFontRef self)
 {
 	// MW-2013-12-19: [[ Bug 11559 ]] If the font has a nil font, do nothing.
-	if (self -> fontstruct == nil)
+    // PM-2015-04-16: [[ Bug 14244 ]] If the font is nil, do nothing
+	if (self == nil || self -> fontstruct == nil)
 		return 0;
 	
 	return self -> fontstruct -> descent;
@@ -202,7 +205,8 @@ int32_t MCFontGetDescent(MCFontRef self)
 void MCFontBreakText(MCFontRef p_font, MCStringRef p_text, MCRange p_range, MCFontBreakTextCallback p_callback, void *p_callback_data, bool p_rtl)
 {
 	// MW-2013-12-19: [[ Bug 11559 ]] If the font has a nil font, do nothing.
-	if (p_font -> fontstruct == nil)
+    // PM-2015-04-16: [[ Bug 14244 ]] If the font is nil, do nothing
+	if (p_font == nil || p_font -> fontstruct == nil)
 		return;
 
     // If the text is small enough, don't bother trying to break it
@@ -595,15 +599,20 @@ bool MCFontUnload(MCStringRef p_path)
 
 bool MCFontListLoaded(uindex_t& r_count, MCStringRef*& r_list)
 {
-    MCAutoArray<MCStringRef> t_list;
+    MCAutoStringRefArray t_list;
     
-    for(MCLoadedFont *t_font = s_loaded_fonts; t_font != nil; t_font = t_font -> next)
-        if (!t_list . Push(t_font -> path))
-            return false;
+    bool t_success;
+    t_success = true;
+ 
+    // AL-2015-01-22: [[ Bug 14424 ]] 'the fontfilesinuse' can cause a crash, due to overreleasing MCStringRefs.
+    //  Property getters always release afterwards, use an MCAutoStringRefArray which increses the refcount.
+    for(MCLoadedFont *t_font = s_loaded_fonts; t_success && t_font != nil; t_font = t_font -> next)
+        t_success = t_list . Push(t_font -> path);
     
-    t_list . Take(r_list, r_count);
-    
-    return true;
+    if (t_success)
+        t_list . Take(r_list, r_count);
+
+    return t_success;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

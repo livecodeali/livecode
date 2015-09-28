@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -20,7 +20,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #ifndef	IMAGE_H
 #define	IMAGE_H
 
-#include "control.h"
+#include "mccontrol.h"
 #include "imagebitmap.h"
 #include "graphics.h"
 #include "exec.h"
@@ -563,7 +563,11 @@ public:
 	void set_gif(uint1 *data, uint4 length);
 
 	//MCString getrawdata(void);
-	void getrawdata(MCDataRef& r_data);
+    void getrawdata(MCDataRef& r_data);
+    
+    // PM-2014-12-12: [[ Bug 13860 ]] Allow exporting referenced images to album
+    void getimagefilename(MCStringRef &r_filename);
+    bool isReferencedImage(void);
     
 	MCImage *next()
 	{

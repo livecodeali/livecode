@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -45,24 +45,30 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "globals.h"
 #include "exec.h"
 #include "system.h"
+#include "dispatch.h"
+#include "scriptpt.h"
 
+#if defined(_MACOSX)
+#include <mach-o/dyld.h>
+#endif
 
 // MDW-2014-07-06: [[ oval_points ]]
 #define QA_NPOINTS 90
 
-static MCPoint qa_points[QA_NPOINTS];
+static MCPoint qa_points[QA_NPOINTS + 1];
 
 static void MCU_play_message()
 {
 	MCAudioClip *acptr = MCacptr;
 	MCacptr = NULL;
-	MCStack *sptr = acptr->getmessagestack();
+    // PM-2014-12-22: [[ Bug 14269 ]] Nil checks to prevent a crash
+	MCStack *sptr = (acptr != NULL ? acptr->getmessagestack() : NULL);
 	if (sptr != NULL)
 	{
 		acptr->setmessagestack(NULL);
 		sptr->getcurcard()->message_with_valueref_args(MCM_play_stopped, acptr->getname());
 	}
-	if (acptr->isdisposable())
+	if (acptr != NULL && acptr->isdisposable())
 		delete acptr;
 }
 
@@ -605,7 +611,7 @@ bool MCU_r8tos(real8 n, uint2 fw, uint2 trailing, uint2 force, MCStringRef &r_st
 	}
 	
 	MCStringRef t_string;
-	if (!MCStringCreateWithCStringAndRelease((char_t *)t_str, t_string))
+	if (!MCStringCreateWithCStringAndRelease(t_str, t_string))
 	{
 		delete[] t_str;
 		return false;
@@ -1397,10 +1403,11 @@ void MCU_snap(int2 &p)
 // MDW-2014-07-09: [[ oval_points ]] need to factor in startAngle and arcAngle
 // this is now used for both roundrects and ovals
 void MCU_roundrect(MCPoint *&points, uint2 &npoints,
-                   const MCRectangle &rect, uint2 radius, uint2 startAngle, uint2 arcAngle)
+                   const MCRectangle &rect, uint2 radius, uint2 startAngle, uint2 arcAngle, uint2 flags)
 {
 	uint2 i, j, k, count;
 	uint2 x, y;
+	bool ignore = false;
 
 	if (points == NULL || npoints != 4 * QA_NPOINTS + 1)
 	{
@@ -1443,13 +1450,21 @@ void MCU_roundrect(MCPoint *&points, uint2 &npoints,
 	// check for startAngle/arcAngle interaction
 	for (count = 0; count < (QA_NPOINTS*4); count++)
 	{
+		ignore = false;
 		// open wedge segment
 		if ((count < startAngle && arclength > 0 && count > arclength) || 
 			(arclength < 0 && count < startAngle) ||
 			(arclength < 0 && count > arcAngle+startAngle) )
 		{
-			x = origin_horiz;
-			y = origin_vert;
+			if (flags & F_OPAQUE)
+			{
+				x = origin_horiz;
+				y = origin_vert;
+			}
+			else
+			{
+				ignore = true;
+			}
 		}
 		else if (count < 90) // quadrant 1
 		{
@@ -1472,11 +1487,14 @@ void MCU_roundrect(MCPoint *&points, uint2 &npoints,
 			y = tr . y + tr . height           - (qa_points[k] . y * rr_height / MAXINT2);
 		}
 
-		if (x != points[i-1] . x || y != points[i-1] . y)
+		if (ignore == false)
 		{
-			points[i] . x = x;
-			points[i] . y = y;
-			i++;
+			if (x != points[i-1] . x || y != points[i-1] . y)
+			{
+				points[i] . x = x;
+				points[i] . y = y;
+				i++;
+			}
 		}
 
 		j--;
@@ -1511,12 +1529,15 @@ void MCU_unparsepoints(MCPoint *points, uint2 npoints, MCExecPoint &ep)
 
 Boolean MCU_parsepoints(MCPoint *&points, uindex_t &noldpoints, MCStringRef data)
 {
+    // This method will parse as much as it can from the string, so we need to
+    // nativize first.
+    
 	Boolean allvalid = True;
 	uint2 npoints = 0;
 	uint4 l = MCStringGetLength(data);
-    char *t_data;
-    /* UNCHECKED */ MCStringConvertToCString(data, t_data);
-	const char *sptr = t_data;
+    MCAutoPointer<char> t_data;
+    /* UNCHECKED */ MCStringConvertToCString(data, &t_data);
+	const char *sptr = *t_data;
 	while (l)
 	{
 		Boolean done1, done2;
@@ -1537,8 +1558,11 @@ Boolean MCU_parsepoints(MCPoint *&points, uindex_t &noldpoints, MCStringRef data
 			MCU_realloc((char **)&points, npoints, npoints + 1, sizeof(MCPoint));
 		points[npoints].x = i1;
 		points[npoints++].y = i2;
-		if (MCStringGetLength(data) - l > 2 && *(sptr - 1) == '\n'
-		        && *(sptr - 2) == '\n')
+        // At this point we have skipped any CRs, so if the previous two chars
+        // are CR (and there is room for two previous CRs) then we append a
+        // 'non-point' to indicate a break in path. This ensures we preserve
+        // a trailing 'non-point'.
+		if (sptr - *t_data >= 2 && *(sptr - 1) == '\n' && *(sptr - 2) == '\n')
 		{
 			if (npoints + 1 > noldpoints)
 				MCU_realloc((char **)&points, npoints, npoints + 1, sizeof(MCPoint));
@@ -1553,10 +1577,16 @@ Boolean MCU_parsepoints(MCPoint *&points, uindex_t &noldpoints, MCStringRef data
 
 Boolean MCU_parsepoint(MCPoint &point, MCStringRef data)
 {
-    char *t_data;
-    /* UNCHECKED */ MCStringConvertToCString(data, t_data);
-	const char *sptr = t_data;
-	uint4 l = MCStringGetLength(data);
+    // This method returns False if it can't parse the point - which will happen
+    // if the string isn't native.
+    if (!MCStringCanBeNative(data))
+        return false;
+    
+    const char *sptr;
+    uint4 l;
+    l = MCStringGetLength(data);
+    sptr = (const char *)MCStringGetNativeCharPtr(data);
+    
 	Boolean done1, done2;
 	// MDW-2013-06-09: [[ Bug 11041 ]] Round non-integer values to nearest.
 	int2 i1= (int2)(MCU_strtol(sptr, l, ',', done1, True));
@@ -1973,6 +2003,12 @@ void MCU_getshift(uint4 mask, uint2 &shift, uint2 &outmask)
 	outmask = j;
 }
 
+static bool _MCStackNotifyToolChange(MCStack *p_stack, void *p_context)
+{
+    p_stack -> notifyattachments(kMCStackAttachmentEventToolChanged);
+    return true;
+}
+
 void MCU_choose_tool(MCExecContext& ctxt, MCStringRef p_input, Tool p_tool)
 {
 	Tool t_new_tool;
@@ -2031,6 +2067,8 @@ void MCU_choose_tool(MCExecContext& ctxt, MCStringRef p_input, Tool p_tool)
     // MW-2014-04-24: [[ Bug 12249 ]] Prod each player to make sure its buffered correctly for the new tool.
     for(MCPlayer *t_player = MCplayers; t_player != NULL; t_player = t_player -> getnextplayer())
         t_player -> syncbuffering(nil);
+    
+    MCdispatcher -> foreachstack(_MCStackNotifyToolChange, nil);
     
 	ctxt . GetObject()->message_with_valueref_args(MCM_new_tool, *t_tool_name);
 }
@@ -2271,15 +2309,40 @@ void MCU_fix_path(MCStringRef in, MCStringRef& r_out)
 		        && *(fptr + 2) == '.' && *(fptr + 3) == '/')
 		{//look for "/../" pattern
             if (fptr == t_unicode_str)
+				/* Delete "/.." component */
 				t_length -= strmove(fptr, fptr + 3, true);
 			else
 			{
 				unichar_t *bptr = fptr - 1;
 				while (True)
 				{ //search backword for '/'
-					if (*bptr == '/' || bptr == t_unicode_str)
+					if (*bptr == '/')
 					{
-						t_length -= strmove(bptr, fptr + 3, true);
+                        // Leave "/../.." unchanged
+                        if (fptr-bptr == 3 && bptr[1] == '.' && bptr[2] == '.')
+                        {
+                            // Ignore this "/../" sequence and move to next component
+                            fptr += 3;
+                            break;
+                        }
+                        
+                        /* Delete "/xxx/.." component */
+                        t_length -= strmove(bptr, fptr + 3, true);
+                        fptr = bptr;
+						break;
+					}
+					else if (bptr == t_unicode_str)
+					{
+                        // Leave "../../" unchanged
+                        if (fptr-bptr == 2 && bptr[0] == '.' && bptr[1] == '.')
+                        {
+                            // Ignore this "/../" sequence and move to next component
+                            fptr += 3;
+                            break;
+                        }
+                        
+                        /* Delete "xxx/../" component */
+						t_length -= strmove (bptr, fptr + 4, true);
 						fptr = bptr;
 						break;
 					}
@@ -2321,18 +2384,19 @@ void MCU_base64decode(MCStringRef in, MCDataRef &out)
 	/* UNCHECKED */ MCFiltersBase64Decode(in, out);
 }
 
-bool MCFiltersUrlEncode(MCStringRef p_source, MCStringRef& r_result);
+// SN-2014-12-02": [[ Bug 14015 ]] The fix should only affect the URLs explicitely encoded as UTF-8
+bool MCFiltersUrlEncode(MCStringRef p_source, bool p_use_utf8, MCStringRef& r_result);
 
-void MCU_urlencode(MCStringRef p_url, MCStringRef &r_encoded)
+void MCU_urlencode(MCStringRef p_url, bool p_use_utf8, MCStringRef &r_encoded)
 {
-	/* UNCHECKED */ MCFiltersUrlEncode(p_url, r_encoded);
+	/* UNCHECKED */ MCFiltersUrlEncode(p_url, p_use_utf8, r_encoded);
 }
 
-bool MCFiltersUrlDecode(MCStringRef p_source, MCStringRef& r_result);
+bool MCFiltersUrlDecode(MCStringRef p_source, bool p_use_utf8, MCStringRef& r_result);
 
-void MCU_urldecode(MCStringRef p_source, MCStringRef& r_result)
+void MCU_urldecode(MCStringRef p_source, bool p_use_utf8, MCStringRef& r_result)
 {
-	/* UNCHECKED */ MCFiltersUrlDecode(p_source, r_result);
+	/* UNCHECKED */ MCFiltersUrlDecode(p_source, p_use_utf8, r_result);
 }
 
 Boolean MCU_freeinserted(MCObjectList *&l)
@@ -2595,13 +2659,12 @@ void MCU_puturl(MCExecContext &ctxt, MCStringRef p_url, MCValueRef p_data)
 	else if (MCU_couldbeurl(MCStringGetOldString(p_url)))
 	{
 		MCAutoDataRef t_data;
-		/* UNCHECKED */ ctxt.ConvertToData(p_data, &t_data);
 
 		// Send "putURL" message
 		Boolean oldlock = MClockmessages;
 		MClockmessages = False;
 		MCParameter p1;
-		p1 . setvalueref_argument(*t_data);
+		p1 . setvalueref_argument(p_data);
 		MCParameter p2;
 		p2 . setvalueref_argument(p_url);
 		p1.setnext(&p2);
@@ -2614,6 +2677,7 @@ void MCU_puturl(MCExecContext &ctxt, MCStringRef p_url, MCValueRef p_data)
 		case ES_PASS:
 			// Either there was no message handler, or the handler passed the message,
 			// so process the URL in the engine.
+			/* UNCHECKED */ ctxt.ConvertToData(p_data, &t_data);
 			MCS_putintourl(ctxt.GetObject(), *t_data, p_url);
 			break;
 
@@ -3159,9 +3223,170 @@ bool MCU_random_bytes(size_t p_bytecount, MCDataRef& r_bytes)
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// SN-2015-04-07: [[ Bug 15164 ]] MCU_loadmodule is now a wrapper of MCU_loadmodule_stringref
+//  to keep consistent its use from the externals.
+void* MCU_loadmodule(const char* p_module)
+{
+    MCAutoStringRef t_module;
+    if (!MCStringCreateWithCString(p_module, &t_module))
+        return NULL;
+
+    return MCU_loadmodule_stringref(*t_module);
+}
+
+// AL-2015-02-06: [[ SB Inclusions ]] Add utility functions for module loading where
+//  p_module can be a universal module name, where a mapping from module names to
+// relative paths has been provided.
+// SN-2015-02-23: [[ Broken Win Compilation ]] Use void*, as the function is imported
+//  as extern in revbrowser/src/cefshared.h - where MCSysModuleHandle does not exist
+void* MCU_loadmodule_stringref(MCStringRef p_module)
+{
+    MCSysModuleHandle t_handle;
+    t_handle = nil;
+#if defined(_MACOSX)
+    MCAutoPointer<char> t_module_cstring;
+    // SN-2015-04-07: [[ Bug 15164 ]] NSAddImage understands UTF-8.
+    if (!MCStringConvertToUTF8String(p_module, &t_module_cstring))
+        return NULL;
+    t_handle = (MCSysModuleHandle)NSAddImage(*t_module_cstring, NSADDIMAGE_OPTION_RETURN_ON_ERROR | NSADDIMAGE_OPTION_WITH_SEARCHING);
+    if (t_handle != nil)
+        return t_handle;
+    // MM-2014-02-06: [[ LipOpenSSL 1.0.1e ]] On Mac, if module cannot be found then look relative to current executable.
+    uint32_t t_buffer_size;
+    t_buffer_size = 0;
+    _NSGetExecutablePath(NULL, &t_buffer_size);
+    char *t_module_path;
+    t_module_path = (char *) malloc(t_buffer_size + strlen(*t_module_cstring) + 1);
+    if (t_module_path != NULL)
+    {
+        if (_NSGetExecutablePath(t_module_path, &t_buffer_size) == 0)
+        {
+            char *t_last_slash;
+            t_last_slash = t_module_path + t_buffer_size;
+            for (uint32_t i = 0; i < t_buffer_size; i++)
+            {
+                if (*t_last_slash == '/')
+                {
+                    *(t_last_slash + 1) = '\0';
+                    break;
+                }
+                t_last_slash--;
+            }
+            strcat(t_module_path, *t_module_cstring);
+            t_handle = (MCSysModuleHandle)NSAddImage(t_module_path, NSADDIMAGE_OPTION_RETURN_ON_ERROR | NSADDIMAGE_OPTION_WITH_SEARCHING);
+        }
+        free(t_module_path);
+        // AL-2015-02-17: [[ SB Inclusions ]] Return the handle if found here.
+        if (t_handle != nil)
+            return t_handle;
+    }
+#endif
+
+    MCAutoStringRef t_path;
+    
+    if (!MCdispatcher || !MCdispatcher -> fetchlibrarymapping(p_module, &t_path))
+    {
+        if (!MCStringCopy(p_module, &t_path))
+            return nil;
+    }
+
+    t_handle = MCS_loadmodule(*t_path);
+    
+    if (t_handle != nil)
+        return t_handle;
+    
+    MCAutoStringRef t_filename;
+    if (MCStringGetCharAtIndex(*t_path ,0) == '/')
+    {
+        if (!MCStringCopy(*t_path, &t_filename))
+            return nil;
+    }
+    else
+    {
+        uindex_t t_last_slash_index;
+        if (!MCStringLastIndexOfChar(MCcmd, '/', UINDEX_MAX, kMCStringOptionCompareExact, t_last_slash_index))
+            t_last_slash_index = MCStringGetLength(MCcmd);
+
+        MCRange t_range;
+        t_range = MCRangeMake(0, t_last_slash_index);
+        if (!MCStringFormat(&t_filename, "%*@/%@", &t_range, MCcmd, *t_path))
+            return nil;
+    }
+
+    t_handle = MCS_loadmodule(*t_filename);
+    
+    return t_handle;
+}
+
+// SN-2015-02-23: [[ Broken Win Compilation ]] Use void*, as the function is imported
+//  as extern in revbrowser/src/cefshared.h - where MCSysModuleHandle does not exist
+void MCU_unloadmodule(void *p_module)
+{
+    // SN-2015-03-04: [[ Broken module unloading ]] NSAddImage, used on Mac in
+    //  MCU_loadmodule, does not need any unloading of the module -
+    //  but the other platforms do.
+#if !defined(_MACOSX)
+    MCS_unloadmodule((MCSysModuleHandle)p_module);
+#endif
+}
+
+// SN-2015-02-23: [[ Broken Win Compilation ]] Use void*, as the function is imported
+//  as extern in revbrowser/src/cefshared.h - where MCSysModuleHandle does not exist
+void *MCU_resolvemodulesymbol(void* p_module, const char *p_symbol)
+{
+#if defined(_MACOSX)
+    NSSymbol t_symbol;
+    t_symbol = NSLookupSymbolInImage((mach_header *)p_module, p_symbol, NSLOOKUPSYMBOLINIMAGE_OPTION_BIND_NOW);
+    if (t_symbol != NULL)
+        return NSAddressOfSymbol(t_symbol);
+#endif
+    MCAutoStringRef t_symbol_str;
+    if (!MCStringCreateWithCString(p_symbol, &t_symbol_str))
+        return nil;
+
+    return MCS_resolvemodulesymbol((MCSysModuleHandle)p_module, *t_symbol_str);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+bool
+MCU_is_token(MCStringRef p_string)
+{
+	MCScriptPoint sp(p_string);
+
+	++MCerrorlock;
+
+	Parse_stat ps = sp.nexttoken();
+
+	--MCerrorlock;
+
+	if (ps == PS_ERROR || ps == PS_EOF)
+	{
+		return false;
+	}
+
+	/* Check that token is located at start of query string */
+	if (sp.getindex() != 0)
+	{
+		return false;
+	}
+
+	/* Check that token spans full length of query string */
+	if (MCStringGetLength(p_string) != MCStringGetLength(sp.gettoken_stringref()))
+	{
+		return false;
+	}
+
+	return true;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
 #ifndef _DEBUG_MEMORY
 
-#ifdef __VISUALC__
+// SN-2015-04-17: [[ Bug 15187 ]] Don't use the nothrow variant on iOS Simulator
+//  as they won't let iOS Simulator 6.3 engine compile.
+#if defined __VISUALC__ || TARGET_IPHONE_SIMULATOR
 void *operator new (size_t size)
 {
     return malloc(size);

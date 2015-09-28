@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -123,6 +123,8 @@ enum MCPlatformPropertyType
 	kMCPlatformPropertyTypeCursorRef,
     
     kMCPlatformPropertyTypeUInt32Array,
+    
+    kMCPlatformPropertyType_Last,
 };
 
 // The lower 21-bits hold a codepoint, the upper bits hold modifiers. Some
@@ -636,10 +638,12 @@ void MCPlatformGetMenubar(MCPlatformMenuRef menu);
 
 typedef class MCPlatformCursor *MCPlatformCursorRef;
 
+// SN-2015-06-16: [[ Bug 14056 ]] Add hidden cursor as part of the standard ones
 enum MCPlatformStandardCursor
 {
 	kMCPlatformStandardCursorUnknown,
-	
+    
+    kMCPlatformStandardCursorNone,
 	kMCPlatformStandardCursorArrow,
 	kMCPlatformStandardCursorWatch,
 	kMCPlatformStandardCursorCross,
@@ -651,8 +655,7 @@ void MCPlatformCreateCustomCursor(MCImageBitmap *image, MCPoint hot_spot, MCPlat
 void MCPlatformRetainCursor(MCPlatformCursorRef cursor);
 void MCPlatformReleaseCursor(MCPlatformCursorRef cursor);
 
-void MCPlatformShowCursor(MCPlatformCursorRef cursor);
-void MCPlatformHideCursor(void);
+void MCPlatformSetCursor(MCPlatformCursorRef cursor);
 void MCPlatformHideCursorUntilMouseMoves(void);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -966,6 +969,7 @@ enum MCPlatformPlayerProperty
 {
 	kMCPlatformPlayerPropertyURL,
 	kMCPlatformPlayerPropertyFilename,
+    kMCPlatformPlayerPropertyInvalidFilename,
 	
 	kMCPlatformPlayerPropertyOffscreen,
 	kMCPlatformPlayerPropertyRect,
@@ -987,7 +991,8 @@ enum MCPlatformPlayerProperty
 	kMCPlatformPlayerPropertyOnlyPlaySelection,
 	
 	kMCPlatformPlayerPropertyLoop,
-	
+    kMCPlatformPlayerPropertyMirrored,
+    	
 	kMCPlatformPlayerPropertyQTVRNode,
 	kMCPlatformPlayerPropertyQTVRPan,
 	kMCPlatformPlayerPropertyQTVRTilt,
@@ -1032,7 +1037,7 @@ struct MCPlatformPlayerQTVRConstraints
 	double z_min, z_max;
 };
 
-void MCPlatformCreatePlayer(MCPlatformPlayerRef& r_player);
+void MCPlatformCreatePlayer(bool dontuseqt, MCPlatformPlayerRef& r_player);
 
 void MCPlatformPlayerRetain(MCPlatformPlayerRef player);
 void MCPlatformPlayerRelease(MCPlatformPlayerRef player);

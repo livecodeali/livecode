@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -52,8 +52,8 @@ static bool MCLogicIsEqualTo(MCExecContext& ctxt, MCValueRef p_left, MCValueRef 
 	}
     
 	bool t_left_array, t_right_array;
-	t_left_array = MCValueGetTypeCode(p_left) == kMCValueTypeCodeArray && p_left != kMCEmptyArray;
-	t_right_array = MCValueGetTypeCode(p_right) == kMCValueTypeCodeArray &&	p_right != kMCEmptyArray;
+	t_left_array = MCValueGetTypeCode(p_left) == kMCValueTypeCodeArray && !MCArrayIsEmpty((MCArrayRef)p_left);
+	t_right_array = MCValueGetTypeCode(p_right) == kMCValueTypeCodeArray &&	!MCArrayIsEmpty((MCArrayRef)p_right);
 	
 	// MW-2012-12-11: [[ ArrayComp ]] If both are arrays and non-empty then
 	//   compare as arrays; otherwise if either is an array they become empty

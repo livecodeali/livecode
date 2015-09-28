@@ -1,3 +1,19 @@
+/* Copyright (C) 2009-2015 LiveCode Ltd.
+
+This file is part of LiveCode.
+
+LiveCode is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License v3 as published by the Free
+Software Foundation.
+
+LiveCode is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
+
 ////////////////////////////////////////////////////////////////////////////////
 //
 //  Private Header File:
@@ -26,6 +42,10 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#ifndef _WIN32
+#include <stdint.h>
+#else
+
 typedef unsigned char uint8_t;
 typedef signed char int8_t;
 typedef unsigned short uint16_t;
@@ -48,6 +68,8 @@ typedef signed int int32_t;
 	#else
 		typedef long long int int64_t;
 	#endif
+#endif
+
 #endif
 
 typedef uint32_t uindex_t;
@@ -523,16 +545,19 @@ inline double MCMin(double a, double b) { return a < b ? a : b; }
 inline double MCMax(double a, double b) { return a > b ? a : b; }
 inline float MCMin(float a, float b) { return a < b ? a : b; }
 inline float MCMax(float a, float b) { return a > b ? a : b; }
+
 inline uint32_t MCAbs(int32_t a) { return a < 0 ? -a : a; }
 inline uint64_t MCAbs(int64_t a) { return a < 0 ? -a : a; }
 inline float MCAbs(float a) { return fabsf(a); }
 inline double MCAbs(double a) { return fabs(a); }
 inline compare_t MCSgn(int32_t a) { return a < 0 ? -1 : (a > 0 ? 1 : 0); }
 inline compare_t MCSgn(int64_t a) { return a < 0 ? -1 : (a > 0 ? 1 : 0); }
-inline compare_t MCCompare(int32_t a, int32_t b) { return a < b ? -1 : (a > b ? 1 : 0); }
-inline compare_t MCCompare(uint32_t a, uint32_t b) { return a < b ? -1 : (a > b ? 1 : 0); }
-inline compare_t MCCompare(int64_t a, int64_t b) { return a < b ? -1 : (a > b ? 1 : 0); }
-inline compare_t MCCompare(uint64_t a, uint64_t b) { return a < b ? -1 : (a > b ? 1 : 0); }
+inline compare_t MCCompare(int a, int b) { return a < b ? -1 : (a > b ? 1 : 0); }
+inline compare_t MCCompare(unsigned int a, unsigned int b) { return a < b ? -1 : (a > b ? 1 : 0); }
+inline compare_t MCCompare(long a, long b) { return a < b ? -1 : (a > b ? 1 : 0); }
+inline compare_t MCCompare(unsigned long a, unsigned long b) { return a < b ? -1 : (a > b ? 1 : 0); }
+inline compare_t MCCompare(long long a, long long b) { return a < b ? -1 : (a > b ? 1 : 0); }
+inline compare_t MCCompare(unsigned long long a, unsigned long long b) { return a < b ? -1 : (a > b ? 1 : 0); }
 
 inline bool MCIsPowerOfTwo(uint32_t x) { return (x & (x - 1)) == 0; }
 

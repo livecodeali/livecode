@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -268,6 +268,7 @@ enum MCPropertyType
     kMCPropertyTypeMixedItemsOfString,
     kMCPropertyTypeMixedLinesOfUInt,
     kMCPropertyTypeRecord,
+    kMCPropertyTypeLegacyPoints,
 };
 
 enum MCPropertyInfoChunkType
@@ -455,6 +456,7 @@ template<typename A, typename B, void Method(MCExecContext&, B, A)> inline void 
 #define MCPropertyThunkArrayGetBinaryString(mth) MCPropertyArrayThunkImp(mth, MCNameRef, MCDataRef&)
 #define MCPropertyThunkArraySetBinaryString(mth) MCPropertyArrayThunkImp(mth, MCNameRef, MCDataRef)
 #define MCPropertyThunkArrayGetString(mth) MCPropertyArrayThunkImp(mth, MCNameRef, MCStringRef&)
+#define MCPropertyThunkArrayGetArray(mth) MCPropertyArrayThunkImp(mth, MCNameRef, MCArrayRef&)
 #define MCPropertyThunkArrayGetAny(mth) MCPropertyArrayThunkImp(mth, MCNameRef, MCValueRef&)
 #define MCPropertyThunkArraySetAny(mth) MCPropertyArrayThunkImp(mth, MCNameRef, MCValueRef)
 
@@ -567,6 +569,8 @@ template<typename A, typename B, void Method(MCExecContext&, B, A)> inline void 
 #define MCPropertyObjectListThunkGetItemsOfUInt(obj, mth) MCPropertyObjectListThunkImp(obj, mth, uindex_t&, uinteger_t*&)
 #define MCPropertyObjectListThunkGetItemsOfString(obj, mth) MCPropertyObjectListThunkImp(obj, mth, uindex_t&, MCStringRef*&)
 
+#define MCPropertyObjectListThunkGetLegacyPoints(obj, mth) MCPropertyObjectListThunkImp(obj, mth, uindex_t&, MCPoint*&)
+
 #define MCPropertyObjectThunkSetAny(obj, mth) MCPropertyObjectThunkImp(obj, mth, MCValueRef)
 #define MCPropertyObjectThunkSetBool(obj, mth) MCPropertyObjectThunkImp(obj, mth, bool)
 #define MCPropertyObjectThunkSetOptionalBool(obj, mth) MCPropertyObjectThunkImp(obj, mth, bool*)
@@ -599,6 +603,8 @@ template<typename A, typename B, void Method(MCExecContext&, B, A)> inline void 
 #define MCPropertyObjectListThunkSetLinesOfPoint(obj, mth) MCPropertyObjectListThunkImp(obj, mth, uindex_t, MCPoint*)
 #define MCPropertyObjectListThunkSetItemsOfUInt(obj, mth) MCPropertyObjectListThunkImp(obj, mth, uindex_t, uinteger_t*)
 #define MCPropertyObjectListThunkSetItemsOfString(obj, mth), MCPropertyObjectListThunkImp(obj, mth, uindex_t, MCStringRef*)
+
+#define MCPropertyObjectListThunkSetLegacyPoints(obj, mth) MCPropertyObjectListThunkImp(obj, mth, uindex_t, MCPoint*)
 
 #define MCPropertyObjectPartThunkGetAny(obj, mth) MCPropertyObjectPartThunkImp(obj, mth, MCValueRef&)
 #define MCPropertyObjectPartThunkGetBool(obj, mth) MCPropertyObjectPartThunkImp(obj, mth, bool&)
@@ -776,6 +782,9 @@ template<typename A, typename B, void Method(MCExecContext&, B, A)> inline void 
 
 #define DEFINE_RO_OBJ_PART_PROPERTY(prop, type, obj, tag) \
 { prop, false, kMCPropertyType##type, nil, (void *)MCPropertyObjectPartThunkGet##type(obj, Get##tag), nil, false, false, kMCPropertyInfoChunkTypeNone },
+
+#define DEFINE_WO_OBJ_PART_PROPERTY(prop, type, obj, tag) \
+{ prop, false, kMCPropertyType##type, nil, nil, (void *)MCPropertyObjectPartThunkSet##type(obj, Set##tag), false, false, kMCPropertyInfoChunkTypeNone },
 
 #define DEFINE_RW_OBJ_PART_NON_EFFECTIVE_PROPERTY(prop, type, obj, tag) \
 { prop, false, kMCPropertyType##type, nil, (void *)MCPropertyObjectPartThunkGet##type(obj, Get##tag), (void *)MCPropertyObjectPartThunkSet##type(obj, Set##tag), true, false, kMCPropertyInfoChunkTypeNone },
@@ -1127,6 +1136,7 @@ template<typename C, void (C::*Method)(MCExecContext&)> inline void MCExecNative
 #define MCExecNativeControlUnaryThunkImp(ctrl, mth, typ) (void(*)(MCExecContext&,MCNativeControlPtr*,typ))MCExecNativeControlThunk<ctrl,typ,&ctrl::mth>
 #define MCExecNativeControlThunkExecString(ctrl, mth) MCExecNativeControlUnaryThunkImp(ctrl, mth, MCStringRef)
 #define MCExecNativeControlThunkExecInt32(ctrl, mth) MCExecNativeControlUnaryThunkImp(ctrl, mth, integer_t)
+#define MCExecNativeControlThunkExecOptionalInt32(ctrl, mth) MCExecNativeControlUnaryThunkImp(ctrl, mth, integer_t*)
 
 #define MCExecNativeControlBinaryThunkImp(ctrl, mth, typ1, typ2) (void(*)(MCExecContext&,MCNativeControlPtr*,typ1,typ2))MCExecNativeControlThunk<ctrl,typ1,typ2,&ctrl::mth>
 #define MCExecNativeControlThunkExecStringString(ctrl, mth) MCExecNativeControlBinaryThunkImp(ctrl, mth, MCStringRef, MCStringRef)
@@ -1135,17 +1145,23 @@ template<typename C, void (C::*Method)(MCExecContext&)> inline void MCExecNative
 #define MCExecNativeControlTernaryThunkImp(ctrl, mth, typ1, typ2, typ3) (void(*)(MCExecContext&,MCNativeControlPtr*,typ1,typ2,typ3))MCExecNativeControlThunk<ctrl,typ1,typ2,typ3,&ctrl::mth>
 #define MCExecNativeControlThunkExecInt32OptionalInt32OptionalInt32(ctrl, mth) MCExecNativeControlTernaryThunkImp(ctrl, mth, integer_t, integer_t*, integer_t*)
 
-#define DEFINE_CTRL_EXEC_METHOD(act, ctrl, tag) \
-{ kMCNativeControlAction##act, (void *)MCExecNativeControlThunkExec(ctrl, Exec##tag) },
+#define DEFINE_CTRL_EXEC_METHOD(act, actsig, ctrl, tag) \
+{ false, (MCNativeControlAction)kMCNativeControlAction##act, (MCNativeControlActionSignature)kMCNativeControlActionSignature_##actsig, (void *)MCExecNativeControlThunkExec(ctrl, Exec##tag) },
 
-#define DEFINE_CTRL_EXEC_UNARY_METHOD(act, ctrl, param1, tag) \
-{ kMCNativeControlAction##act, (void *)MCExecNativeControlThunkExec##param1(ctrl, Exec##tag) },
+#define DEFINE_CTRL_EXEC_UNARY_METHOD(act, actsig, ctrl, param1, tag) \
+{ false, (MCNativeControlAction)kMCNativeControlAction##act, (MCNativeControlActionSignature)kMCNativeControlActionSignature_##actsig, (void *)MCExecNativeControlThunkExec##param1(ctrl, Exec##tag) },
 
-#define DEFINE_CTRL_EXEC_BINARY_METHOD(act, ctrl, param1, param2, tag) \
-{ kMCNativeControlAction##act, (void *)MCExecNativeControlThunkExec##param1##param2(ctrl, Exec##tag) },
+#define DEFINE_CTRL_EXEC_BINARY_METHOD(act, actsig, ctrl, param1, param2, tag) \
+{ false, (MCNativeControlAction)kMCNativeControlAction##act, (MCNativeControlActionSignature)kMCNativeControlActionSignature_##actsig, (void *)MCExecNativeControlThunkExec##param1##param2(ctrl, Exec##tag) },
 
-#define DEFINE_CTRL_EXEC_TERNARY_METHOD(act, ctrl, param1, param2, param3, tag) \
-{ kMCNativeControlAction##act, (void *)MCExecNativeControlThunkExec##param1##param2##param3(ctrl, Exec##tag) },
+#define DEFINE_CTRL_EXEC_TERNARY_METHOD(act, actsig, ctrl, param1, param2, param3, tag) \
+{ false, (MCNativeControlAction)kMCNativeControlAction##act, (MCNativeControlActionSignature)kMCNativeControlActionSignature_##actsig, (void *)MCExecNativeControlThunkExec##param1##param2##param3(ctrl, Exec##tag) },
+
+#define DEFINE_CTRL_WAITABLE_EXEC_METHOD(act, actsig, ctrl, tag) \
+{ true, (MCNativeControlAction)kMCNativeControlAction##act, (MCNativeControlActionSignature)kMCNativeControlActionSignature_##actsig, (void *)MCExecNativeControlThunkExec(ctrl, Exec##tag) },
+
+#define DEFINE_CTRL_WAITABLE_EXEC_UNARY_METHOD(act, actsig, ctrl, param1, tag) \
+{ true, (MCNativeControlAction)kMCNativeControlAction##act, (MCNativeControlActionSignature)kMCNativeControlActionSignature_##actsig, (void *)MCExecNativeControlThunkExec##param1(ctrl, Exec##tag) },
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1498,7 +1514,8 @@ public:
     bool ConvertToData(MCValueRef p_value, MCDataRef& r_data);
     bool ConvertToName(MCValueRef p_value, MCNameRef& r_data);
 	bool ConvertToNumber(MCValueRef value, MCNumberRef& r_number);
-	bool ConvertToArray(MCValueRef value, MCArrayRef& r_array);
+    // SN-2014-12-03: [[ Bug 14147 ]] Some conversions to an array might not accept a string
+	bool ConvertToArray(MCValueRef value, MCArrayRef& r_array, bool p_strict = false);
     
     bool ConvertToBool(MCValueRef value, bool& r_bool);
 	bool ConvertToInteger(MCValueRef value, integer_t& r_integer);
@@ -1673,6 +1690,12 @@ public:
     void GiveCStringToResult(char *p_cstring);
     void SetTheResultToCString(const char *p_string);
     void SetTheResultToBool(bool p_bool);
+
+    // SN-2015-06-03: [[ Bug 11277 ]] Refactor MCExecPoint update
+    void deletestatements(MCStatement* p_statements);
+    void eval_ctxt(MCExecContext &ctxt, MCStringRef p_expression, MCExecValue &r_value);
+    void eval(MCExecContext &ctxt, MCStringRef p_expression, MCValueRef &r_value);
+    void doscript(MCExecContext &ctxt, MCStringRef p_script, uinteger_t p_line, uinteger_t p_pos);
     
 	//////////
 	
@@ -1730,6 +1753,10 @@ public:
     
 	void TryToEvalExprAsArrayRef(MCExpression *p_expr, Exec_errors p_error, MCArrayRef& r_value);
     void TryToEvalOptionalExprAsColor(MCExpression *p_expr, MCColor *p_default, Exec_errors p_error, MCColor *&r_value);
+    
+    bool EvalExprAsStrictUInt(MCExpression *p_expr, Exec_errors p_error, uinteger_t& r_value);
+    
+    bool EvalExprAsStrictInt(MCExpression *p_expr, Exec_errors p_error, integer_t& r_value);
     
 private:
 #ifdef LEGACY_EXEC
@@ -1874,6 +1901,8 @@ extern MCExecMethodInfo *kMCMathEvalRoundMethodInfo;
 extern MCExecMethodInfo *kMCMathEvalStatRoundToPrecisionMethodInfo;
 extern MCExecMethodInfo *kMCMathEvalStatRoundMethodInfo;
 extern MCExecMethodInfo *kMCMathEvalTruncMethodInfo;
+extern MCExecMethodInfo *kMCMathEvalFloorMethodInfo;
+extern MCExecMethodInfo *kMCMathEvalCeilMethodInfo;
 extern MCExecMethodInfo *kMCMathEvalAcosMethodInfo;
 extern MCExecMethodInfo *kMCMathEvalAsinMethodInfo;
 extern MCExecMethodInfo *kMCMathEvalAtanMethodInfo;
@@ -1961,6 +1990,8 @@ void MCMathEvalRound(MCExecContext& ctxt, real64_t p_number, real64_t& r_result)
 void MCMathEvalStatRoundToPrecision(MCExecContext& ctxt, real64_t p_number, real64_t p_precision, real64_t& r_result);
 void MCMathEvalStatRound(MCExecContext& ctxt, real64_t p_number, real64_t& r_result);
 void MCMathEvalTrunc(MCExecContext& ctxt, real64_t p_number, real64_t& r_result);
+void MCMathEvalFloor(MCExecContext& ctxt, real64_t p_number, real64_t& r_result);
+void MCMathEvalCeil(MCExecContext& ctxt, real64_t p_number, real64_t& r_result);
 
 void MCMathEvalAcos(MCExecContext& ctxt, real64_t p_in, real64_t& r_result);
 void MCMathEvalAsin(MCExecContext& ctxt, real64_t p_in, real64_t& r_result);
@@ -3182,8 +3213,9 @@ void MCInterfaceSetProcessType(MCExecContext& ctxt, intenum_t value);
 void MCInterfaceGetShowInvisibles(MCExecContext& ctxt, bool& r_value);
 void MCInterfaceSetShowInvisibles(MCExecContext& ctxt, bool p_value);
 
-void MCInterfaceGetCursor(MCExecContext& ctxt, uinteger_t& r_value);
-void MCInterfaceSetCursor(MCExecContext& ctxt, uinteger_t p_value);
+// SN-2015-07-29: [[ Bug 15649 ]] The cursor can be empty - it is optional
+void MCInterfaceGetCursor(MCExecContext& ctxt, uinteger_t *&r_value);
+void MCInterfaceSetCursor(MCExecContext& ctxt, uinteger_t* p_value);
 void MCInterfaceGetDefaultCursor(MCExecContext& ctxt, uinteger_t& r_value);
 void MCInterfaceSetDefaultCursor(MCExecContext& ctxt, uinteger_t p_value);
 void MCInterfaceGetDefaultStack(MCExecContext& ctxt, MCStringRef& r_value);
@@ -3637,6 +3669,7 @@ extern MCExecMethodInfo *kMCEngineExecGetMethodInfo;
 extern MCExecMethodInfo *kMCEngineExecPutIntoVariableMethodInfo;
 extern MCExecMethodInfo *kMCEngineExecPutOutputMethodInfo;
 extern MCExecMethodInfo *kMCEngineExecDoMethodInfo;
+extern MCExecMethodInfo *kMCEngineExecDoInCallerMethodInfo;
 extern MCExecMethodInfo *kMCEngineExecInsertScriptOfObjectIntoMethodInfo;
 extern MCExecMethodInfo *kMCEngineExecQuitMethodInfo;
 extern MCExecMethodInfo *kMCEngineExecCancelMessageMethodInfo;
@@ -3759,6 +3792,7 @@ void MCEngineExecPutOutput(MCExecContext& ctxt, MCStringRef value);
 void MCEngineExecPutOutputUnicode(MCExecContext& ctxt, MCDataRef value);
 
 void MCEngineExecDo(MCExecContext& ctxt, MCStringRef p_script, int p_line, int p_pos);
+void MCEngineExecDoInCaller(MCExecContext& ctxt, MCStringRef p_script, int p_line, int p_pos);
 void MCEngineExecInsertScriptOfObjectInto(MCExecContext& ctxt, MCObject *p_script, bool p_in_front);
 void MCEngineExecQuit(MCExecContext& ctxt, integer_t p_retcode);
 
@@ -4259,7 +4293,7 @@ void MCNetworkExecOpenSocket(MCExecContext& ctxt, MCNameRef p_name, MCNameRef p_
 void MCNetworkExecOpenSecureSocket(MCExecContext& ctxt, MCNameRef p_name, MCNameRef p_message, MCNameRef p_end_hostname, bool p_with_verification);
 void MCNetworkExecOpenDatagramSocket(MCExecContext& ctxt, MCNameRef p_name, MCNameRef p_message, MCNameRef p_end_hostname);
 
-void MCNetworkExecPostToUrl(MCExecContext& ctxt, MCDataRef p_data, MCStringRef p_url);
+void MCNetworkExecPostToUrl(MCExecContext& ctxt, MCValueRef p_data, MCStringRef p_url);
 
 void MCNetworkExecAcceptConnectionsOnPort(MCExecContext& ctxt, uint2 p_port, MCNameRef p_message);
 void MCNetworkExecAcceptDatagramConnectionsOnPort(MCExecContext& ctxt, uint2 p_port, MCNameRef p_message);
@@ -5009,8 +5043,8 @@ void MCStoreGetPurchaseList(MCExecContext& ctxt, MCStringRef& r_list);
 void MCStoreExecCreatePurchase(MCExecContext& ctxt, MCStringRef p_product_id, uint32_t& r_id);
 void MCStoreGetPurchaseState(MCExecContext& ctxt, int p_id, MCStringRef& r_state);
 void MCStoreGetPurchaseError(MCExecContext& ctxt, int p_id, MCStringRef& r_error);
-void MCStoreGetPurchaseProperty(MCExecContext& ctxt, int p_id, MCStringRef p_prop_name);
-void MCStoreSetPurchaseProperty(MCExecContext& ctxt, int p_id, MCStringRef p_prop_name, uint32_t p_quantity);
+void MCStoreGetPurchaseProperty(MCExecContext& ctxt, MCStringRef p_product_id, MCStringRef p_prop_name, MCStringRef& r_property_value);
+void MCStoreSetPurchaseProperty(MCExecContext& ctxt, MCStringRef p_product_id, MCStringRef p_prop_name, MCStringRef p_value);
 void MCStoreExecSendPurchaseRequest(MCExecContext& ctxt, uint32_t p_id);
 void MCStoreExecConfirmPurchaseDelivery(MCExecContext& ctxt, uint32_t p_id);
 void MCStoreExecRequestProductDetails(MCExecContext& ctxt, MCStringRef p_product_id);
@@ -5304,6 +5338,7 @@ extern MCExecEnumTypeInfo* kMCMiscStatusBarStyleTypeInfo;
 
 extern MCExecMethodInfo* kMCMiscGetDeviceTokenMethodInfo;
 extern MCExecMethodInfo* kMCMiscGetLaunchUrlMethodInfo;
+extern MCExecMethodInfo* kMCMiscGetLaunchDataMethodInfo;
 extern MCExecMethodInfo* kMCMiscExecBeepMethodInfo;
 extern MCExecMethodInfo* kMCMiscExecVibrateMethodInfo;
 extern MCExecMethodInfo* kMCMiscGetDeviceResolutionMethodInfo;
@@ -5335,6 +5370,8 @@ extern MCExecMethodInfo* kMCMiscGetBuildInfoMethodInfo;
 
 void MCMiscGetDeviceToken(MCExecContext& ctxt, MCStringRef& r_token);
 void MCMiscGetLaunchUrl(MCExecContext& ctxt, MCStringRef& r_url);
+
+void MCMiscGetLaunchData(MCExecContext &ctxt, MCArrayRef &r_data);
 
 void MCMiscExecBeep(MCExecContext& ctxt, int32_t* p_number_of_times);
 void MCMiscExecVibrate(MCExecContext& ctxt, int32_t* p_number_of_times);
@@ -5382,6 +5419,8 @@ void MCMiscExecEnableRemoteControl(MCExecContext& ctxt);
 void MCMiscExecDisableRemoteControl(MCExecContext& ctxt);
 void MCMiscGetRemoteControlEnabled(MCExecContext& ctxt, bool& r_enabled);
 void MCMiscSetRemoteControlDisplayProperties(MCExecContext& ctxt, MCArrayRef p_props);
+
+void MCMiscGetIsVoiceOverRunning(MCExecContext& ctxt, bool& r_is_vo_running);
 
 ////////////////////////////////////////////////////////////////////////////////
 

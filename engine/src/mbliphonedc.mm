@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -66,6 +66,10 @@ extern void setup_simulator_hooks(void);
 
 extern CGBitmapInfo MCGPixelFormatToCGBitmapInfo(uint32_t p_pixel_format, bool p_alpha);
 extern bool MCImageGetCGColorSpace(CGColorSpaceRef &r_colorspace);
+
+// SN-2015-02-16: [[ iOS Font mapping ]] We want to clean the generated font map
+//   when closing the engine.
+extern void ios_clear_font_mapping(void);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -222,6 +226,8 @@ Boolean MCScreenDC::open(void)
 
 Boolean MCScreenDC::close(Boolean p_force)
 {
+    // SN-2015-02-16: [[ iOS Font Name ]] Clear the font mapping array.
+    ios_clear_font_mapping();
 	return True;
 }
 
@@ -352,7 +358,12 @@ void MCScreenDC::beep(void)
 {
 	// MW-2012-08-06: [[ Fibers ]] Execute the system code on the main fiber.
 	MCIPhoneRunBlockOnMainFiber(^(void) {
+    
+    // PM-2015-03-12: [[ Bug 14408 ]] On devices that don't support vibration, use AudioServicesPlaySystemSound, which does not lower the background volume, if audio is playing on the background
+    if([[UIDevice currentDevice].model isEqualToString:@"iPhone"])
 		AudioServicesPlayAlertSound(s_system_sound_name != nil ? s_system_sound : kSystemSoundID_Vibrate);
+    else
+        AudioServicesPlaySystemSound(s_system_sound_name != nil ? s_system_sound : kSystemSoundID_Vibrate);
 	});
 }
 
@@ -401,8 +412,6 @@ static void MCScreenDCDoSetBeepSound(void *p_env)
 		s_system_sound = t_new_sound;
 		s_system_sound_name = MCValueRetain(*t_sound_path);
 	}
-	else
-		MCValueRelease(*t_sound_path);
 	
 	env -> result = t_status == noErr;
 }
@@ -515,54 +524,45 @@ static void MCScreenDCDoSnapshot(void *p_env)
 			CGContextScaleCTM(t_img_context, 1.0 / t_scale, 1.0 / t_scale);
 			
 			bool t_is_rotated;
-			CGSize t_offset;
-			CGFloat t_angle;
-			switch(MCIPhoneGetOrientation())
+			t_is_rotated = UIInterfaceOrientationIsLandscape(MCIPhoneGetOrientation());
+			
+			if (MCmajorosversion >= 800)
 			{
-				case UIInterfaceOrientationPortrait:
-					t_angle = 0.0;
-					t_offset = CGSizeMake(t_screen_rect . width / 2, t_screen_rect . height / 2);
-					t_is_rotated = false;
-					break;
-				case UIInterfaceOrientationPortraitUpsideDown:
-                    // PM-2014-10-09: [[ Bug 13634 ]] No need to rotate the coords on iOS 8
-                    if (MCmajorosversion >=800)
-                        t_angle = 0.0;
-                    else
-                        t_angle = M_PI;
-
-					t_offset = CGSizeMake(t_screen_rect . width / 2, t_screen_rect . height / 2);
-					t_is_rotated = false;
-					break;
-				case UIInterfaceOrientationLandscapeLeft:
-					// MW-2011-10-17: [[ Bug 9816 ]] Angle caused upside-down image so inverted.
-                    // PM-2014-10-09: [[ Bug 13634 ]] No need to rotate the coords on iOS 8
-                    if (MCmajorosversion >=800)
-                        t_angle = 0.0;
-                    else
-                        t_angle = M_PI / 2;
-
-					t_offset = CGSizeMake(t_screen_rect . height / 2, t_screen_rect . width / 2);
-					t_is_rotated = true;
-					break;
-				case UIInterfaceOrientationLandscapeRight:
-					// MW-2011-10-17: [[ Bug 9816 ]] Angle caused upside-down image so inverted.
-                    // PM-2014-10-09: [[ Bug 13634 ]] No need to rotate the coords on iOS 8
-                    if (MCmajorosversion >=800)
-                        t_angle = 0.0;
-                    else
-                        t_angle = -M_PI / 2;
-                    
-                    t_offset = CGSizeMake(t_screen_rect . height / 2, t_screen_rect . width / 2);
-					t_is_rotated = true;
-					break;
+				// PM-2014-10-09: [[ Bug 13634 ]] No need to rotate the coords on iOS 8
+				// IM-2014-11-05: [[ Bug 13949 ]] Avoid rotating entirely as faulty offset was being applied to snapshots in landscape orientation.
+			}
+			else
+			{
+				CGSize t_offset;
+				CGFloat t_angle;
+				
+				switch(MCIPhoneGetOrientation())
+				{
+					case UIInterfaceOrientationPortrait:
+						t_angle = 0.0;
+						t_offset = CGSizeMake(t_screen_rect . width / 2, t_screen_rect . height / 2);
+						break;
+					case UIInterfaceOrientationPortraitUpsideDown:
+						t_angle = M_PI;
+						t_offset = CGSizeMake(t_screen_rect . width / 2, t_screen_rect . height / 2);
+						break;
+					case UIInterfaceOrientationLandscapeLeft:
+						// MW-2011-10-17: [[ Bug 9816 ]] Angle caused upside-down image so inverted.
+						t_angle = M_PI / 2;
+						t_offset = CGSizeMake(t_screen_rect . height / 2, t_screen_rect . width / 2);
+						break;
+					case UIInterfaceOrientationLandscapeRight:
+						// MW-2011-10-17: [[ Bug 9816 ]] Angle caused upside-down image so inverted.
+						t_angle = -M_PI / 2;
+						t_offset = CGSizeMake(t_screen_rect . height / 2, t_screen_rect . width / 2);
+						break;
+				}
+				
+				CGContextTranslateCTM(t_img_context, t_screen_rect . width / 2, t_screen_rect . height / 2);
+				CGContextRotateCTM(t_img_context, t_angle);
+				CGContextTranslateCTM(t_img_context, -t_offset . width, -t_offset . height);
 			}
 			
-			CGContextTranslateCTM(t_img_context, t_screen_rect . width / 2, t_screen_rect . height / 2);
-			CGContextRotateCTM(t_img_context, t_angle);
-			CGContextTranslateCTM(t_img_context, -t_offset . width, -t_offset . height);
-            
-            
 #ifndef USE_UNDOCUMENTED_METHODS
 			NSArray *t_windows;
 			t_windows = [[[UIApplication sharedApplication] windows] retain];
@@ -655,6 +655,8 @@ MCImageBitmap *MCScreenDC::snapshot(MCRectangle &r, uint4 window, MCStringRef di
 
 Boolean MCScreenDC::wait(real8 duration, Boolean dispatch, Boolean anyevent)
 {
+    MCDeletedObjectsEnterWait(dispatch);
+    
 	real8 curtime = MCS_time();
 	
 	if (duration < 0.0)
@@ -674,8 +676,11 @@ Boolean MCScreenDC::wait(real8 duration, Boolean dispatch, Boolean anyevent)
 		DoRunloopActions();
 		
 		// MW-2013-08-18: [[ XPlatNotify ]] Handle any pending notifications
-		if (MCNotifyDispatch(dispatch == True) && anyevent)
-			break;
+		if (MCNotifyDispatch(dispatch == True))
+        {
+            if (anyevent)
+                break;
+        }
 		
 		real8 eventtime = exittime;
 		if (handlepending(curtime, eventtime, dispatch))
@@ -717,6 +722,15 @@ Boolean MCScreenDC::wait(real8 duration, Boolean dispatch, Boolean anyevent)
 		else if (!done && eventtime > curtime)
 			t_sleep = MCMin(eventtime - curtime, exittime - curtime);
 		
+        // MM-2015-08-11: [[ Bug 15700 ]] Poll the sockets. Code pulled over from OS X wait.
+        extern Boolean MCS_handle_sockets();
+        if (MCS_handle_sockets())
+        {
+            if (anyevent)
+                done = True;
+            t_sleep = 0.0;
+        }
+        
 		// Switch to the main fiber and wait for at most t_sleep seconds. This
 		// returns 'true' if the wait was broken rather than timed out.
 		if (MCIPhoneWait(t_sleep) && anyevent)
@@ -736,8 +750,10 @@ Boolean MCScreenDC::wait(real8 duration, Boolean dispatch, Boolean anyevent)
 	// MW-2012-09-19: [[ Bug 10218 ]] Make sure we update the screen in case
 	//   any engine event handling methods need us to.
 	MCRedrawUpdateScreen();
-
-	return abort;
+    
+    MCDeletedObjectsLeaveWait(dispatch);
+	
+    return abort;
 }
 
 // MW-2011-08-16: [[ Wait ]] Break the OS event loop, causing a switch back to
@@ -1196,12 +1212,18 @@ static void MCIPhoneDoDidBecomeActive(void *)
 	// Convert the environment variables into stringrefs
 	uindex_t envc = 0;
 	MCAutoArray<MCStringRef> t_envp;
-	while (env[envc] != 0)
-	{
-		t_envp.Extend(envc + 1);
-		MCStringCreateWithBytes((const byte_t*)env[envc], strlen(env[envc]), kMCStringEncodingUTF8, false, t_envp[envc]);
-		envc++;
-	}
+    
+    // SN-2015-09-22: [[ Bug 15753 ]] Only iterate through the env elements if
+    //  there is any element (not the case with iOS min version 5.1.1)
+    if (env)
+    {
+        while (env[envc] != 0)
+        {
+            t_envp.Extend(envc + 1);
+            MCStringCreateWithBytes((const byte_t*)env[envc], strlen(env[envc]), kMCStringEncodingUTF8, false, t_envp[envc]);
+            envc++;
+        }
+    }
 	t_envp.Extend(envc + 1);
 	t_envp[envc] = nil;
 	
@@ -1306,7 +1328,7 @@ void MCIPhoneHandleDidBecomeActive(void)
 	// Convert the current thread to the main fiber (system owned).
 	MCFiberConvert(s_main_fiber);
 
-	// Create our auxillary script fiber.
+    // Create our auxiliary script fiber.
 	MCFiberCreate(256 * 1024, s_script_fiber);
 	
 	// Transfer control to the engine fiber.

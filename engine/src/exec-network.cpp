@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -229,6 +229,15 @@ void MCNetworkEvalHostNameToAddress(MCExecContext& ctxt, MCStringRef p_hostname,
 		ctxt.LegacyThrow(EE_NETWORK_NOPERM);
 		return;
 	}
+    
+    // SN-2014-12-16: [[ Bug 14181 ]] We don't accept callback messages on server
+#ifdef _SERVER
+    if (!MCNameIsEmpty(p_message))
+    {
+        ctxt.LegacyThrow(EE_HOSTNAME_BADMESSAGE);
+        return;
+    }
+#endif
 
 	MCAutoListRef t_list;
     if (MCS_ntoa(p_hostname, ctxt.GetObject(), p_message, &t_list))
@@ -430,11 +439,13 @@ void MCNetworkExecUnloadUrl(MCExecContext& ctxt, MCStringRef p_url)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void MCNetworkExecPostToUrl(MCExecContext& ctxt, MCDataRef p_data, MCStringRef p_url)
+void MCNetworkExecPostToUrl(MCExecContext& ctxt, MCValueRef p_data, MCStringRef p_url)
 // SJT-2014-09-11: [[ URLMessages ]] Send "postURL" messages on all platforms.
 {
 	if (MCU_couldbeurl(MCStringGetOldString(p_url)))
 	{
+		MCAutoDataRef t_data;
+
 		// Send "postURL" message.
 		MCParameter p1;
 		p1 . setvalueref_argument(p_data);
@@ -449,7 +460,8 @@ void MCNetworkExecPostToUrl(MCExecContext& ctxt, MCDataRef p_data, MCStringRef p
 		case ES_PASS:
 			// Either there was no message handler, or the handler passed the message,
 			// so process the URL in the engine.
-			MCS_posttourl(ctxt . GetObject(), p_data, p_url);
+			/* UNCHECKED */ ctxt.ConvertToData(p_data, &t_data);
+			MCS_posttourl(ctxt . GetObject(), *t_data, p_url);
 			// don't break!
 
 		default:
@@ -554,10 +566,7 @@ void MCNetworkExecPerformOpenSocket(MCExecContext& ctxt, MCNameRef p_name, MCNam
     // MM-2014-06-13: [[ Bug 12567 ]] Added support for specifying an end host name to verify against.
 	MCSocket *s = MCS_open_socket(p_name, p_datagram, ctxt . GetObject(), p_message, p_secure, p_ssl, kMCEmptyString, p_end_hostname);
 	if (s != NULL)
-	{
-		MCU_realloc((char **)&MCsockets, MCnsockets, MCnsockets + 1, sizeof(MCSocket *));
-		MCsockets[MCnsockets++] = s;
-	}
+        MCSocketsAppendToSocketList(s);
 }
 
 void MCNetworkExecOpenSocket(MCExecContext& ctxt, MCNameRef p_name, MCNameRef p_message, MCNameRef p_end_hostname)
@@ -601,11 +610,7 @@ void MCNetworkExecPerformAcceptConnections(MCExecContext& ctxt, uint2 p_port, MC
 
 	MCSocket *s = MCS_accept(p_port, ctxt . GetObject(), p_message, p_datagram ? True : False, p_secure ? True : False, p_with_verification ? True : False, kMCEmptyString);
 	if (s != NULL)
-	{
-		MCU_realloc((char **)&MCsockets, MCnsockets,
-		            MCnsockets + 1, sizeof(MCSocket *));
-		MCsockets[MCnsockets++] = s;
-	}
+        MCSocketsAppendToSocketList(s);
 }
 
 void MCNetworkExecAcceptConnectionsOnPort(MCExecContext& ctxt, uint2 p_port, MCNameRef p_message)
@@ -639,20 +644,27 @@ void MCNetworkExecReadFromSocket(MCExecContext& ctxt, MCNameRef p_socket, uint4 
 		// MW-2012-10-26: [[ Bug 10062 ]] Make sure we clear the result.
 		ctxt . SetTheResultToEmpty();
 
-        MCAutoDataRef t_data;
+        MCDataRef t_data;
 		if (p_sentinel != nil)
         {
             MCAutoPointer<char> t_sentinel;
             /* UNCHECKED */ MCStringConvertToCString(p_sentinel, &t_sentinel);
-            MCS_read_socket(MCsockets[t_index], ctxt, p_count, *t_sentinel, p_message, &t_data);
+            t_data = MCS_read_socket(MCsockets[t_index], ctxt, p_count, *t_sentinel, p_message);
         }
 		else
-			MCS_read_socket(MCsockets[t_index], ctxt, 0, nil, p_message, &t_data);
+			t_data = MCS_read_socket(MCsockets[t_index], ctxt, 0, nil, p_message);
 
 		if (p_message == NULL)
 		{
-			ctxt . SetItToValue(*t_data);
+            // PM-2015-01-20: [[ Bug 14409 ]] Prevent a crash if MCS_read_socket fails
+            if (t_data == nil)
+                ctxt . SetItToValue(kMCEmptyData);
+            else
+                ctxt . SetItToValue(t_data);
 		}
+        
+        MCValueRelease(t_data);
+        
 	}
 	else
 		ctxt . SetTheResultToStaticCString("socket is not open");
@@ -745,8 +757,19 @@ void MCNetworkExecPutIntoUrl(MCExecContext& ctxt, MCValueRef p_value, int p_wher
         /* UNCHECKED */ ctxt . ConvertToString(p_value, &t_value);
         
         MCStringRef t_string;
-		/* UNCHECKED */ MCStringMutableCopy((MCStringRef)p_chunk . mark . text, t_string);
-		/* UNCHECKED */ MCStringReplace(t_string, MCRangeMake(p_chunk.mark.start, p_chunk.mark.finish - p_chunk.mark.start), *t_value);
+        MCRange t_range;
+        /* UNCHECKED */ MCStringMutableCopy((MCStringRef)p_chunk . mark . text, t_string);
+
+        // SN-2015-05-19: [[ Bug 15368 ]] Insert the new string at the right
+        //  position: might be after or before the chunk, not only into it.
+        if (p_where == PT_INTO)
+            t_range = MCRangeMake(p_chunk . mark . start, p_chunk . mark . finish - p_chunk . mark . start);
+        else if (p_where == PT_BEFORE)
+            t_range = MCRangeMake(p_chunk . mark . start, 0);
+        else // p_where == PT_AFTER
+            t_range = MCRangeMake(p_chunk . mark . finish, 0);
+
+        /* UNCHECKED */ MCStringReplace(t_string, t_range, *t_value);
 		/* UNCHECKED */ MCStringCopyAndRelease(t_string, (MCStringRef&)&t_new_value);
 	}
 	

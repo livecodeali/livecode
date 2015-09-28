@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -48,15 +48,18 @@ enum
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// MW-2014-04-22: [[ Bug 12259 ]] Override sendEvent so that we always get a chance
-//   at the MouseSync event.
-@interface com_runrev_livecode_MCApplication: NSApplication
-
-- (void)sendEvent:(NSEvent *)event;
-
-@end
-
 @implementation com_runrev_livecode_MCApplication
+
+-(id)init
+{
+    self = [super init];
+    if (self)
+    {
+        m_pseudo_modal_for = nil;
+    }
+    
+    return self;
+}
 
 - (void)sendEvent:(NSEvent *)event
 {
@@ -102,6 +105,16 @@ enum
 
     MCPlatformReleaseWindow(s_moving_window);
     s_moving_window = nil;
+}
+
+- (void)becomePseudoModalFor: (NSWindow*)window
+{
+    m_pseudo_modal_for = window;
+}
+
+- (NSWindow*)pseudoModalFor
+{
+    return m_pseudo_modal_for;
 }
 
 @end
@@ -766,7 +779,10 @@ void MCMacPlatformBeginModalSession(MCMacPlatformWindow *p_window)
 	s_modal_sessions[s_modal_session_count - 1] . is_done = false;
 	s_modal_sessions[s_modal_session_count - 1] . window = p_window;
 	p_window -> Retain();
+	// IM-2015-01-30: [[ Bug 14140 ]] lock the window frame to prevent it from being centered on the screen.
+	p_window->SetFrameLocked(true);
 	s_modal_sessions[s_modal_session_count - 1] . session = [NSApp beginModalSessionForWindow: (NSWindow *)(p_window -> GetHandle())];
+	p_window->SetFrameLocked(false);
 }
 
 void MCMacPlatformEndModalSession(MCMacPlatformWindow *p_window)
@@ -1661,7 +1677,7 @@ void MCMacPlatformHandleMouseCursorChange(MCPlatformWindowRef p_window)
         
         // PM-2014-04-02: [[ Bug 12082 ]] IDE no longer crashes when changing an applied pattern
         if (t_cursor != nil)
-            MCPlatformShowCursor(t_cursor);
+            MCPlatformSetCursor(t_cursor);
         // SN-2014-10-01: [[ Bug 13516 ]] Hiding a cursor here is not what we want to happen if a cursor hasn't been found
         else
             MCMacPlatformResetCursor();
@@ -1833,8 +1849,13 @@ void MCMacPlatformSyncMouseBeforeDragging(void)
 			MCPlatformCallbackSendMouseRelease(s_mouse_window, t_button_to_release, false);
 		MCPlatformCallbackSendMouseLeave(s_mouse_window);
 		
-		MCPlatformReleaseWindow(s_mouse_window);
-		s_mouse_window = nil;
+        // SN-2015-01-13: [[ Bug 14350 ]] The user can close the stack in
+        //  a mouseLeave handler
+        if (s_mouse_window != nil)
+        {
+            MCPlatformReleaseWindow(s_mouse_window);
+            s_mouse_window = nil;
+        }
 	}
 }
 

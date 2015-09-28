@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -323,6 +323,8 @@ enum Functions {
     F_CACHED_URLS,
     F_CAPS_LOCK_KEY,
 	F_BYTE_TO_NUM,
+	// MDW-2014-08-23 : [[ feature_floor ]]
+	F_CEIL,
     F_CHAR_TO_NUM,
     F_CIPHER_NAMES,
     F_CLICK_CHAR,
@@ -339,7 +341,9 @@ enum Functions {
     F_CODEPOINT_OFFSET,
     F_CODEUNIT_OFFSET,
     F_COLOR_NAMES,
+    F_COMMAND_ARGUMENTS,
     F_COMMAND_KEY,
+    F_COMMAND_NAME,
     F_COMMAND_NAMES,
     F_COMPOUND,
     F_COMPRESS,
@@ -369,6 +373,8 @@ enum Functions {
     F_EXTENTS,
     F_FILES,
     F_FLUSH_EVENTS,
+	// MDW-2014-08-23 : [[ feature_floor ]]
+	F_FLOOR,
     F_FOCUSED_OBJECT,
     F_FONT_LANGUAGE,
     F_FONT_NAMES,
@@ -1300,6 +1306,7 @@ enum Properties {
     P_CURRENT_TIME,
     P_DURATION,
     P_LOOPING,
+    P_MIRRORED,
     P_PLAY_RATE,
     P_SHOW_BADGE,
     P_SHOW_CONTROLLER,
@@ -1610,6 +1617,8 @@ enum Properties {
     P_CAN_RETREAT,
     P_ALPHA,
     P_BACKGROUND_COLOR,
+    // SN-2014-12-11: [[ Merge-6.7.1-rc-4 ]]
+    P_IGNORE_VOICE_OVER_SENSITIVITY,
     P_MULTI_LINE,
     P_TEXT_COLOR,
     P_FONT_SIZE,
@@ -1658,6 +1667,8 @@ enum Properties {
     P_IS_PREPARED_TO_PLAY,
     P_LOAD_STATE,
     P_PLAYBACK_STATE,
+    // SN-2015-09-04: [[ Bug 9744 ]] readyForDisplay property added for players
+    P_READY_FOR_DISPLAY,
     
     // MOBILE STORE PROPERTIES
     P_PRODUCT_IDENTIFIER,
@@ -1674,6 +1685,8 @@ enum Properties {
     P_LOCALIZED_TITLE,
     P_LOCALIZED_DESCRIPTION,
     P_LOCALIZED_PRICE,
+    
+    __P_LAST,
 };
 
 enum Look_and_feel {

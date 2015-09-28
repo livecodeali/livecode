@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -291,7 +291,9 @@ void MCStack::sethints()
     // GDK does not provide an easy way to change the WM class properties after
     // window creation time. As a result, we have to do it manually.
     x11::XClassHint chints;
-	chints.res_name = (char *)getname_cstring();
+
+	const char * t_res_name = getname_cstring();
+	chints.res_name = (char *) t_res_name;
 
     // Build the class name
     MCAutoStringRef t_class_name;
@@ -307,6 +309,8 @@ void MCStack::sethints()
     
 	chints.res_class = (char*)*t_class_name_cstr;
     x11::XSetClassHint(x11::gdk_x11_display_get_xdisplay(MCdpy), x11::gdk_x11_drawable_get_xid(window), &chints);
+
+	delete t_res_name;
 
     // TODO: is this just another way of ensuring on-top-ness?
 	//if (mode >= WM_PALETTE)
@@ -690,11 +694,7 @@ void MCX11PutImage(GdkDisplay *p_dpy, GdkDrawable* d, GdkRegion* p_clip_region, 
                           int2 dx, int2 dy, uint2 w, uint2 h)
 {
 	if (d == nil)
-		return;
-
-	GdkGC *t_gc;
-
-	t_gc = gdk_gc_new(d);
+        return;
 
     // If we use gdk_draw_pixbuf, the pixbuf gets blended with the existing
     // contents of the window - something that we definitely do not want. We

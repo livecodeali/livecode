@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -1596,9 +1596,20 @@ void MCObject::GetParentScript(MCExecContext& ctxt, MCStringRef& r_parent_script
 		MCParentScript *t_parent;
 		t_parent = parent_script -> GetParent();
 		
-		if (MCStringFormat(r_parent_script, "button id %d of stack \"%@\"", t_parent -> GetObjectId(),
-							t_parent -> GetObjectStack()))
-			return;
+        if (t_parent -> GetObjectId() != 0)
+        {
+            if (MCStringFormat(r_parent_script, "button id %d of stack \"%@\"", t_parent -> GetObjectId(),
+                               t_parent -> GetObjectStack()))
+            
+                return;
+        }
+        else
+        {
+            if (MCStringFormat(r_parent_script, "stack \"%@\"",
+                               t_parent -> GetObjectStack()))
+                
+                return;
+        }
 
 		ctxt . Throw();
 	}
@@ -1648,10 +1659,6 @@ void MCObject::SetParentScript(MCExecContext& ctxt, MCStringRef new_parent_scrip
 	if (t_success)
         t_success = t_chunk -> getobj(ctxt, t_object, t_part_id, False);
 
-	// Check that the object is a button
-	if (t_success)
-		t_success =	t_object -> gettype() == CT_BUTTON;
-
 	// MW-2013-07-18: [[ Bug 11037 ]] Make sure the object isn't in the hierarchy
 	//   of the parentScript.
 	bool t_is_cyclic;
@@ -1694,6 +1701,10 @@ void MCObject::SetParentScript(MCExecContext& ctxt, MCStringRef new_parent_scrip
 			uint32_t t_id;
 			t_id = t_object -> getid();
 
+            // If the object is a stack, then it has an id of zero.
+            if (t_object -> gettype() == CT_STACK)
+                t_id = 0;
+            
 			MCNameRef t_stack;
 			t_stack = t_object -> getstack() -> getname();
 
@@ -1728,7 +1739,7 @@ void MCObject::SetParentScript(MCExecContext& ctxt, MCStringRef new_parent_scrip
 			//   is because the inheritence hierarchy has been updated and so the
 			//   super_use chains need to be remade.
 			MCParentScript *t_this_parent;
-			if (getstate(CS_IS_PARENTSCRIPT))
+			if (getisparentscript())
 			{
 				t_this_parent = MCParentScript::Lookup(this);
 				if (t_success && t_this_parent != nil)
@@ -2320,259 +2331,271 @@ void MCObject::GetEffectiveColors(MCExecContext& ctxt, MCStringRef& r_colors)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool MCObject::GetPattern(MCExecContext& ctxt, Properties which, bool effective, uint4& r_pattern)
+bool MCObject::GetPattern(MCExecContext& ctxt, Properties which, bool effective, uinteger_t*& r_pattern)
 {
-
-	uint2 i;
-	if (getpindex(which - P_FORE_PATTERN, i))
-	{
-		if (patterns[i].id < PI_END && patterns[i].id > PI_PATTERNS)
-			r_pattern = patterns[i].id - PI_PATTERNS;
-		else
-			r_pattern = patterns[i].id;
-		return true;
-	}
-	else
-	{
-		if (effective && parent != NULL)
-			return parent->GetPattern(ctxt, which, effective, r_pattern);
-	}
-
-	return false;
+    uint2 i;
+    if (getpindex(which - P_FORE_PATTERN, i))
+    {
+        if (patterns[i].id < PI_END && patterns[i].id > PI_PATTERNS)
+            *r_pattern = patterns[i].id - PI_PATTERNS;
+        else
+            *r_pattern = patterns[i].id;
+        return true;
+    }
+    else
+    {
+        if (effective)
+        {
+            if (parent != NULL)
+                return parent->GetPattern(ctxt, which, effective, r_pattern);
+            else
+            {
+                // AL-2014-11-18: [[ Bug 14055 ]] Effective pattern needs to be optional as
+                //  exisiting behavior is to return empty for no pattern
+                MCdispatcher -> GetDefaultPattern(ctxt, r_pattern);
+                return true;
+            }
+        }
+    }
+    
+    return false;
 }
 
 void MCObject::SetPattern(MCExecContext& ctxt, uint2 p_new_pixmap, uint4* p_new_id)
 {
-	uint2 i;
-	bool t_isopened;
-	t_isopened = (opened != 0) || (gettype() == CT_STACK && static_cast<MCStack*>(this)->getextendedstate(ECS_ISEXTRAOPENED));
-	if (p_new_id == nil)
-	{
-		if (getpindex(p_new_pixmap, i))
-		{
-			if (t_isopened)
-				MCpatternlist->freepat(patterns[i].pattern);
-			destroypindex(p_new_pixmap, i);
-		}
-	}
-	else
-	{
-		if (!getpindex(p_new_pixmap, i))
-			i = createpindex(p_new_pixmap);
-		else
-			if (t_isopened)
-				MCpatternlist->freepat(patterns[i].pattern);
-		if (*p_new_id < PI_PATTERNS)
-			*p_new_id += PI_PATTERNS;
-		patterns[i].id = *p_new_id;
-		if (t_isopened)
-			patterns[i].pattern = MCpatternlist->allocpat(patterns[i].id, this);
-		if (getcindex(p_new_pixmap, i))
-			destroycindex(p_new_pixmap, i);
-	}
+    uint2 i;
+    bool t_isopened;
+    t_isopened = (opened != 0) || (gettype() == CT_STACK && static_cast<MCStack*>(this)->getextendedstate(ECS_ISEXTRAOPENED));
+    if (p_new_id == nil)
+    {
+        if (getpindex(p_new_pixmap, i))
+        {
+            if (t_isopened)
+                MCpatternlist->freepat(patterns[i].pattern);
+            destroypindex(p_new_pixmap, i);
+        }
+    }
+    else
+    {
+        if (!getpindex(p_new_pixmap, i))
+            i = createpindex(p_new_pixmap);
+        else
+            if (t_isopened)
+                MCpatternlist->freepat(patterns[i].pattern);
+        if (*p_new_id < PI_PATTERNS)
+            *p_new_id += PI_PATTERNS;
+        patterns[i].id = *p_new_id;
+        if (t_isopened)
+            patterns[i].pattern = MCpatternlist->allocpat(patterns[i].id, this);
+        if (getcindex(p_new_pixmap, i))
+            destroycindex(p_new_pixmap, i);
+    }
 }
 
 void MCObject::GetPenPattern(MCExecContext& ctxt, uinteger_t*& r_pattern)
 {
-	r_pattern = nil;
+    r_pattern = nil;
 }
 
 void MCObject::SetPenPattern(MCExecContext& ctxt, uinteger_t* pattern)
 {
-	SetPattern(ctxt, DI_FORE, pattern);
-	Redraw();
+    SetPattern(ctxt, DI_FORE, pattern);
+    Redraw();
 }
 
 void MCObject::GetBrushPattern(MCExecContext& ctxt, uinteger_t*& r_pattern)
 {
-	r_pattern = nil;
+    r_pattern = nil;
 }
 
 void MCObject::SetBrushPattern(MCExecContext& ctxt, uinteger_t* pattern)
 {
-	SetPattern(ctxt, DI_BACK, pattern);
-	Redraw();
+    SetPattern(ctxt, DI_BACK, pattern);
+    Redraw();
 }
 
 void MCObject::GetForePattern(MCExecContext& ctxt, uinteger_t*& r_pattern)
 {
-	if (GetPattern(ctxt, P_FORE_PATTERN, false, *r_pattern))
-		return;
-
-	r_pattern = nil;
+    if (GetPattern(ctxt, P_FORE_PATTERN, false, r_pattern))
+        return;
+    
+    r_pattern = nil;
 }
 
 void MCObject::SetForePattern(MCExecContext& ctxt, uinteger_t* pattern)
 {
-	SetPattern(ctxt, DI_FORE, pattern);
-	Redraw();
+    SetPattern(ctxt, DI_FORE, pattern);
+    Redraw();
 }
 
-void MCObject::GetEffectiveForePattern(MCExecContext& ctxt, uinteger_t& r_pattern)
+void MCObject::GetEffectiveForePattern(MCExecContext& ctxt, uinteger_t*& r_pattern)
 {
-	GetPattern(ctxt, P_FORE_PATTERN, true, r_pattern);
+    GetPattern(ctxt, P_FORE_PATTERN, true, r_pattern);
 }
 
 void MCObject::GetBackPattern(MCExecContext& ctxt, uinteger_t*& r_pattern)
 {
-	if (GetPattern(ctxt, P_BACK_PATTERN, false, *r_pattern))
-		return;
-
-	r_pattern = nil;
+    if (GetPattern(ctxt, P_BACK_PATTERN, false, r_pattern))
+        return;
+    
+    r_pattern = nil;
 }
 
 void MCObject::SetBackPattern(MCExecContext& ctxt, uinteger_t* pattern)
 {
-	SetPattern(ctxt, DI_BACK, pattern);
-	Redraw();
+    SetPattern(ctxt, DI_BACK, pattern);
+    Redraw();
 }
 
-void MCObject::GetEffectiveBackPattern(MCExecContext& ctxt, uinteger_t& r_pattern)
+void MCObject::GetEffectiveBackPattern(MCExecContext& ctxt, uinteger_t*& r_pattern)
 {
-	GetPattern(ctxt, P_BACK_PATTERN, true, r_pattern);
+    GetPattern(ctxt, P_BACK_PATTERN, true, r_pattern);
 }
 
 void MCObject::GetHilitePattern(MCExecContext& ctxt, uinteger_t*& r_pattern)
 {
-	if (GetPattern(ctxt, P_HILITE_PATTERN, false, *r_pattern))
-		return;
-
-	r_pattern = nil;
+    if (GetPattern(ctxt, P_HILITE_PATTERN, false, r_pattern))
+        return;
+    
+    r_pattern = nil;
 }
 
 void MCObject::SetHilitePattern(MCExecContext& ctxt, uinteger_t* pattern)
 {
-	SetPattern(ctxt, P_HILITE_PATTERN - P_FORE_PATTERN, pattern);
-	Redraw();
+    SetPattern(ctxt, P_HILITE_PATTERN - P_FORE_PATTERN, pattern);
+    Redraw();
 }
 
-void MCObject::GetEffectiveHilitePattern(MCExecContext& ctxt, uinteger_t& r_pattern)
+void MCObject::GetEffectiveHilitePattern(MCExecContext& ctxt, uinteger_t*& r_pattern)
 {
-	GetPattern(ctxt, P_HILITE_PATTERN, true, r_pattern);
+    GetPattern(ctxt, P_HILITE_PATTERN, true, r_pattern);
 }
 
 void MCObject::GetBorderPattern(MCExecContext& ctxt, uinteger_t*& r_pattern)
 {
-	if (GetPattern(ctxt, P_BORDER_PATTERN, false, *r_pattern))
-		return;
-
-	r_pattern = nil;
+    if (GetPattern(ctxt, P_BORDER_PATTERN, false, r_pattern))
+        return;
+    
+    r_pattern = nil;
 }
 
 void MCObject::SetBorderPattern(MCExecContext& ctxt, uinteger_t* pattern)
 {
-	SetPattern(ctxt, P_BORDER_PATTERN - P_FORE_PATTERN, pattern);
-	Redraw();
+    SetPattern(ctxt, P_BORDER_PATTERN - P_FORE_PATTERN, pattern);
+    Redraw();
 }
 
-void MCObject::GetEffectiveBorderPattern(MCExecContext& ctxt, uinteger_t& r_pattern)
+void MCObject::GetEffectiveBorderPattern(MCExecContext& ctxt, uinteger_t*& r_pattern)
 {
-	GetPattern(ctxt, P_BORDER_PATTERN, true, r_pattern);
+    GetPattern(ctxt, P_BORDER_PATTERN, true, r_pattern);
 }
 
 void MCObject::GetTopPattern(MCExecContext& ctxt, uinteger_t*& r_pattern)
 {
-	if (GetPattern(ctxt, P_TOP_PATTERN, false, *r_pattern))
-		return;
-
-	r_pattern = nil;
+    if (GetPattern(ctxt, P_TOP_PATTERN, false, r_pattern))
+        return;
+    
+    r_pattern = nil;
 }
 
 void MCObject::SetTopPattern(MCExecContext& ctxt, uinteger_t* pattern)
 {
-	SetPattern(ctxt, P_TOP_PATTERN - P_FORE_PATTERN, pattern);
-	Redraw();
+    SetPattern(ctxt, P_TOP_PATTERN - P_FORE_PATTERN, pattern);
+    Redraw();
 }
 
-void MCObject::GetEffectiveTopPattern(MCExecContext& ctxt, uinteger_t& r_pattern)
+void MCObject::GetEffectiveTopPattern(MCExecContext& ctxt, uinteger_t*& r_pattern)
 {
-	GetPattern(ctxt, P_TOP_PATTERN, true, r_pattern);
+    GetPattern(ctxt, P_TOP_PATTERN, true, r_pattern);
 }
 
 void MCObject::GetBottomPattern(MCExecContext& ctxt, uinteger_t*& r_pattern)
 {
-	if (GetPattern(ctxt, P_BOTTOM_PATTERN, false, *r_pattern))
-		return;
-
-	r_pattern = nil;
+    if (GetPattern(ctxt, P_BOTTOM_PATTERN, false, r_pattern))
+        return;
+    
+    r_pattern = nil;
 }
 
 void MCObject::SetBottomPattern(MCExecContext& ctxt, uinteger_t* pattern)
 {
-	SetPattern(ctxt, P_BOTTOM_PATTERN - P_FORE_PATTERN, pattern);
-	Redraw();
+    SetPattern(ctxt, P_BOTTOM_PATTERN - P_FORE_PATTERN, pattern);
+    Redraw();
 }
 
-void MCObject::GetEffectiveBottomPattern(MCExecContext& ctxt, uinteger_t& r_pattern)
+void MCObject::GetEffectiveBottomPattern(MCExecContext& ctxt, uinteger_t*& r_pattern)
 {
-	GetPattern(ctxt, P_BOTTOM_PATTERN, true, r_pattern);
+    GetPattern(ctxt, P_BOTTOM_PATTERN, true, r_pattern);
 }
 
 void MCObject::GetShadowPattern(MCExecContext& ctxt, uinteger_t*& r_pattern)
 {
-	if (GetPattern(ctxt, P_SHADOW_PATTERN, false, *r_pattern))
-		return;
-
-	r_pattern = nil;
+    if (GetPattern(ctxt, P_SHADOW_PATTERN, false, r_pattern))
+        return;
+    
+    r_pattern = nil;
 }
 
 void MCObject::SetShadowPattern(MCExecContext& ctxt, uinteger_t* pattern)
 {
-	SetPattern(ctxt, P_SHADOW_PATTERN - P_FORE_PATTERN, pattern);
-	Redraw();
+    SetPattern(ctxt, P_SHADOW_PATTERN - P_FORE_PATTERN, pattern);
+    Redraw();
 }
 
-void MCObject::GetEffectiveShadowPattern(MCExecContext& ctxt, uinteger_t& r_pattern)
+void MCObject::GetEffectiveShadowPattern(MCExecContext& ctxt, uinteger_t*& r_pattern)
 {
-	GetPattern(ctxt, P_SHADOW_PATTERN, true, r_pattern);
+    GetPattern(ctxt, P_SHADOW_PATTERN, true, r_pattern);
 }
 
 void MCObject::GetFocusPattern(MCExecContext& ctxt, uinteger_t*& r_pattern)
 {
-	if (GetPattern(ctxt, P_FOCUS_PATTERN, false, *r_pattern))
-		return;
-
-	r_pattern = nil;
+    if (GetPattern(ctxt, P_FOCUS_PATTERN, false, r_pattern))
+        return;
+    
+    r_pattern = nil;
 }
 
 void MCObject::SetFocusPattern(MCExecContext& ctxt, uinteger_t* pattern)
 {
-	SetPattern(ctxt, P_FOCUS_PATTERN - P_FORE_PATTERN, pattern);
-	Redraw();
+    SetPattern(ctxt, P_FOCUS_PATTERN - P_FORE_PATTERN, pattern);
+    Redraw();
 }
 
-void MCObject::GetEffectiveFocusPattern(MCExecContext& ctxt, uinteger_t& r_pattern)
+void MCObject::GetEffectiveFocusPattern(MCExecContext& ctxt, uinteger_t*& r_pattern)
 {
-	GetPattern(ctxt, P_FOCUS_PATTERN, true, r_pattern);
+    GetPattern(ctxt, P_FOCUS_PATTERN, true, r_pattern);
 }
 
 bool MCObject::GetPatterns(MCExecContext& ctxt, bool effective, MCStringRef& r_patterns)
-{	
-	bool t_success;
-	t_success = true;
-	
-	MCAutoListRef t_pattern_list;
-	if (t_success)
-		t_success = MCListCreateMutable('\n', &t_pattern_list);
-
-	if (t_success)
-	{
-		for (uint2 p = P_FORE_PATTERN; p <= P_FOCUS_PATTERN; p++)
-		{
-			uint4 t_id;
+{
+    bool t_success;
+    t_success = true;
+    
+    MCAutoListRef t_pattern_list;
+    if (t_success)
+        t_success = MCListCreateMutable('\n', &t_pattern_list);
+    
+    if (t_success)
+    {
+        uinteger_t *t_id_ptr;
+        for (uint2 p = P_FORE_PATTERN; p <= P_FOCUS_PATTERN; p++)
+        {
+            uinteger_t t_id;
+            t_id_ptr = &t_id;
+            
             MCAutoStringRef t_pattern;
-			if (GetPattern(ctxt, (Properties)p, effective, t_id))
+            if (GetPattern(ctxt, (Properties)p, effective, t_id_ptr) && t_id_ptr != nil)
                 t_success = MCStringFormat(&t_pattern, "%d", t_id) && MCListAppend(*t_pattern_list, *t_pattern);
             else
                 t_success = MCListAppend(*t_pattern_list, kMCEmptyString);
-		}
-	}
-	
-	if (t_success)
-		t_success = MCListCopyAsString(*t_pattern_list, r_patterns);
-
-	return t_success;
-} 
+        }
+    }
+    
+    if (t_success)
+        t_success = MCListCopyAsString(*t_pattern_list, r_patterns);
+    
+    return t_success;
+}
 
 void MCObject::GetPatterns(MCExecContext& ctxt, MCStringRef& r_patterns)
 {
@@ -3060,60 +3083,19 @@ void MCObject::SetVisibility(MCExecContext& ctxt, uint32_t part, bool setting, b
 	if (dirty && opened && gettype() >= CT_GROUP)
 		t_old_effective_rect = static_cast<MCControl *>(this) -> geteffectiverect();
 	
-	bool needmfocus;
-	needmfocus = false;
+    if (dirty)
+        signallisteners(P_VISIBLE);
+    
+    if (dirty && opened)
+    {
+        // MW-2011-08-18: [[ Layers ]] Take note of the change in visibility.
+        if (gettype() >= CT_GROUP)
+            static_cast<MCControl *>(this) -> layer_visibilitychanged(t_old_effective_rect);
+    }
+    
 	if (dirty)
-	{
-		if (opened && getstack() == MCmousestackptr)
-			if (!(flags & F_VISIBLE))
-			{
-				MCObject *mfocused = MCmousestackptr->getcard()->getmfocused();
-				// MW-2012-02-22: [[ Bug 10018 ]] If the target is a group then check
-				//   to see if it is the ancestor of the mfocused control; otherwise
-				//   just compare directly.
-				if (mfocused != nil && gettype() == CT_GROUP)
-				{
-					while(mfocused -> gettype() != CT_CARD)
-					{
-						if (mfocused == this)
-						{
-							needmfocus = True;
-							break;
-						}
-						mfocused = mfocused -> getparent();
-					}
-				}
-				else if (this == mfocused)
-					needmfocus = true;
-			}
-			else if (MCU_point_in_rect(rect, MCmousex, MCmousey))
-				needmfocus = true;
-
-		if (state & CS_KFOCUSED)
-			getcard(part)->kunfocus();
-
-		// MW-2008-08-04: [[ Bug 7094 ]] If we change the visibility of the control
-		//   while its grabbed, we should ungrab it - otherwise it sticks to the
-		//   cursor.
-		if (gettype() >= CT_GROUP && getstate(CS_GRAB))
-			state &= ~CS_GRAB;
-
-		if (resizeparent())
-			dirty = false;
-	}
-
-	if (dirty)
-		signallisteners(P_VISIBLE);
-	
-	if (dirty && opened)
-	{
-		// MW-2011-08-18: [[ Layers ]] Take note of the change in visibility.
-		if (gettype() >= CT_GROUP)
-			static_cast<MCControl *>(this) -> layer_visibilitychanged(t_old_effective_rect);
-	}
-
-	if (needmfocus)
-		MCmousestackptr->getcard()->mfocus(MCmousex, MCmousey);
+        // AL-2015-06-30: [[ Bug 15556 ]] Use refactored function to sync mouse focus
+        sync_mfocus();
 }
 
 void MCObject::GetVisible(MCExecContext& ctxt, uint32_t part, bool& r_setting)

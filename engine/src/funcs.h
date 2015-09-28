@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -495,6 +495,21 @@ class MCClickLine : public MCConstantFunctionCtxt<MCStringRef, MCInterfaceEvalCl
 public:
 	// virtual Exec_stat eval(MCExecPoint &);
 	virtual MCExecMethodInfo *getmethodinfo(void) const { return kMCInterfaceEvalClickLineMethodInfo; }
+};
+
+class MCCommandArguments : public MCFunction
+{
+    MCExpression* argument_index;
+public:
+    MCCommandArguments() { argument_index = NULL; }
+    virtual Parse_stat parse(MCScriptPoint &sp, Boolean the);
+    virtual void eval_ctxt(MCExecContext& ctxt, MCExecValue& r_value);
+};
+
+class MCCommandName : public MCFunction
+{
+public:
+    virtual void eval_ctxt(MCExecContext& ctxt, MCExecValue& r_value);
 };
 
 class MCClickLoc : public MCConstantFunctionCtxt<MCStringRef, MCInterfaceEvalClickLoc>
@@ -2437,12 +2452,37 @@ public:
 	virtual ~MCTranspose(){}
 };
 
+/*
+class MCMathOperator : public MCUnaryFunctionCtxt<double, double, MCExecValueTraits, Exec_errors, Parse_errors, MCExecMethodInfo>
+{
+public:
+    MCMathOperator(){}
+    virtual ~MCMathOperator(){}
+};
+*/
+
 class MCTrunc : public MCUnaryFunctionCtxt<double, double, MCMathEvalTrunc, EE_TRUNC_BADSOURCE, PE_TRUNC_BADPARAM, kMCMathEvalTruncMethodInfo>
 {
 public:
     MCTrunc(){}
     virtual ~MCTrunc(){}
 };
+
+// MDW-2014-08-23 : [[ feature_floor ]]
+class MCFloor : public MCUnaryFunctionCtxt<double, double, MCMathEvalFloor, EE_FLOOR_BADSOURCE, PE_FLOOR_BADPARAM, kMCMathEvalFloorMethodInfo>
+{
+public:
+	MCFloor(){}
+	virtual ~MCFloor(){}
+};
+
+class MCCeil : public MCUnaryFunctionCtxt<double, double, MCMathEvalCeil, EE_CEIL_BADSOURCE, PE_CEIL_BADPARAM, kMCMathEvalCeilMethodInfo>
+{
+public:
+	MCCeil(){}
+	virtual ~MCCeil(){}
+};
+// MDW-2014-08-23 : [[ feature_floor ]]
 
 class MCHTTPProxyForURL: public MCFunction
 {

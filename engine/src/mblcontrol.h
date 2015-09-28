@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -27,6 +27,7 @@ enum MCNativeControlType
 	kMCNativeControlTypePlayer,
 	kMCNativeControlTypeInput,
 	kMCNativeControlTypeMultiLineInput,
+    kMCNativeControlType_Last,
 };
 
 enum MCNativeControlProperty
@@ -43,6 +44,8 @@ enum MCNativeControlProperty
 	kMCNativeControlPropertyOpaque,
 	kMCNativeControlPropertyAlpha,
 	kMCNativeControlPropertyBackgroundColor,
+    kMCNativeControlPropertyIgnoreVoiceOverSensitivity,
+    
 	
 	// Browser / Text view properties
 	kMCNativeControlPropertyDataDetectorTypes,
@@ -86,6 +89,7 @@ enum MCNativeControlProperty
 	kMCNativeControlPropertyDuration,
 	kMCNativeControlPropertyPlayableDuration,
 	kMCNativeControlPropertyLoadState,
+	kMCNativeControlPropertyReadyForDisplay,
 	kMCNativeControlPropertyPlaybackState,
 	kMCNativeControlPropertyStartTime,
 	kMCNativeControlPropertyEndTime,
@@ -130,6 +134,8 @@ enum MCNativeControlProperty
     
     // Android specific properties
     kMCNativeControlPropertyMultiLine,
+    
+    kMCNativeControlProperty_Last,
 };
 
  
@@ -165,6 +171,8 @@ enum MCNativeControlAction
 	
 	// TextView-specific actions
 	kMCNativeControlActionScrollRangeToVisible,
+    
+    kMCNativeControlAction_Last,
 };
 
 class MCNativeControl;
@@ -318,7 +326,7 @@ enum MCNativeControlInputContentType
 
 enum MCNativeControlInputDataDetectorType
 {
-    kMCNativeControlInputDataDetectorTypeNone = 0,
+    kMCNativeControlInputDataDetectorTypeNoneBit = 0,
     kMCNativeControlInputDataDetectorTypeWebUrlBit,
     kMCNativeControlInputDataDetectorTypeEmailAddressBit,
     kMCNativeControlInputDataDetectorTypePhoneNumberBit,
@@ -326,6 +334,7 @@ enum MCNativeControlInputDataDetectorType
     kMCNativeControlInputDataDetectorTypeCalendarEventBit,
     kMCNativeControlInputDataDetectorTypeAllBit,
 	
+	kMCNativeControlInputDataDetectorTypeNone = 1 << kMCNativeControlInputDataDetectorTypeNoneBit,
     kMCNativeControlInputDataDetectorTypeWebUrl = 1 << kMCNativeControlInputDataDetectorTypeWebUrlBit,
     kMCNativeControlInputDataDetectorTypeEmailAddress = 1 << kMCNativeControlInputDataDetectorTypeEmailAddressBit,
     kMCNativeControlInputDataDetectorTypePhoneNumber = 1 << kMCNativeControlInputDataDetectorTypePhoneNumberBit,
@@ -364,9 +373,21 @@ enum MCNativeControlInputVerticalAlign
     kMCNativeControlInputVerticalAlignBottom,
 };
 
+enum MCNativeControlActionSignature
+{
+    kMCNativeControlActionSignature_Void,
+    kMCNativeControlActionSignature_String,
+    kMCNativeControlActionSignature_OptInteger,
+    kMCNativeControlActionSignature_String_String,
+    kMCNativeControlActionSignature_Integer_Integer,
+    kMCNativeControlActionSignature_Integer_OptInteger_OptInteger,
+};
+
 struct MCNativeControlActionInfo
 {
+	bool waitable;
     MCNativeControlAction action;
+    MCNativeControlActionSignature signature;
     void *exec_method;
 };
 

@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -20,6 +20,8 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "mblandroid.h"
 #include "mblandroidutil.h"
+
+#include "mcstring.h"
 
 #include <sys/stat.h>
 #include <dirent.h>
@@ -421,7 +423,10 @@ bool MCAndroidSystem::GetTemporaryFileName(MCStringRef &r_tmp_name)
 
 Boolean MCAndroidSystem::GetStandardFolder(MCNameRef p_folder, MCStringRef &r_folder)
 {
-	if (MCNameIsEqualToCString(p_folder, "engine", kMCCompareExact))
+    // SN-2015-04-16: [[ Bug 14295 ]] The resources folder on Mobile is the same
+    //   as the engine folder.
+    if (MCNameIsEqualTo(p_folder, MCN_engine, kMCCompareCaseless)
+            || MCNameIsEqualTo(p_folder, MCN_resources, kMCCompareCaseless))
     {
         MCLog("GetStandardFolder(\"%@\") -> \"%@\"", MCNameGetString(p_folder), MCcmd);
 		return MCStringCopy(MCcmd, r_folder);
@@ -449,6 +454,11 @@ bool MCAndroidSystem::ShortFilePath(MCStringRef p_path, MCStringRef& r_short_pat
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// ST-2014-12-18: [[ Bug 14259 ]] Not implemented / needed on Android
+bool MCAndroidSystem::GetExecutablePath(MCStringRef& r_path)
+{
+    return false;
+}
 
 bool MCAndroidSystem::PathToNative(MCStringRef p_path, MCStringRef& r_native)
 {

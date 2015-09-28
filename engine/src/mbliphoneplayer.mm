@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -65,6 +65,8 @@ class MCiOSPlayerControl;
 }
 
 - (id)initWithInstance:(MCiOSPlayerControl*)instance;
+- (void)beginWithOverlay: (bool)p_overlay;
+- (void)end;
 - (void)dealloc;
 
 - (void)movieDurationAvailable: (NSNotification *)notification;
@@ -80,8 +82,6 @@ class MCiOSPlayerControl;
 - (void)playerPlaybackStateDidChange: (NSNotification *)notification;
 - (void)playerScalingModeDidChange: (NSNotification *)notification;
 - (void)playerWindowTouched: (UIControl*) p_sender;
-- (UIControl*)getOverlay;
-- (void)setOverlay: (UIControl*) p_overlay;
 
 @end
 
@@ -139,6 +139,7 @@ public:
     void GetLoadState(MCExecContext& ctxt, MCNativeControlLoadState& r_state);
     void GetPlaybackState(MCExecContext& ctxt, MCNativeControlPlaybackState& r_state);
     void GetNaturalSize(MCExecContext& ctxt, integer_t r_size[2]);
+    void GetIsReadyForDisplay(MCExecContext& ctxt, bool& r_value);
     
     
 	// Player-specific actions
@@ -197,6 +198,7 @@ MCPropertyInfo MCiOSPlayerControl::kProperties[] =
     DEFINE_RO_CTRL_SET_PROPERTY(P_LOAD_STATE, NativeControlLoadState, MCiOSPlayerControl, LoadState)
     DEFINE_RO_CTRL_ENUM_PROPERTY(P_PLAYBACK_STATE, NativeControlPlaybackState, MCiOSPlayerControl, PlaybackState)
     DEFINE_RO_CTRL_PROPERTY(P_NATURAL_SIZE, Int32X2, MCiOSPlayerControl, NaturalSize)
+    DEFINE_RO_CTRL_PROPERTY(P_READY_FOR_DISPLAY, Bool, MCiOSPlayerControl, IsReadyForDisplay)
 };
 
 MCObjectPropertyTable MCiOSPlayerControl::kPropertyTable =
@@ -210,15 +212,15 @@ MCObjectPropertyTable MCiOSPlayerControl::kPropertyTable =
 
 MCNativeControlActionInfo MCiOSPlayerControl::kActions[] =
 {
-    DEFINE_CTRL_EXEC_METHOD(Play, MCiOSPlayerControl, Play)
-    DEFINE_CTRL_EXEC_METHOD(Pause, MCiOSPlayerControl, Pause)
-    DEFINE_CTRL_EXEC_METHOD(Stop, MCiOSPlayerControl, Stop)
-    DEFINE_CTRL_EXEC_METHOD(PrepareToPlay, MCiOSPlayerControl, PrepareToPlay)
-    DEFINE_CTRL_EXEC_METHOD(BeginSeekingForward, MCiOSPlayerControl, BeginSeekingForward)
-    DEFINE_CTRL_EXEC_METHOD(BeginSeekingBackward, MCiOSPlayerControl, BeginSeekingBackward)
-    DEFINE_CTRL_EXEC_METHOD(EndSeeking, MCiOSPlayerControl, EndSeeking)
-    DEFINE_CTRL_EXEC_TERNARY_METHOD(Snapshot, MCiOSPlayerControl, Int32, OptionalInt32, OptionalInt32, Snapshot)
-    DEFINE_CTRL_EXEC_TERNARY_METHOD(SnapshotExactly, MCiOSPlayerControl, Int32, OptionalInt32, OptionalInt32, SnapshotExactly)
+    DEFINE_CTRL_EXEC_METHOD(Play, Void, MCiOSPlayerControl, Play)
+    DEFINE_CTRL_EXEC_METHOD(Pause, Void, MCiOSPlayerControl, Pause)
+    DEFINE_CTRL_EXEC_METHOD(Stop, Void, MCiOSPlayerControl, Stop)
+    DEFINE_CTRL_EXEC_METHOD(PrepareToPlay, Void, MCiOSPlayerControl, PrepareToPlay)
+    DEFINE_CTRL_EXEC_METHOD(BeginSeekingForward, Void, MCiOSPlayerControl, BeginSeekingForward)
+    DEFINE_CTRL_EXEC_METHOD(BeginSeekingBackward, Void, MCiOSPlayerControl, BeginSeekingBackward)
+    DEFINE_CTRL_EXEC_METHOD(EndSeeking, Void, MCiOSPlayerControl, EndSeeking)
+    DEFINE_CTRL_EXEC_TERNARY_METHOD(Snapshot, Integer_OptInteger_OptInteger, MCiOSPlayerControl, Int32, OptionalInt32, OptionalInt32, Snapshot)
+    DEFINE_CTRL_EXEC_TERNARY_METHOD(SnapshotExactly, Integer_OptInteger_OptInteger, MCiOSPlayerControl, Int32, OptionalInt32, OptionalInt32, SnapshotExactly)
 };
 
 MCNativeControlActionTable MCiOSPlayerControl::kActionTable =
@@ -593,6 +595,20 @@ void MCiOSPlayerControl::GetIsPreparedToPlay(MCExecContext& ctxt, bool& r_value)
         r_value = false;
 }
 
+// SN-2015-09-04: [[ Bug 9744 ]] Add getter for readyForDisplay property
+void MCiOSPlayerControl::GetIsReadyForDisplay(MCExecContext& ctxt, bool& r_value)
+{
+    r_value = false;
+    
+    if (m_controller != nil)
+    {
+#ifdef __IPHONE_6_0
+        if (MCmajorosversion >= 600)
+            r_value = [m_controller readyForDisplay];
+#endif
+    }
+}
+
 void MCiOSPlayerControl::GetLoadState(MCExecContext& ctxt, MCNativeControlLoadState& r_state)
 {
     uint32_t t_load_state;
@@ -603,12 +619,13 @@ void MCiOSPlayerControl::GetLoadState(MCExecContext& ctxt, MCNativeControlLoadSt
         MPMovieLoadState t_state;
         t_state = [m_controller loadState];
         
+        // PM-2015-02-13: [[ Bug 14604 ]] Used (1 << kMCNativeControlLoadState*) to align with the definition of MCExecFormatSet()
         if (t_state & MPMovieLoadStatePlayable)
-            t_load_state |= kMCNativeControlLoadStatePlayable;
+            t_load_state |= 1 << kMCNativeControlLoadStatePlayable;
         if (t_state & MPMovieLoadStatePlaythroughOK)
-            t_load_state |= kMCNativeControlLoadStatePlaythroughOK;
+            t_load_state |= 1 << kMCNativeControlLoadStatePlaythroughOK;
         if (t_state & MPMovieLoadStateStalled)
-            t_load_state |= kMCNativeControlLoadStateStalled;
+            t_load_state |= 1 << kMCNativeControlLoadStateStalled;
     }
     r_state = (MCNativeControlLoadState)t_load_state;
 }
@@ -872,6 +889,20 @@ Exec_stat MCiOSPlayerControl::Get(MCNativeControlProperty p_property, MCExecPoin
 			if (m_controller != nil)
 				FormatBoolean(ep, [m_controller isPreparedToPlay]);
 			return ES_NORMAL;
+		
+		// PM-2015-07-09: [[ Bug 9744 ]] Added readyForDisplay (RO) property for native player
+		case kMCNativeControlPropertyReadyForDisplay:
+			if (m_controller != nil)
+			{
+#ifdef __IPHONE_6_0
+				if (MCmajorosversion >= 600)
+					FormatBoolean(ep, [m_controller readyForDisplay]);
+				else
+#endif
+				FormatBoolean(ep, false);
+			}
+			
+			return ES_NORMAL;
 			
 		case kMCNativeControlPropertyLoadState:
 			if (m_controller != nil)
@@ -902,26 +933,15 @@ Exec_stat MCiOSPlayerControl::Get(MCNativeControlProperty p_property, MCExecPoin
 
 void MCiOSPlayerControl::Play()
 {
+    // PM-2014-09-18: [[ Bug 13048 ]] Make sure movieTouched message is sent
+    // PM-2015-03-06: [[ Bug 14816 ]] movieTouched msg to be sent only when in fullscreen and showController=false
+    [m_delegate beginWithOverlay:([m_controller isFullscreen] && [m_controller controlStyle] == MPMovieControlStyleNone)];
     [m_controller play];
 }
 
 void MCiOSPlayerControl::ExecPlay(MCExecContext& ctxt)
 {
-    // PM-2014-09-18: [[ Bug 13048 ]] Make sure movieTouched message is sent
-    if ([m_controller isFullscreen])
-    {
-        // The movie's window is the one that is active
-        UIWindow *t_window = [[UIApplication sharedApplication] keyWindow];
-
-        // Now we create an invisible control with the same size as the window
-        [m_delegate setOverlay: [[UIControl alloc] initWithFrame: [t_window frame]]];
-
-        // We want to get notified whenever the overlay control is touched
-        [m_delegate.getOverlay addTarget: m_delegate action: @selector(playerWindowTouched:) forControlEvents: UIControlEventTouchDown];
-        [t_window addSubview: m_delegate.getOverlay];
-
-    }
-    [m_controller play];
+    Play();
 }
 void MCiOSPlayerControl::ExecPause(MCExecContext& ctxt)
 {
@@ -1157,15 +1177,37 @@ static struct { NSString* const* name; SEL selector; } s_player_notifications[] 
 	return self;
 }
 
-- (void)dealloc
+// PM-2015-02-12: [[ Bug 14525 ]] Moved the overlay code entirely into the delegate
+- (void)beginWithOverlay:(bool)p_overlay
+{
+    if (p_overlay)
+    {
+        // The movie's window is the one that is active
+        UIWindow *t_window = [[UIApplication sharedApplication] keyWindow];
+
+        // Now we create an invisible control with the same size as the window
+        m_overlay = [[UIControl alloc] initWithFrame: [t_window frame]];
+        
+        // We want to get notified whenever the overlay control is touched
+        [m_overlay addTarget: self action: @selector(playerWindowTouched:) forControlEvents: UIControlEventTouchDown];
+        [t_window addSubview: m_overlay];
+    }
+}
+
+- (void)end
 {
     if (m_overlay != nil)
     {
         [m_overlay removeTarget: self action: @selector(playerWindowTouched:) forControlEvents: UIControlEventTouchDown];
         [m_overlay removeFromSuperview];
         [m_overlay release];
+        m_overlay = nil;
     }
-    
+}
+
+- (void)dealloc
+{
+    [self end];
 	[[NSNotificationCenter defaultCenter] removeObserver: self];
 	[super dealloc];
 }
@@ -1215,12 +1257,7 @@ static struct { NSString* const* name; SEL selector; } s_player_notifications[] 
 - (void)playerPlaybackDidFinish: (NSNotification *)notification
 {
     // PM-2014-09-18: [[ Bug 13048 ]] Clear m_overlay if playback finishes for any reason
-    if (m_overlay != nil)
-    {
-        [m_overlay removeTarget: self action: @selector(playerWindowTouched:) forControlEvents: UIControlEventTouchDown];
-        [m_overlay removeFromSuperview];
-        [m_overlay release];
-    }
+    [self end];
     
 	NSObject *t_value;
 	
@@ -1257,16 +1294,6 @@ static struct { NSString* const* name; SEL selector; } s_player_notifications[] 
 - (void)playerWindowTouched: (UIControl*) p_sender
 {
     MCEventQueuePostCustom(new MCiOSPlayerNotifyEvent(m_instance, MCM_movie_touched));
-}
-
-- (UIControl*)getOverlay
-{
-    return m_overlay;
-}
-
-- (void)setOverlay:(UIControl *)p_overlay
-{
-    m_overlay = p_overlay;
 }
 @end
 

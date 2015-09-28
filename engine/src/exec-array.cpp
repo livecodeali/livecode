@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -393,8 +393,11 @@ void MCArraysExecCombineAsSet(MCExecContext& ctxt, MCArrayRef p_array, MCStringR
             return;
         }
     }
-    
-    MCStringCopy(*t_string, r_string);
+
+    if (*t_string == nil)
+        r_string = MCValueRetain(kMCEmptyString);
+    else
+        MCStringCopy(*t_string, r_string);
 }
 
 //////////
@@ -573,7 +576,17 @@ void MCArraysDoUnion(MCExecContext& ctxt, MCArrayRef p_dst_array, MCArrayRef p_s
         {
             if (p_recursive && MCValueIsArray(t_dst_value) && MCValueIsArray(t_src_value))
             {
-                MCArraysExecUnionRecursive(ctxt, (MCArrayRef)t_dst_value, (MCArrayRef)t_src_value);
+                // AL-2015-02-23: [[ Bug 14658 ]] Ensure recursive set operations are
+                //  performed on mutable copies of sub-arrays.
+                MCAutoArrayRef t_dst_subarray;
+                if (!MCArrayMutableCopy((MCArrayRef)t_dst_value, &t_dst_subarray))
+                    return;
+                
+                MCArraysExecUnionRecursive(ctxt, *t_dst_subarray, (MCArrayRef)t_src_value);
+                
+                if (!MCArrayStoreValue(p_dst_array, ctxt . GetCaseSensitive(), t_key, *t_dst_subarray))
+                    return;
+                
                 if (ctxt . HasError())
                     return;
             }
@@ -593,18 +606,39 @@ void MCArraysDoIntersect(MCExecContext& ctxt, MCArrayRef p_dst_array, MCArrayRef
 	MCNameRef t_key;
 	MCValueRef t_src_value;
     MCValueRef t_dst_value;
+    MCAutoArrayRef t_orig_dst_array;
 	uintptr_t t_iterator;
 	t_iterator = 0;
     
     bool t_is_array;
     
-	while(MCArrayIterate(p_dst_array, t_iterator, t_key, t_dst_value))
+    // TS-2015-19-18: [[ Bug 15948 ]] Take a copy of p_dst_array and iterate through
+    // the copy so that we are not removing values from the same array.  Otherwise
+    // the array may be rehashed during the MCArrayRemoveValue() call and break the
+    // iteration sequence.
+    if (!MCArrayCopy(p_dst_array, &t_orig_dst_array)) {
+        return;
+    }
+    
+    // Loop through the copy of the array, not the one that we will be removing entries
+    // from.
+    while(MCArrayIterate(*t_orig_dst_array, t_iterator, t_key, t_dst_value))
 	{
 		if (MCArrayFetchValue(p_src_array, ctxt . GetCaseSensitive(), t_key, t_src_value))
         {
             if (p_recursive && MCValueIsArray(t_dst_value) && MCValueIsArray(t_src_value))
             {
-                MCArraysExecIntersectRecursive(ctxt, (MCArrayRef)t_dst_value, (MCArrayRef)t_src_value);
+                // AL-2015-02-23: [[ Bug 14658 ]] Ensure recursive set operations are
+                //  performed on mutable copies of sub-arrays.
+                MCAutoArrayRef t_dst_subarray;
+                if (!MCArrayMutableCopy((MCArrayRef)t_dst_value, &t_dst_subarray))
+                    return;
+                
+                MCArraysExecIntersectRecursive(ctxt, *t_dst_subarray, (MCArrayRef)t_src_value);
+                
+                if (!MCArrayStoreValue(p_dst_array, ctxt . GetCaseSensitive(), t_key, *t_dst_subarray))
+                    return;
+                
                 if (ctxt . HasError())
                     return;
             }

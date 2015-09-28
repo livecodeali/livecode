@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -640,7 +640,12 @@ void REVVideoGrabber(VideoGrabberKeyword whichkeyword,
 						if (InitQT())
 							gvideograbber = new CQTVideoGrabber(windowid);
 						else
+						{
+							// SN-2015-04-17: [[ Bug 13452 ]] Break if qvideograbber
+							//  has not been created successfully
 							result = istrdup("ERROR: cannot load quicktime");
+							break;
+						}
 					}
 #ifdef WIN32
 				}

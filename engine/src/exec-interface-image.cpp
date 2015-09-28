@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -604,6 +604,7 @@ void MCImage::SetTransparencyData(MCExecContext &ctxt, bool p_flatten, MCDataRef
 		MCImageBitmap *t_copy = nil;
 		if (m_rep != nil)
 		{
+            // PM-2015-02-09: [[ Bug 14483 ]] Reverted patch for bugfix 13938
             t_success = copybitmap(false, t_copy);
 		}
 		else
@@ -616,7 +617,8 @@ void MCImage::SetTransparencyData(MCExecContext &ctxt, bool p_flatten, MCDataRef
 		if (t_success)
 		{
 			MCImageSetMask(t_copy, (uint8_t*)MCDataGetBytePtr(p_data), t_length, !p_flatten);
-			setbitmap(t_copy, 1.0);
+            // PM-2015-02-09: [[ Bug 14483 ]] Reverted patch for bugfix 14347
+            setbitmap(t_copy, 1.0);
 		}
 		
 		MCImageFreeBitmap(t_copy);
@@ -720,10 +722,8 @@ void MCImage::SetCenterRectangle(MCExecContext& ctxt, MCRectangle *p_rectangle)
 void MCImage::GetCenterRectangle(MCExecContext& ctxt, MCRectangle *&r_rectangle)
 {
     if (m_center_rect . x != INT16_MIN)
-    {
-        r_rectangle = new MCRectangle;
+        // AL-2014-11-05: [[ Bug 13943 ]] Return center rect correctly
         *r_rectangle = m_center_rect;
-    }
     else
         r_rectangle = NULL;
 }

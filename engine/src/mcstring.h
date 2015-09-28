@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -152,6 +152,7 @@ extern MCNameRef MCN_html;
 extern MCNameRef MCN_browser;
 extern MCNameRef MCN_command_line;
 extern MCNameRef MCN_development;
+extern MCNameRef MCN_development_cmdline;
 extern MCNameRef MCN_helper_application;
 extern MCNameRef MCN_installer;
 extern MCNameRef MCN_mobile;
@@ -200,6 +201,8 @@ extern MCNameRef MCN_x86_64;
 extern MCNameRef MCN_motorola_powerpc;
 extern MCNameRef MCN_i386;
 extern MCNameRef MCN_arm;
+// SN-2015-01-07: [[ iOS-64bit ]] ARM64 added
+extern MCNameRef MCN_arm64;
 
 extern MCNameRef MCN_local_mac;
 extern MCNameRef MCN_local_win32;
@@ -226,6 +229,7 @@ extern MCNameRef MCN_opaque_pixels;
 extern MCNameRef MCN_desktop;
 extern MCNameRef MCN_documents;
 extern MCNameRef MCN_engine;
+extern MCNameRef MCN_resources;
 extern MCNameRef MCN_fonts;
 extern MCNameRef MCN_home;
 extern MCNameRef MCN_start;

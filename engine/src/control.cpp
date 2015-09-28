@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -27,7 +27,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "stack.h"
 #include "tooltip.h"
 #include "card.h"
-#include "control.h"
+#include "mccontrol.h"
 #include "group.h"
 #include "field.h"
 #include "scrolbar.h"
@@ -128,6 +128,7 @@ MCControl::~MCControl()
 {
 	if (focused == this)
 		focused = NULL;
+    
 	MCscreen->stopmove(this, False);
 
 	// MW-2009-06-11: [[ Bitmap Effects ]] Destroy the bitmap effects
@@ -144,6 +145,7 @@ void MCControl::open()
 		if (!getstate(CS_KEEP_LAYER))
 			layer_resetattrs();
 		
+        // Make sure we keep state which should be preserved across open.
 		state = (state & (CS_NO_MESSAGES | CS_NO_FILE | CS_SELECTED)) | (state & CS_KEEP_LAYER);
 	}
 	
@@ -789,15 +791,6 @@ Boolean MCControl::del()
 		}
 	}
 
-	// MW-2008-10-28: [[ ParentScripts ]] If the object is marked as being used
-	//   as a parentScript, flush the parentScript table so we don't get any
-	//   dangling pointers.
-	if (getstate(CS_IS_PARENTSCRIPT) && gettype() == CT_BUTTON)
-	{
-		MCParentScript::FlushObject(this);
-		setstate(False, CS_IS_PARENTSCRIPT);
-	}
-
     // IM-2012-05-16 [[ BZ 10212 ]] deleting the dragtarget control in response
     // to a 'dragdrop' message would leave these globals pointing to the deleted
     // object, leading to an infinite loop if the target was a field
@@ -810,7 +803,9 @@ Boolean MCControl::del()
     if (MCdragsource == this)
         MCdragsource = nil;
     
-	return True;
+    // MCObject now does things on del(), so we must make sure we finish by
+    // calling its implementation.
+    return MCObject::del();
 }
 
 void MCControl::paste(void)
@@ -1050,7 +1045,8 @@ inline MCRectangle MCGRectangleGetPixelRect(const MCGRectangle &p_rect)
 
 void MCControl::redraw(MCDC *dc, const MCRectangle &dirty)
 {
-	if (!opened || !(isvisible() || MCshowinvisibles))
+    // SN-2014-11-14: [[ Bug 14028 ]] Use the current control visibility state
+	if (!opened || !(getflag(F_VISIBLE) || MCshowinvisibles))
 		return;
 
 	// MW-2009-06-11: [[ Bitmap Effects ]] A control needs to be (partially)
@@ -1839,6 +1835,8 @@ Exec_stat MCControl::setsbprop(Properties which, bool p_enable,
 			}
 			else
 			{
+				// PM-2015-07-16: [[ Bug 11569 ]] Unset CS_HSCROLL when the hscrollBar of a control is set to false
+			    state &= ~CS_HSCROLL;
 				delete hsb;
 				hsb = NULL;
 				if (opened)
@@ -1880,6 +1878,8 @@ Exec_stat MCControl::setsbprop(Properties which, bool p_enable,
 			}
 			else
 			{
+				// PM-2015-07-16: [[ Bug 11569 ]] Unset CS_VSCROLL when the vscrollBar of a control is set to false
+				state &= ~CS_VSCROLL;
 				delete vsb;
 				vsb = NULL;
 				if (opened)

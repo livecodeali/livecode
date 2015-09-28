@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -190,8 +190,10 @@ public:
 	findex_t IncrementIndex(findex_t p_in)
 	{
 		unichar_t t_char = MCStringGetCharAtIndex(m_text, p_in);
+        // SN-2015-09-08: [[ Bug 15895 ]] A field can end with half of a
+        //  surrogate pair - in which case the index only increments by 1.
 		if (0xD800 <= t_char && t_char < 0xDC00)
-			return p_in + 2;
+            return (findex_t)MCU_min((uindex_t)(p_in + 2), MCStringGetLength(m_text));
 		return p_in + 1;
 	}
 	
@@ -650,6 +652,8 @@ public:
 	void importattrs(const MCFieldParagraphStyle& x_style);
 	// MW-2012-03-03: [[ StackFile5500 ]] Computes the size of the attrs when serialized.
 	uint32_t measureattrs(void);
+    // SN-2015-05-01: [[ Bug 15175 ]] Make easier to find out whether we need an extra flag
+    bool hasextraflag(void);
 
 	// MW-2012-03-05: [[ HiddenText ]] Get whether the paragraph is hidden or not.
 	bool gethidden(void) const;

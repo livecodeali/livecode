@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -691,6 +691,9 @@ LT factor_table[] =
         {"casesensitive", TT_PROPERTY, P_CASE_SENSITIVE},
         {"cd", TT_CHUNK, CT_CARD},
         {"cds", TT_CLASS, CT_CARD},
+		// MDW-2014-08-23 : [[ feature_floor ]]
+        {"ceil", TT_FUNCTION, F_CEIL},
+        {"ceiling", TT_FUNCTION, F_CEIL},
         {"centered", TT_PROPERTY, P_CENTERED},
         {"centerrect", TT_PROPERTY, P_CENTER_RECTANGLE},
         {"centerrectangle", TT_PROPERTY, P_CENTER_RECTANGLE},
@@ -721,7 +724,9 @@ LT factor_table[] =
         // MERG-2013-08-12: [[ ClipsToRect ]] If true group clips to the set rect rather than the rect of children
         {"clipstorect", TT_PROPERTY, P_CLIPS_TO_RECT},
         {"closebox", TT_PROPERTY, P_CLOSE_BOX},
+        {"cmdargs", TT_FUNCTION, F_COMMAND_ARGUMENTS},
         {"cmdkey", TT_FUNCTION, F_COMMAND_KEY},
+        {"cmdname", TT_FUNCTION, F_COMMAND_NAME},
         {"codepoint", TT_CHUNK, CT_CODEPOINT},
         {"codepointoffset", TT_FUNCTION, F_CODEPOINT_OFFSET},
         {"codepointproperty", TT_FUNCTION, F_CODEPOINT_PROPERTY},
@@ -729,7 +734,7 @@ LT factor_table[] =
         {"codepointtonum", TT_FUNCTION, F_UNICODE_CHAR_TO_NUM},
         {"codeunit", TT_CHUNK, CT_CODEUNIT},
         {"codeunitoffset", TT_FUNCTION, F_CODEUNIT_OFFSET},
-		{"codeunits", TT_CLASS, CT_CODEUNIT},
+        {"codeunits", TT_CLASS, CT_CODEUNIT},
         {"collapsebox", TT_PROPERTY, P_COLLAPSE_BOX},
 		// MERG-2013-08-17: [[ ColorDialogColors ]] Custom color management for the windows color dialog
 		{"colordialogcolors", TT_PROPERTY, P_COLOR_DIALOG_COLORS},
@@ -741,8 +746,12 @@ LT factor_table[] =
         {"colorworld", TT_PROPERTY, P_COLOR_WORLD},
         {"columndel", TT_PROPERTY, P_COLUMN_DELIMITER},
         {"columndelimiter", TT_PROPERTY, P_COLUMN_DELIMITER},
+        // SN-2015-07-18: [[ CommandFunctions ]] Added keywords for
+        //  commandName and commandArguments
+        {"commandarguments", TT_FUNCTION, F_COMMAND_ARGUMENTS},
         {"commandchar", TT_PROPERTY, P_COMMAND_CHAR},
         {"commandkey", TT_FUNCTION, F_COMMAND_KEY},
+        {"commandname", TT_FUNCTION, F_COMMAND_NAME},
         {"commandnames", TT_FUNCTION, F_COMMAND_NAMES},
 		// MW-2011-09-10: [[ TileCache ]] The maximum number of bytes to use for the tile cache
 		{"compositorcachelimit", TT_PROPERTY, P_COMPOSITOR_CACHE_LIMIT},
@@ -915,6 +924,8 @@ LT factor_table[] =
 		{"flaggedranges", TT_PROPERTY, P_FLAGGED_RANGES},
         {"fld", TT_CHUNK, CT_FIELD},
         {"flds", TT_CLASS, CT_FIELD},
+		// MDW-2014-08-23 : [[ feature_floor ]]
+        {"floor", TT_FUNCTION, F_FLOOR},
         {"flushevents", TT_FUNCTION, F_FLUSH_EVENTS},
         {"focuscolor", TT_PROPERTY, P_FOCUS_COLOR},
         {"focusedobject", TT_FUNCTION, F_FOCUSED_OBJECT},
@@ -1207,6 +1218,7 @@ LT factor_table[] =
         {"minheight", TT_PROPERTY, P_MIN_HEIGHT},
         {"minimizebox", TT_PROPERTY, P_MINIMIZE_BOX},
         {"minwidth", TT_PROPERTY, P_MIN_WIDTH},
+        {"mirrored", TT_PROPERTY, P_MIRRORED},
 		{"miterlimit", TT_PROPERTY, P_MITER_LIMIT},
         {"mnemonic", TT_PROPERTY, P_MNEMONIC},
         {"mod", TT_BINOP, O_MOD},
@@ -1517,7 +1529,6 @@ LT factor_table[] =
         {"segmentoffset", TT_FUNCTION, F_WORD_OFFSET},
         {"segments", TT_CLASS, CT_WORD},
         {"selected", TT_PROPERTY, P_SELECTED},
-        //{"selectedareacolor", TT_PROPERTY, P_SELECTED_AREA_COLOR},
         {"selectedbutton", TT_FUNCTION, F_SELECTED_BUTTON},
         {"selectedchunk", TT_FUNCTION, F_SELECTED_CHUNK},
         {"selectedcolor", TT_PROPERTY, P_SELECTED_COLOR},

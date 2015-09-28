@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -433,6 +433,8 @@ bool MCSystemSetNotificationBadgeValue (uint32_t r_badge_value);
 bool MCSystemGetDeviceToken (MCStringRef& r_device_token);
 bool MCSystemGetLaunchUrl (MCStringRef& r_launch_url);
 
+bool MCSystemGetLaunchData(MCArrayRef &r_lauch_data);
+
 bool MCSystemBeep(int32_t p_number_of_times);
 bool MCSystemVibrate(int32_t p_number_of_times);
 
@@ -460,7 +462,8 @@ bool MCSystemGetIdentifierForVendor(MCStringRef& r_identifier);
 bool MCSystemSetReachabilityTarget(MCStringRef p_hostname);
 bool MCSystemGetReachabilityTarget(MCStringRef& r_hostname);
 
-bool MCSystemExportImageToAlbum(MCStringRef& r_save_result, MCDataRef p_raw_data, MCStringRef p_file_name, MCStringRef p_file_extension);
+// SN-2014-12-18: [[ Bug 13860 ]] Parameter added in case it's a filename, not raw data, in the DataRef
+bool MCSystemExportImageToAlbum(MCStringRef& r_save_result, MCDataRef p_raw_data, MCStringRef p_file_name, MCStringRef p_file_extension, bool p_is_raw_data = true);
 
 bool MCSystemSetRedrawInterval(int32_t p_interval);
 bool MCSystemSetAnimateAutorotation(bool p_enabled);
@@ -477,11 +480,15 @@ bool MCSystemDisableRemoteControl();
 bool MCSystemGetRemoteControlEnabled(bool& r_enabled);
 bool MCSystemSetRemoteControlDisplayProperties(MCExecContext& ctxt, MCArrayRef p_array);
 
+// SN-2014-12-11: [[ Merge-6.7.1-rc-4 ]]
+bool MCSystemGetIsVoiceOverRunning(bool& r_is_vo_running);
+
 enum MCMiscStatusBarStyle
 {
     kMCMiscStatusBarStyleDefault,
     kMCMiscStatusBarStyleTranslucent,
-    kMCMiscStatusBarStyleOpaque
+    kMCMiscStatusBarStyleOpaque,
+    kMCMiscStatusBarStyleSolid
 };
 
 enum MCMiscKeyboardType

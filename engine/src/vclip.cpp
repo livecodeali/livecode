@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -184,7 +184,10 @@ Exec_stat MCVideoClip::setprop_legacy(uint4 parid, Properties p, MCExecPoint &ep
 Boolean MCVideoClip::del()
 {
 	getstack()->removevclip(this);
-	return True;
+    
+    // MCObject now does things on del(), so we must make sure we finish by
+    // calling its implementation.
+    return MCObject::del();
 }
 
 void MCVideoClip::paste(void)

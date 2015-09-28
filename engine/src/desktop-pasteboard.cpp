@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -269,7 +269,8 @@ bool MCSystemPasteboard::Fetch(MCTransferType p_type, MCDataRef& r_data)
             /* UNCHECKED */ MCStringDecode(*t_in_data, kMCStringEncodingUTF8, false, &t_input_mac);
             MCAutoStringRef t_output;
             /* UNCHECKED */ MCStringConvertLineEndingsToLiveCode(*t_input_mac, &t_output);
-            /* UNCHECKED */ MCStringEncode(*t_output, kMCStringEncodingMacRoman, false, &t_out_data);
+            // SN-2014-11-13: [[ Bug 13993 ]] We now get a UTF-16 string to allow Unicode filenames
+            /* UNCHECKED */ MCStringEncode(*t_output, kMCStringEncodingUTF16, false, &t_out_data);
 		}
 		break;
 			

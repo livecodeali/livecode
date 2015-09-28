@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -27,7 +27,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 ///////////////////////////////////////////////////////////////////////////////
 //
-// The MCVariableArray class represents Revolution's 'hash' value.
+// The MCVariableArray class represents LiveCode's 'hash' value.
 // It is intended to be used by another class that controls construction and
 // destruction (notice it has no constructor/destructor). The reason behind
 // this is that we want to be able to put it in 'union' constructs and have
@@ -251,7 +251,7 @@ inline uint32_t MCVariableArray::getnfilled(void) const
 ///////////////////////////////////////////////////////////////////////////////
 //
 // The MCVariableValue class represents a value that can be stored in a 
-// Revolution variable, or container (such as a hash).
+// LiveCode variable, or container (such as a hash).
 //
 // A value has one of 5 states:
 //   - UNDEFINED: no value has been set, this is evaluated as *both* 0.0 and
@@ -326,6 +326,11 @@ public:
 
 	// Append the given byte sequence to the variable.
 	bool append_string(const MCString& s);
+    
+    // Prepend the given byte sequence to the variable.
+	bool prepend_string(const MCString& s);
+    
+    bool insert_string(const MCString& s, int insert_at);
 
 	// This method is used to set the buffer of the value to a custom conversion
 	// of it as a number. It results in the format being VF_NUMBER, but the buffer
@@ -350,6 +355,8 @@ public:
 	// Append the value of ep to 'this'.
 	// String coercion is performed as required.
 	Exec_stat append(MCExecPoint& ep);
+    
+    Exec_stat prepend(MCExecPoint& ep);
 
 	bool has_element(MCExecPoint& ep, const MCString& key);
 
@@ -611,6 +618,10 @@ protected:
 	MCVariable(void) {}
 	MCVariable(const MCVariable& other) {}
     
+    // Returns true if the existing value of the variable is can become or remain
+    // data when the operation is complete, without loss of information.
+    bool can_become_data(MCExecContext& ctxt, MCNameRef *p_path, uindex_t p_length);
+    
     // Modify the content of the variable - append or prepend (nested key).
     bool modify(MCExecContext& ctxt, MCValueRef p_value, MCNameRef *p_path, uindex_t p_length, MCVariableSettingStyle p_setting);
     // Modify the variable by appending/prepending the value given (nested key).
@@ -619,6 +630,7 @@ protected:
     bool modify(MCExecContext& ctxt, MCValueRef p_value, MCVariableSettingStyle p_setting);
     bool modify_ctxt(MCExecContext& ctxt, MCExecValue p_value, MCVariableSettingStyle p_setting);
     
+    bool modify_string(MCExecContext& ctxt, MCStringRef p_value, MCNameRef *p_path, uindex_t p_length, MCVariableSettingStyle p_setting);
     // Modify the content of the variable - append or prepend (nested key). Target must already be data.
     bool modify_data(MCExecContext& ctxt, MCDataRef p_data, MCNameRef *p_path, uindex_t p_length, MCVariableSettingStyle p_setting);
 public:
@@ -667,6 +679,9 @@ public:
     // Replace the content of the internal string according to the range given to avoid unnecessary copy
 	bool replace(MCExecContext& ctxt, MCValueRef p_replacement, MCRange p_range);
     bool replace(MCExecContext& ctxt, MCValueRef p_replacement, MCRange p_range, MCNameRef *p_path, uindex_t p_length);
+    
+    bool replace_string(MCExecContext& ctxt, MCStringRef p_replacement, MCRange p_range, MCNameRef *p_path, uindex_t p_length);
+    bool replace_data(MCExecContext& ctxt, MCDataRef p_replacement, MCRange p_range, MCNameRef *p_path, uindex_t p_length);
     
 	bool deleterange(MCExecContext& ctxt, MCRange p_range);
     bool deleterange(MCExecContext& ctxt, MCRange p_range, MCNameRef *p_path, uindex_t p_length);

@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -196,7 +196,7 @@ Boolean MCScreenDC::open()
     MCAutoStringRef t_type, t_error;
     /* UNCHECKED */ MCS_query_registry(t_key, &t_value, &t_type, &t_error);
 
-	if (!MCValueIsEmpty(*t_value))
+	if (*t_value != nil && !MCValueIsEmpty(*t_value))
 	{
 		MCAutoStringRef t_string;
 		/* UNCHECKED */ ctxt . ConvertToString(*t_value, &t_string);
@@ -222,7 +222,7 @@ Boolean MCScreenDC::open()
     MCAutoStringRef t_type2, t_error2;
     /* UNCHECKED */ MCS_query_registry(t_key2, &t_value2, &t_type2, &t_error2);
 
-	if (!MCValueIsEmpty(*t_value2))
+	if (*t_value != nil && !MCValueIsEmpty(*t_value2))
 	{
 		MCAutoStringRef t_string;
 		/* UNCHECKED */ ctxt . ConvertToString(*t_value2, &t_string);
@@ -263,7 +263,7 @@ Boolean MCScreenDC::open()
 
 	// The System and Input codepages are used to translate input characters.
 	// A keyboard layout will present characters via WM_CHAR in the
-	// input_codepage, while Revolution is running in the system_codepage.
+	// input_codepage, while LiveCode is running in the system_codepage.
 	//
 	system_codepage = GetACP();
 
@@ -715,18 +715,18 @@ static void fixdata(uint4 *bits, uint2 width, uint2 height)
 		*bits++ |= mask;
 }
 
-uint4 MCScreenDC::dtouint4(Drawable d)
+uintptr_t MCScreenDC::dtouint(Drawable d)
 {
 	if (d == DNULL)
 		return 0;
 	else
 		if (d->type == DC_WINDOW)
-			return (uint4)(d->handle.window);
+			return (uintptr_t)(d->handle.window);
 		else
-			return (uint4)(d->handle.pixmap);
+			return (uintptr_t)(d->handle.pixmap);
 }
 
-Boolean MCScreenDC::uint4towindow(uint4 id, Window &w)
+Boolean MCScreenDC::uinttowindow(uintptr_t id, Window &w)
 {
 	w = new _Drawable;
 	w->type = DC_WINDOW;

@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -108,8 +108,8 @@ public:
 	Boolean import(MCStringRef fname, IO_handle stream);
 	Boolean open_audio();
 	Boolean play();
-	void stop(Boolean abort);
-	void setloudness(uint2 p_loudness);
+    void stop(Boolean abort);
+    bool isPlaying();
 
 	IO_stat save(IO_handle stream, uint4 p_part, bool p_force_ext);
 	IO_stat extendedsave(MCObjectOutputStream& p_stream, uint4 p_part);

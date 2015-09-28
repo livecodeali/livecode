@@ -15,6 +15,43 @@ local sDeviceSDKs
 
 ////////////////////////////////////////////////////////////////////////////////
 
+-- SN-2015-03-24: [[ Bug 15037 ]] Add a consistent, strict list of the
+--  SDKs and device relying on the engines we provide in the shipped version
+-- SN-2015-05-01: [[ Xcode 6.4 ]] Add iOS 8.4 amongst the uable iOS SDK
+function deployUsableIosSdk
+   return "5.1,6.1,7.1,8.2,8.4,9.0"
+end deployUsableIosSdk
+
+// SN-2015-05-01: [[ Xcode 6.4 ]] Return the pair iOS SDK / Xcode for the current MacOS version
+function deployGetIphoneOSes
+   local tList, tMacVersion
+   put deploySanatizeSystemVersion() into tMacVersion
+   if tMacVersion < 100800 then
+      put "6.1,4.6" into tList[1]
+   else if tMacVersion < 100900 then
+      put "7.1,5.1" into tList[1]
+   else if tMacVersion < 101000 then
+      put "8.2,6.2" into tList[1]
+   else if tMacVersion < 101100 then
+      put "8.4,6.4" into tList[1]
+      put "8.2,6.2" into tList[2]
+      // Xcode 7.0 can be installed from Mac OSX 10.10.4 onwards
+      if tMacVersion >= 101004 then
+         put "9.0,7.0" into tList[3]
+      end if
+   else
+      put "9.0,7.0" into tList[1]
+   end if
+   
+   return tList
+end deployGetIphoneOSes
+
+function deployGetIosMinimumVersions
+   return "5.1.1,6.0,6.1,7.0,7.1,8.0,8.1,8.2,8.3,8.4,9.0"
+end deployGetIosMinimumVersions
+
+////////////////////////////////////////////////////////////////////////////////
+
 -- Called on startup to initialize the deployment platform if possible.
 command deployInitialize
    if the platform is not "macos" then
@@ -42,13 +79,17 @@ end deployIsAvailable
 
 -- Invoked to fetch the list of targets for this simulation platform
 function deployListTargets
-   local tTargets
+   local tTargets, tAvailableSimEngines
+   
+   -- SN-2015-03-24: [[ Bug 15037 ]] Only list the simulators / devices SDKs
+   --  for which we provide engines.
+   put deployUsableIosSdk() into tAvailableSimEngines
    
    repeat for each key tKey in sDeploySimulators
-      if tKey >= "4.2" then
+      if tKey is among the items of tAvailableSimEngines then
          put "iPad Simulator" && tKey & return after tTargets
       end if
-      if tKey >= "4.0" then
+      if tKey is among the items of tAvailableSimEngines then
          put "iPhone Simulator" && tKey & return after tTargets
       end if
    end repeat
@@ -297,23 +338,14 @@ command deployUpdateSDKs
    repeat for each line tSDK in tSDKs
       set the folder to tSDK & "/Platforms/iPhoneSimulator.platform/Developer/SDKs"
       if the result is empty then
-         -- Include each simulator that isn't < 4.0 in the array, and ignore any
-         -- above 5.0 as that's the upper limit on supported versions for the
-         -- current release.
+         -- SN-2015-03-24: [[ Bug 15037 ]] Only the provided sim engines are available
+         local tAvailableSimulators
+         put deployUsableIosSdk() into tAvailableSimulators
+         
          repeat for each line tSim in (the folders & return & the files)
             get char 16 to -5 of tSim
             
-            -- MM-2012-09-18: We no no longer support simulators before 4.3.
-            if it < "4.3" then
-               next repeat
-            end if
-            
-            -- MW-2012-03-21: Allow anything up to and including 5.1 support.
-            if it > "8.1" then
-               next repeat
-            end if
-            
-            if tSimulators[it] is not empty then
+            if it is not among the items of tAvailableSimulators then
                next repeat
             end if
             
@@ -321,13 +353,15 @@ command deployUpdateSDKs
          end repeat        
       end if
       
-      -- Look for SDK version 5.0, 5.1 and 6.0, used for device builds.
-      --
       set the folder to tSDK & "/Platforms/iPhoneOS.platform/Developer/SDKs"
       if the result is empty then
+         -- SN-2015-03-24: [[ Bug 15037 ]] Only the provided device engines are available
+         local tAvailableDevices
+         put deployUsableIosSdk() into tAvailableDevices
+         
          repeat for each line tDevSDK in (the folders & return & the files)
             get char 9 to -5 of tDevSDK
-            if it is not among the words of "5.0 5.1 6.0 6.1 7.0 7.1 8.0 8.1" then
+            if it is not among the items of tAvailableDevices then
                next repeat
             end if
             if tDeviceSDKs[it] is not empty then
@@ -347,6 +381,58 @@ command deployUpdateSDKs
    revIDEDeployTargetsChanged
 end deployUpdateSDKs
 
+function deployGetInvalidityMessage pIosXcodePairs
+   local tIosToInstall, tIosList
+   
+   // SN-2015-05-01: [[ Refactor iOS SDK version ]] We might have several iOS / Xcode
+   //  pairs to list (as for now, 2 for Yosemite)
+   repeat for each element tIosXcodePair in pIosXcodePairs
+      if tIosToInstall is not empty then put " or " before tIosToInstall
+      if tIosList is not empy then put LF before tIosList
+      
+      put item 1 of tIosXcodePair before tIosToInstall
+      put "  - iOS" && item 1 of tIosXcodePair && "comes with Xcode" && item 2 of tIosXcodePair before tIosList
+   end repeat
+   
+   return "In order to perfom device builds, you must have the iOS SDK" && tIosToInstall && "configured." & LF & tIosList
+end deployGetInvalidityMessage
+
+-- SN-2015-03-12: [[ Bug 14866 ]] Move the command updateSDKs from
+-- card "Mobile" of stack "revpreferencesgui" here, to make any update
+-- after a new Xcode release more convenient
+-- MM-2013-10-08: We now only build for Arm v7, reducing the SDKs users now require.
+function deployCheckLatestSDKIsInstalled @rTooltip, @rAvailableSDKs
+   local tSDKStatus, tValid, tIosXcodePairs
+   put empty into tSDKStatus   
+   put false into tValid
+   
+   put deployGetIphoneOSes() into tIosXcodePairs
+   get deployGetSDKVersions()
+   
+   // We loop on all the possible iOS usable for this MacOS version
+   local tIostoInstall, tXcodeToInstall
+   repeat for each element tIosXcodePair in tIosXcodePairs
+      if item 1 of tIosXcodePair is in it then
+         put true into tValid
+         exit repeat
+      end if
+   end repeat
+   
+   if not tValid then
+      put deployGetInvalidityMessage(tIosXcodePairs) into tSDKStatus
+   end if
+   
+   if it is empty then
+      get "(none)"
+   else
+      replace return with comma & space in it
+   end if
+   
+   put it into rAvailableSDKs
+   put tSDKStatus into rSDKStatus
+   
+   return tValid
+end deployCheckLatestSDKIsInstalled
 
 -- Invoked to get the list of simulators available
 function deployGetSimulatorVersions
@@ -447,36 +533,29 @@ function deployIsValidSDK pSDK
       return false
    end if
    
-   if there is a folder (pSDK & slash & "Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator4.3.sdk") then
-      return true
-   end if
-   if there is a folder (pSDK & slash & "Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator5.0.sdk") then
-      return true
-   end if
-   if there is a folder (pSDK & slash & "Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator5.1.sdk") then
-      return true
-   end if
-   if there is a folder (pSDK & slash & "Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator6.0.sdk") then
-      return true
-   end if
-   if there is a folder (pSDK & slash & "Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator6.1.sdk") then
-      return true
-   end if   
-   if there is a folder (pSDK & slash & "Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator7.0.sdk") then
-      return true
-   end if   
-   if there is a folder (pSDK & slash & "Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator7.1.sdk") then
-      return true
-   end if
-   if there is a folder (pSDK & slash & "Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator8.0.sdk") then
-      return true
-   end if   
-   if there is a folder (pSDK & slash & "Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator8.1.sdk") then
-      return true
-   end if   
+   local tOldFolder, tSDKVersion, tValidSDK
+   put the defaultfolder into tOldFolder
+   set the defaultfolder to pSDK & slash & "Platforms/iPhoneSimulator.platform/Developer/SDKs"
+   
+   put the files & LF & the folders into tSDKList
+   
+   put false into tValidSDK
+   
+   // SN-2015-03-24: [[ Bug 15037 ]] We accept any SDK having a simulator for
+   //  which we provide an engine.
+   repeat for each line tSDK in tSDKList
+      if matchtext(tSDK, "iPhoneSimulator([0-9]\.[0-9]).sdk", tSDKVersion) and \
+            tSDKVersion is among the items of deployUsableIosSdk() then
+         put true into tValidSDK
+         exit repeat
+      end if
+   end repeat
+   
+   // SN-2015-05-21: [[ Bug 15401 ]] We should restore the default path to its initial value
+   set the defaultFolder to tOldFolder
    
    -- Otherwise it must be invalid
-   return false
+   return tValidSDK
 end deployIsValidSDK
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -499,4 +578,3 @@ function deploySanatizeSystemVersion
 end deploySanatizeSystemVersion
 
 ////////////////////////////////////////////////////////////////////////////////
-

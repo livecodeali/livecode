@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -51,6 +51,10 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include <sys/param.h>
 #endif
 
+#ifdef TARGET_SUBPLATFORM_ANDROID
+#include "mblandroidjava.h"
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////
 
 uint32_t g_name_resolution_count = 0;
@@ -66,7 +70,7 @@ bool addrinfo_lookup(const char *p_name, const char *p_port, int p_socktype, str
 	t_hints.ai_socktype = p_socktype;
 	// specify IPv4 addresses only
 	t_hints.ai_family = AF_INET;
-	t_hints.ai_flags = AI_ADDRCONFIG;
+	t_hints.ai_flags = 0;
 
 	int t_status;
 
@@ -196,6 +200,12 @@ struct _thread_notify_info
 
 void notify_thread(void *p_context)
 {
+#ifdef TARGET_SUBPLATFORM_ANDROID
+    // MM-2015-08-04: [[ Bug 15679 ]] Pushing the callback notification will call BreakWait which accesses the JNI.
+    //   Make sure we attach this thread to the JVM so that we have a JNI interface pointer.
+    MCJavaAttachCurrentThread();
+#endif
+    
 	_thread_notify_info *t_info;
 	t_info = (_thread_notify_info*)p_context;
 
@@ -205,6 +215,10 @@ void notify_thread(void *p_context)
 	// during unsafe wait.  fixes broken hostnametoaddress call
 	MCNotifyPush(t_info->m_callback, t_info->m_context, false, false);
 	MCMemoryDelete(t_info);
+    
+#ifdef TARGET_SUBPLATFORM_ANDROID
+    MCJavaDetachCurrentThread();
+#endif
 }
 
 bool launch_thread_with_notify(_thread_function p_thread, _notify_callback p_callback, void *p_context)
@@ -323,9 +337,17 @@ bool MCSocketHostNameResolve(const char *p_name, const char *p_port, int p_sockt
 		t_success = (MCCStringClone(p_name, t_info->m_name) &&
 			MCCStringClone(p_port, t_info->m_port));
 	}
+    // SN-2014-12-16: [[ Bug 14181 ]] We can't notify on servers as there is no RunLoop.
+    //  We do not create a thread to resolve the hostname.
 	if (t_success)
+#ifdef _SERVER
+    {
+        hostname_resolve_thread((void*)t_info);
+        hostname_resolve_notify_callback((void*)t_info);
+    }
+#else
 		t_success = launch_thread_with_notify(hostname_resolve_thread, hostname_resolve_notify_callback, t_info);
-
+#endif
 	if (t_success)
 	{
 		g_name_resolution_count += 1;

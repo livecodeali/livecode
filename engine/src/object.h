@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -181,6 +181,17 @@ struct MCInterfaceTextStyle;
 struct MCInterfaceTriState;
 struct MCExecValue;
 
+struct MCDeletedObjectPool;
+void MCDeletedObjectsSetup(void);
+void MCDeletedObjectsTeardown(void);
+void MCDeletedObjectsEnterWait(bool p_dispatching);
+void MCDeletedObjectsLeaveWait(bool p_dispatching);
+void MCDeletedObjectsOnObjectCreated(MCObject *object);
+void MCDeletedObjectsOnObjectDeleted(MCObject *object);
+void MCDeletedObjectsOnObjectDestroyed(MCObject *object);
+
+void MCDeletedObjectsDoDrain(void);
+
 struct MCPatternInfo
 {
 	uint32_t id;
@@ -231,6 +242,9 @@ protected:
 	
 	// IM-2013-04-16: [[ BZ 10848 ]] // flag to record encrypted state of object script
 	bool m_script_encrypted : 1;
+    
+    // If this is true, then this object is in the parentScript resolution table.
+    bool m_is_parent_script : 1;
 	
 	MCStringRef tooltip;
 	
@@ -249,6 +263,8 @@ protected:
 
 	// MW-2012-02-16: [[ LogFonts ]] The object's logical font attrs.
 	MCObjectFontAttrs *m_font_attrs;
+    
+    MCDeletedObjectPool *m_pool;
 
 	static uint1 dashlist[2];
 	static uint1 dotlist[2];
@@ -774,14 +790,7 @@ public:
 		return kMCPropertyChangedMessageTypeNone;
 	}	
 
-	void scheduledelete(void);
-	
-	// IM-2013-02-11 image change notification (used by button icons, field images, etc.)
-	// returns true if the referenced image is still in use by this object
-	virtual bool imagechanged(MCImage *p_image, bool p_deleting)
-	{
-		return false;
-	}
+	virtual void scheduledelete(bool p_is_child = false);
 
 	// MW-2012-10-10: [[ IdCache ]]
 	void setinidcache(bool p_value)
@@ -792,12 +801,32 @@ public:
 	bool getinidcache(void)
 	{
 		return m_in_id_cache;
-	}
+    }
+
+	// IM-2013-02-11 image change notification (used by button icons, field images, etc.)
+	// returns true if the referenced image is still in use by this object
+	virtual bool imagechanged(MCImage *p_image, bool p_deleting)
+	{
+        return false;
+    }
+    
+    void setisparentscript(bool p_value)
+    {
+        m_is_parent_script = p_value;
+    }
+    
+    bool getisparentscript(void)
+    {
+        return m_is_parent_script;
+    }
     
     MCRectangle measuretext(MCStringRef p_text, bool p_is_unicode);
     
     // Currently non-functional: always returns false
     bool is_rtl() const { return false; }
+    
+    // AL-2015-06-30: [[ Bug 15556 ]] Refactored function to sync mouse focus
+    void sync_mfocus(void);
     
 	////////// PROPERTY SUPPORT METHODS
 
@@ -810,7 +839,7 @@ public:
 	void SetColor(MCExecContext& ctxt, int index, const MCInterfaceNamedColor& p_color);
 	bool GetColors(MCExecContext& ctxt, bool effective, MCStringRef& r_colors);
 
-	bool GetPattern(MCExecContext& ctxt, Properties which, bool effective, uint4& r_pattern);
+	bool GetPattern(MCExecContext& ctxt, Properties which, bool effective, uint4*& r_pattern);
 	void SetPattern(MCExecContext& ctxt, uint2 p_new_pixmap, uint4* p_new_id);
 	bool GetPatterns(MCExecContext& ctxt, bool effective, MCStringRef& r_patterns);
 
@@ -917,28 +946,28 @@ public:
 
 	void GetForePattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	virtual void SetForePattern(MCExecContext& ctxt, uinteger_t* pattern);
-	void GetEffectiveForePattern(MCExecContext& ctxt, uinteger_t& r_pattern);
+	void GetEffectiveForePattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	void GetBackPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	virtual void SetBackPattern(MCExecContext& ctxt, uinteger_t* pattern);
-	void GetEffectiveBackPattern(MCExecContext& ctxt, uinteger_t& r_pattern);
+	void GetEffectiveBackPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	void GetHilitePattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	virtual void SetHilitePattern(MCExecContext& ctxt, uinteger_t* pattern);
-	void GetEffectiveHilitePattern(MCExecContext& ctxt, uinteger_t& r_pattern);
+	void GetEffectiveHilitePattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	void GetBorderPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	virtual void SetBorderPattern(MCExecContext& ctxt, uinteger_t* pattern);
-	void GetEffectiveBorderPattern(MCExecContext& ctxt, uinteger_t& r_pattern);
+	void GetEffectiveBorderPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	void GetTopPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	virtual void SetTopPattern(MCExecContext& ctxt, uinteger_t* pattern);
-	void GetEffectiveTopPattern(MCExecContext& ctxt, uinteger_t& r_pattern);
+	void GetEffectiveTopPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	void GetBottomPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	virtual void SetBottomPattern(MCExecContext& ctxt, uinteger_t* pattern);
-	void GetEffectiveBottomPattern(MCExecContext& ctxt, uinteger_t& r_pattern);
+	void GetEffectiveBottomPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	void GetShadowPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	virtual void SetShadowPattern(MCExecContext& ctxt, uinteger_t* pattern);
-	void GetEffectiveShadowPattern(MCExecContext& ctxt, uinteger_t& r_pattern);
+	void GetEffectiveShadowPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	void GetFocusPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	virtual void SetFocusPattern(MCExecContext& ctxt, uinteger_t* pattern);
-	void GetEffectiveFocusPattern(MCExecContext& ctxt, uinteger_t& r_pattern);
+	void GetEffectiveFocusPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 
 	void GetPatterns(MCExecContext& ctxt, MCStringRef& r_patterns);
 	void SetPatterns(MCExecContext& ctxt, MCStringRef patterns);
@@ -1094,7 +1123,13 @@ public:
 #endif
     
 //////////
-				
+			
+    MCRectangle measuretext(const MCString& p_text, bool p_is_unicode);
+    
+    // Object pool instance variable manipulation
+    MCDeletedObjectPool *getdeletedobjectpool(void) const { return m_pool; }
+    void setdeletedobjectpool(MCDeletedObjectPool *pool) { m_pool = pool; }
+
 protected:
 	IO_stat defaultextendedsave(MCObjectOutputStream& p_stream, uint4 p_part);
 	IO_stat defaultextendedload(MCObjectInputStream& p_stream, uint32_t version, uint4 p_remaining);

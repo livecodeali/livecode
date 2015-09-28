@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -216,6 +216,8 @@ static struct {const char *name; Properties property;} s_native_control_properti
 	{"opaque", P_OPAQUE},
 	{"alpha", P_ALPHA},
 	{"backgroundColor", P_BACKGROUND_COLOR},
+    // PM-2014-12-08: [[ Bug 13659 ]] New property of iOS native controls to allow them interact with Voice Over
+    {"ignoreVoiceOverSensitivity", P_IGNORE_VOICE_OVER_SENSITIVITY},
 	
 	{"dataDetectorTypes", P_DATA_DETECTOR_TYPES},
 	
@@ -260,13 +262,15 @@ static struct {const char *name; Properties property;} s_native_control_properti
 	{"autoplay", P_SHOULD_AUTOPLAY},
 	{"looping", P_LOOPING},
 	
-	{"playbackstate", P_PLAYBACK_STATE},
+    {"playbackstate", P_PLAYBACK_STATE},
     
     // MM-2013-02-21: [[ Bug 10632 ]] Added playRate property for native player.
     {"playrate", P_PLAY_RATE},
     
 	{"loadstate", P_LOAD_STATE},
-	{"useapplicationaudiosession", P_USE_APPLICATION_AUDIO_SESSION},
+    {"useapplicationaudiosession", P_USE_APPLICATION_AUDIO_SESSION},
+    // PM-2015-07-09: [[ Bug 9744 ]] Added readyForDisplay property for native player
+    {"readyForDisplay", P_READY_FOR_DISPLAY},
 	{"allowsairplay", P_ALLOWS_AIR_PLAY},
 	
 	{"enabled", P_ENABLED},
@@ -439,7 +443,10 @@ bool MCNativeControl::GetControlList(MCStringRef& r_list)
             t_success = MCListAppend(*t_list, *t_control_string);
     }
     
-    MCListCopyAsString(*t_list, r_list);
+    if (t_success)
+        t_success = MCListCopyAsString(*t_list, r_list);
+    
+    return t_success;
 }
 
 
@@ -451,32 +458,47 @@ extern bool MCNativePlayerControlCreate(MCNativeControl *&r_control);
 extern bool MCNativeInputControlCreate(MCNativeControl *&r_control);
 extern bool MCNativeMultiLineInputControlCreate(MCNativeControl *&r_control);
 
+bool MCNativeControlCreate(MCNativeControlType p_type, MCNativeControl*& r_control)
+{
+    bool t_success = true;
+    MCNativeControl *t_control = nil;
+    switch(p_type)
+    {
+        case kMCNativeControlTypeBrowser:
+            t_success = MCNativeBrowserControlCreate(t_control);
+            break;
+        case kMCNativeControlTypeScroller:
+            t_success = MCNativeScrollerControlCreate(t_control);
+            break;
+        case kMCNativeControlTypePlayer:
+            t_success = MCNativePlayerControlCreate(t_control);
+            break;
+        case kMCNativeControlTypeInput:
+            t_success = MCNativeInputControlCreate(t_control);
+            break;
+        case kMCNativeControlTypeMultiLineInput:
+            t_success = MCNativeMultiLineInputControlCreate(t_control);
+            break;
+            
+        default:
+            t_success = false;
+            break;
+    }
+    
+    if (!t_success)
+        return false;
+    
+    r_control = t_control;
+    return true;
+}
+
 bool MCNativeControl::CreateWithType(MCNativeControlType p_type, MCNativeControl*& r_control)
 {
     bool t_success = true;
     MCNativeControl *t_control = nil;
-	switch(p_type)
-	{
-		case kMCNativeControlTypeBrowser:
-			t_success =  MCNativeBrowserControlCreate(t_control);
-            break;
-		case kMCNativeControlTypeScroller:
-			t_success = MCNativeScrollerControlCreate(t_control);
-            break;
-		case kMCNativeControlTypePlayer:
-			t_success = MCNativePlayerControlCreate(t_control);
-            break;
-		case kMCNativeControlTypeInput:
-			t_success = MCNativeInputControlCreate(t_control);
-            break;
-		case kMCNativeControlTypeMultiLineInput:
-			t_success = MCNativeMultiLineInputControlCreate(t_control);
-			break;
-            
-		default:
-            t_success = false;
-			break;
-	}
+    
+    if (t_success)
+        t_success = MCCreateNativeControl(p_type, (void*&)t_control);
     
     if (t_success)
         t_success = t_control->Create();

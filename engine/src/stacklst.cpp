@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -264,6 +264,14 @@ MCStack *MCStacklist::getstack(uint2 n)
 bool MCStacklist::stackprops(MCExecContext& ctxt, Properties p_property, MCListRef& r_list)
 {
 	MCAutoListRef t_list;
+    
+    // SN-2015-01-05: [[ Bug 14330 ]] Return if there is no open stacks
+    if (stacks == NULL)
+    {
+        r_list = MCValueRetain(kMCEmptyList);
+        return true;
+    }
+    
 	if (!MCListCreateMutable('\n', &t_list))
 		return false;
 
@@ -337,9 +345,10 @@ Boolean MCStacklist::doaccelerator(KeySym p_key)
 		{
 			if (t_lowersym == accelerators[i] . key && (MCmodifierstate & t_mod_mask) == (accelerators[i].mods & t_mod_mask) && accelerators[i] . button -> getparent() == t_menubar)
 			{
+                // SN-2014-11-06: [[ Bug 13836 ]] mouseDown must be sent to the menubar group.
                 // MW-2014-10-22: [[ Bug 13510 ]] Make sure we send the update message to the menu of menubar - not
                 //   the menubar group.
-				accelerators[i] . button -> message_with_valueref_args(MCM_mouse_down, kMCEmptyString);
+				t_menubar -> message_with_valueref_args(MCM_mouse_down, kMCEmptyString);
 
 				// We now need to re-search for the accelerator, since it could have gone/been deleted in the mouseDown
 				for(uint2 i = 0; i < naccelerators; i++)

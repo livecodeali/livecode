@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -111,6 +111,8 @@ public:
 		m_pointer = 0;
 		m_length = 0;
 		m_capacity = 0;
+        // SN-2015-02-11: [[ Bug 14531 ]] Initially not EOF
+        m_is_eof = false;
 	}
 	
 	MCMemoryFileHandle(const void *p_data, size_t p_length)
@@ -119,6 +121,8 @@ public:
 		m_pointer = 0;
 		m_length = p_length;
 		m_capacity = 0;
+        // SN-2015-02-11: [[ Bug 14531 ]] Initially not EOF
+        m_is_eof = false;
 	}
 	
 	bool TakeBuffer(void*& r_buffer, size_t& r_length)
@@ -130,6 +134,8 @@ public:
 		m_length = 0;
 		m_capacity = 0;
 		m_pointer = 0;
+        // SN-2015-02-11: [[ Bug 14531 ]] Not EOF anymore
+        m_is_eof = false;
         
         return (r_buffer != nil);
 	}
@@ -143,15 +149,28 @@ public:
     
     virtual bool IsExhausted(void)
     {
-        return m_pointer == m_length;
+        // SN-2015-02-11: [[ Bug 14531 ]] Updated to a bool
+        return m_is_eof;
     }
     
     bool Read(void *p_buffer, uint32_t p_length, uint32_t& r_read)
     {
-        r_read = MCU_min(p_length, m_length - m_pointer);
+        // SN-2015-02-11: [[ Bug 14531 ]] We are only EOF if we
+        //  are asked more than what we have.
+        if (p_length > m_length - m_pointer)
+        {
+            r_read = (uint32_t)(m_length - m_pointer);
+            m_is_eof = true;
+        }
+        else
+        {
+            m_is_eof = false;
+            r_read = p_length;
+        }
         
         memcpy(p_buffer, m_buffer + m_pointer, r_read);
         m_pointer += r_read;
+
         return true;
     }
 	
@@ -176,10 +195,13 @@ public:
 			m_buffer = static_cast<char *>(t_new_buffer);
 			m_capacity = t_new_capacity;
 		}
-		
+
 		memcpy(m_buffer + m_pointer, p_buffer, p_length);
 		m_pointer += p_length;
-		m_length = MCU_max(m_pointer, m_length);
+		m_length = MCMax(m_pointer, m_length);
+        // SN-2015-02-11: [[ Bug 14531 ]] We are no longer at
+        //  the EOF position once we have written.
+        m_is_eof = false;
         
 		return true;
 	}
@@ -199,6 +221,10 @@ public:
 		if (t_new_offset < 0 || t_new_offset > m_length)
 			return false;
 		
+        // SN-2015-02-11: [[ Bug 14531 ]] We are no longer at
+        //  the EOF position, since we have moved.
+        m_is_eof = false;
+
 		m_pointer = (uint32_t)t_new_offset;
 		return true;
 	}
@@ -209,6 +235,8 @@ public:
 			return false;
 		
 		m_pointer -= 1;
+        // SN-2015-02-11: [[ Bug 14531 ]] We are no longer at
+        //  the EOF position,
 		return true;
 	}
 	
@@ -250,9 +278,14 @@ public:
 	
 protected:
 	char *m_buffer;
-	uint32_t m_pointer;
-	uint32_t m_length;
-	uint32_t m_capacity;
+	size_t m_pointer;
+	size_t m_length;
+	size_t m_capacity;
+    // SN-2015-02-11: [[ Bug 14531 ]] Added a bool.
+    //  We don't want m_pointer to go over m_length,
+    //  but we need to know when we tried to read
+    //  *more* than we had - which is the EOF 'state'.
+    bool m_is_eof;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -261,7 +294,7 @@ protected:
 class MCMemoryMappedFileHandle: public MCMemoryFileHandle
 {
 public:
-    MCMemoryMappedFileHandle(int p_fd, void *p_buffer, uint32_t p_length)
+    MCMemoryMappedFileHandle(int p_fd, void *p_buffer, size_t p_length)
     : MCMemoryFileHandle(p_buffer, p_length)
     {
         m_fd = p_fd;
@@ -279,7 +312,7 @@ public:
 private:
     int m_fd;
     void *m_buffer;
-    uint32_t m_length;
+    size_t m_length;
 };
 #endif
 
@@ -322,7 +355,7 @@ public:
         
         m_is_eof = false;
         
-		if (!t_stat == IO_NORMAL)
+		if (t_stat != IO_NORMAL)
             return false;
         
         return true;
@@ -505,6 +538,8 @@ struct MCSystemInterface
 	
 	virtual bool ListFolderEntries(MCSystemListFolderEntriesCallback p_callback, void *x_context) = 0;
     
+    // ST-2014-12-18: [[ Bug 14259 ]] Returns the executable from the system tools, not from argv[0]
+	virtual bool GetExecutablePath(MCStringRef& r_path) = 0;
 	virtual bool PathToNative(MCStringRef p_path, MCStringRef& r_native) = 0;
 	virtual bool PathFromNative(MCStringRef p_native, MCStringRef& r_path) = 0;
 	virtual bool ResolvePath(MCStringRef p_path, MCStringRef& r_resolved_path) = 0;

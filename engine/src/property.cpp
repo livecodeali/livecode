@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -254,8 +254,8 @@ static MCPropertyInfo kMCPropertyInfoTable[] =
 	DEFINE_RW_PROPERTY(P_DEFAULT_MENU_BAR, Name, Interface, DefaultMenubar)
 	DEFINE_RW_CUSTOM_PROPERTY(P_STACK_FILE_VERSION, InterfaceStackFileVersion, Interface, StackFileVersion)
 	DEFINE_RW_PROPERTY(P_DEFAULT_STACK, String, Interface, DefaultStack)
-	DEFINE_RW_PROPERTY(P_DEFAULT_CURSOR, UInt32, Interface, DefaultCursor)
-	DEFINE_RW_PROPERTY(P_CURSOR, UInt32, Interface, Cursor)
+    DEFINE_RW_PROPERTY(P_DEFAULT_CURSOR, UInt32, Interface, DefaultCursor)
+    DEFINE_RW_PROPERTY(P_CURSOR, OptionalUInt32, Interface, Cursor)
 
 	DEFINE_RW_PROPERTY(P_TWELVE_TIME, Bool, DateTime, TwelveTime)
 
@@ -263,7 +263,8 @@ static MCPropertyInfo kMCPropertyInfoTable[] =
 	DEFINE_RW_PROPERTY(P_DONT_USE_QT, Bool, Multimedia, DontUseQt)
 	DEFINE_RW_PROPERTY(P_DONT_USE_QT_EFFECTS, Bool, Multimedia, DontUseQtEffects)
 	
-	DEFINE_RW_PROPERTY(P_RECURSION_LIMIT, UInt16, Engine, RecursionLimit)
+	// PM-2015-07-15: [[ Bug 15602 ]] Use 32-bit number for 'recursionLimit' property
+	DEFINE_RW_PROPERTY(P_RECURSION_LIMIT, UInt32, Engine, RecursionLimit)
 
 	DEFINE_RW_PROPERTY(P_IDLE_RATE, UInt16, Interface, IdleRate)
 	DEFINE_RW_PROPERTY(P_IDLE_TICKS, UInt16, Interface, IdleTicks)
@@ -718,7 +719,6 @@ Parse_stat MCProperty::parse(MCScriptPoint &sp, Boolean the)
 	case P_RAISE_PALETTES:
 	case P_RAISE_WINDOWS:
 	case P_DONT_USE_NS:
-	case P_DONT_USE_QT:
 	case P_DONT_USE_QT_EFFECTS:
 	case P_PROPORTIONAL_THUMBS:
 	case P_SHARED_MEMORY:
@@ -938,6 +938,7 @@ Parse_stat MCProperty::parse(MCScriptPoint &sp, Boolean the)
 			break;
 		}
 	case P_BRUSH_COLOR:
+	case P_DONT_USE_QT:
 	case P_BRUSH_BACK_COLOR:
 	case P_BRUSH_PATTERN:
 	case P_PEN_COLOR:
@@ -2394,14 +2395,21 @@ bool MCProperty::resolveprop(MCExecContext& ctxt, Properties& r_which, MCNameRef
 		break;
 	case P_DEFAULT_MENU_BAR:
 		{
-			MCGroup *gptr = (MCGroup *)MCdefaultstackptr->getobjname(CT_GROUP,
-			                ep.getsvalue());
-			if (gptr == NULL)
-			{
-				MCeerror->add
-				(EE_PROPERTY_NODEFAULTMENUBAR, line, pos, ep.getsvalue());
-				return ES_ERROR;
-			}
+            MCGroup *gptr = (MCGroup *)MCdefaultstackptr->getobjname(CT_GROUP, ep.getsvalue());
+            
+            if (gptr == NULL)
+            {
+                // AL-2014-10-31: [[ Bug 13884 ]] Resolve chunk properly if the name is not found
+                //  so that setting the defaultMenubar by the long id of a group works.
+                MCObject *optr = getobj(ep);
+                if (optr == NULL || optr -> gettype() != CT_GROUP)
+                {
+                    MCeerror->add(EE_PROPERTY_NODEFAULTMENUBAR, line, pos, ep.getsvalue());
+                    return ES_ERROR;
+                }
+                gptr = (MCGroup *)optr;
+            }
+
 			MCdefaultmenubar = gptr;
 			MCscreen->updatemenubar(False);
 		}
@@ -2557,8 +2565,7 @@ bool MCProperty::resolveprop(MCExecContext& ctxt, Properties& r_which, MCNameRef
 		return ep.getboolean(MChidebackdrop, line, pos, EE_PROPERTY_NAB);
 	case P_DONT_USE_NS:
 		return ep.getboolean(MCdontuseNS, line, pos, EE_PROPERTY_NAB);
-	case P_DONT_USE_QT:
-		return ep.getboolean(MCdontuseQT, line, pos, EE_PROPERTY_NAB);
+	
 	case P_DONT_USE_QT_EFFECTS:
 		return ep.getboolean(MCdontuseQTeffects, line, pos, EE_PROPERTY_NAB);
 	case P_PROPORTIONAL_THUMBS:
@@ -2925,6 +2932,7 @@ bool MCProperty::resolveprop(MCExecContext& ctxt, Properties& r_which, MCNameRef
 		return ES_NORMAL;
 
 	case P_BRUSH_COLOR:
+	case P_DONT_USE_QT:
 	case P_BRUSH_BACK_COLOR:
 	case P_BRUSH_PATTERN:
 	case P_PEN_COLOR:
@@ -2984,6 +2992,8 @@ bool MCProperty::resolveprop(MCExecContext& ctxt, Properties& r_which, MCNameRef
 					MCbrushpattern = t_new_pattern;
 				}
 				break;
+			case P_DONT_USE_QT:
+				return ep.getboolean(MCdontuseQT, line, pos, EE_PROPERTY_NAB);
 			case P_PEN_PATTERN:
 				{
 					if (ep.getuint4(MCpenpmid, line, pos, EE_PROPERTY_PENPATNAN) != ES_NORMAL)

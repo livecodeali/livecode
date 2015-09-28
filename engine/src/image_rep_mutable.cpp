@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -935,7 +935,7 @@ MCRectangle MCMutableImageRep::drawbrush(Tool which)
 		newrect.y -= rect.y;
 		x = newrect.x;
 		if (yinc == 1)
-			y = newrect.y;
+			y = newrect.y - 1; // PM-2015-06-29: [[ Bug 4123]] Eraser/Brush tool in Magnify palette is one pixel off in y-axis
 		else
 			y = newrect.y + newrect.height - 1;
 		dx = newrect.width - 1;
@@ -1945,12 +1945,14 @@ void MCMutableImageRep::image_undo(Ustruct *us)
     
     // PM-2014-10-01: [[ Bug 13568 ]] Make sure that pressing undo (cmd+z) twice when using paint tools, the second undo undoes the first one.
     MCImageBitmap *t_old_bitmap;
+    t_old_bitmap = nil;
     MCImageCopyBitmap(m_bitmap, t_old_bitmap);
 
     MCImageFreeBitmap(m_bitmap);
     m_bitmap = m_undo_image;
     m_undo_image = nil;
     /* UNCHECKED */ MCImageCopyBitmap(t_old_bitmap, m_undo_image);
+    MCImageFreeBitmap(t_old_bitmap);
     
     // MW-2011-08-18: [[ Layers ]] Invalidate the whole object.
     m_owner->invalidate_rep(rect);

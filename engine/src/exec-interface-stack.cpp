@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -1413,7 +1413,7 @@ void MCStack::SetWmPlace(MCExecContext& ctxt, bool setting)
 
 void MCStack::GetWindowId(MCExecContext& ctxt, uinteger_t& r_id)
 {
-	r_id = MCscreen -> dtouint4((Drawable)window);
+    r_id = MCscreen -> dtouint((Drawable)window);
 }
 
 void MCStack::GetPixmapId(MCExecContext& ctxt, uinteger_t& r_id)

@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -65,6 +65,11 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "graphicscontext.h"
 
 #include "resolution.h"
+
+// PM-2014-11-11: [[ Bug 13970 ]] Added for the MCplayers' syncbuffering call
+#ifdef FEATURE_PLATFORM_PLAYER
+#include "platform.h"
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -144,9 +149,15 @@ MCObject::MCObject()
 	
 	// MW-2012-10-10: [[ IdCache ]]
 	m_in_id_cache = false;
-	
+    
 	// IM-2013-04-16: Initialize to false;
 	m_script_encrypted = false;
+    
+    // Object's do not begin in the parentScript table.
+    m_is_parent_script = false;
+    
+    // Attach ourselves to an object pool.
+    MCDeletedObjectsOnObjectCreated(this);
 }
 
 MCObject::MCObject(const MCObject &oref) : MCDLlist(oref)
@@ -238,6 +249,13 @@ MCObject::MCObject(const MCObject &oref) : MCDLlist(oref)
 	
 	// MW-2012-10-10: [[ IdCache ]]
 	m_in_id_cache = false;
+    
+    // Cloned objects have a different identifier so are not in the parentScript
+    // table at the start.
+    m_is_parent_script = false;
+    
+    // Attach ourselves to an object pool.
+    MCDeletedObjectsOnObjectCreated(this);
 }
 
 MCObject::~MCObject()
@@ -290,6 +308,13 @@ MCObject::~MCObject()
 	//   all deletions vector through 'scheduledelete'.
 	if (m_in_id_cache)
 		getstack() -> uncacheobjectbyid(this);
+    
+    // If this object is a parent-script make sure we flush it from the table.
+	if (m_is_parent_script)
+		MCParentScript::FlushObject(this);
+    
+    // Detach ourselves from the object pool.
+    MCDeletedObjectsOnObjectDestroyed(this);
 }
 
 Chunk_term MCObject::gettype() const
@@ -504,14 +529,18 @@ Boolean MCObject::kdown(MCStringRef p_string, KeySym key)
 	case XK_Down:
 		if (message_with_valueref_args(MCM_arrow_key, MCSTR("down")) == ES_NORMAL)
 			return True;
-		break;
-	default:
+        break;
+    default:
 		MCAutoStringRef t_string;
 			
 		// Special keys as their number converted to a string, the rest by value
-		if (key > 0x7F && (key & XK_Class_mask) == XK_Class_compat)
-			/* UNCHECKED */ MCStringFormat(&t_string, "%ld", key);
-            else if (MCmodifierstate & MS_CONTROL)
+        // SN-2014-12-08: [[ Bug 12681 ]] Avoid to print the keycode in case we have a
+        // numeric keypad keycode.
+        // SN-2015-05-05: [[ Bug 15305 ]] Ensure that the keys are not printing
+        //  their numeric value, if not wanted.
+        if (key > 0xFF && (key & XK_Class_mask) == XK_Class_compat && (key < XK_KP_Space || key > XK_KP_Equal))
+            /* UNCHECKED */ MCStringFormat(&t_string, "%ld", key);
+        else if (MCmodifierstate & MS_CONTROL)
             /* UNCHECKED */ MCStringFormat(&t_string, "%c", (char)key);
 		else
 			t_string = p_string;
@@ -799,8 +828,32 @@ void MCObject::deselect()
 
 Boolean MCObject::del()
 {
-	fprintf(stderr, "Object: ERROR tried to delete %s\n", getname_cstring());
-	return False;
+    // If the object is marked as being used as a parentScript, flush the parentScript
+    // table so we don't get any dangling pointers.
+	if (m_is_parent_script)
+	{
+		MCParentScript::FlushObject(this);
+        m_is_parent_script = false;
+    }
+    
+    // SN-2015-06-04: [[ Bug 14642 ]] These two blocks have been moved from
+    //  MCObject::scheduledelete, since a deleted object is no longer something
+    //  we want to listen to. In case we undo the deletion, it will be added
+    //  back to the list of listened objects; in case we revert the stack to its
+    //  saved state, we will now be left with a list of listened-to objects with
+    //  no dangling pointers.
+    if (m_weak_handle != nil)
+    {
+        m_weak_handle -> Clear();
+        m_weak_handle = nil;
+    }
+    
+    // MW-2012-10-10: [[ IdCache ]] Remove the object from the stack's id cache
+    //   (if it is in it!).
+    if (m_in_id_cache)
+        getstack() -> uncacheobjectbyid(this);
+    
+	return True;
 }
 
 void MCObject::paste(void)
@@ -1027,7 +1080,7 @@ Exec_stat MCObject::handleself(Handler_type p_handler_type, MCNameRef p_message,
 				t_main_stat = exechandler(t_handler, p_parameters);
 
 				// If there was an error we are done.
-				if (t_stat == ES_ERROR)
+				if (t_main_stat == ES_ERROR)
 					return t_main_stat;
 			}
 		}
@@ -2864,6 +2917,14 @@ MCImageBitmap *MCObject::snapshot(const MCRectangle *p_clip, const MCPoint *p_si
 	{
 		t_context -> setopacity(blendlevel * 255 / 100);
 		t_context -> setfunction(GXblendSrcOver);
+
+        // PM-2014-11-11: [[ Bug 13970 ]] Make sure each player is buffered correctly for export snapshot
+        for(MCPlayer *t_player = MCplayers; t_player != nil; t_player = t_player -> getnextplayer())
+            t_player -> syncbuffering(t_context);
+            
+#ifdef FEATURE_PLATFORM_PLAYER
+        MCPlatformWaitForEvent(0.0, true);
+#endif
 		if (t_effects != nil)
 			t_context -> begin_with_effects(t_effects, static_cast<MCControl *>(this) -> getrect());
 		// MW-2011-09-06: [[ Redraw ]] Render the control isolated, but not as a sprite.
@@ -2988,7 +3049,11 @@ IO_stat MCObject::load(IO_handle stream, uint32_t version)
 	{
 		if ((stat = IO_read_stringref_new(_script, stream, version >= 7000)) != IO_NORMAL)
 			return stat;
-		
+        
+        // SN-2014-11-07: [[ Bug 13957 ]] It's possible to get a NULL script but having the
+        //  F_SCRIPT flag. Unset the flag in case it's needed
+        if (_script == NULL)
+            flags &= ~F_SCRIPT;
 		getstack() -> securescript(this);
 	}
 
@@ -3796,20 +3861,26 @@ bool MCObject::resolveparentscript(void)
 	t_stack = getstack() -> findstackname(t_script -> GetObjectStack());
 
 	// Next search for the control we need.
-	MCControl *t_control;
-	t_control = NULL;
+	MCObject *t_object;
+	t_object = NULL;
 	if (t_stack != NULL)
-		t_control = t_stack -> getcontrolid(CT_BUTTON, t_script -> GetObjectId(), true);
+    {
+        if (t_script -> GetObjectId() != 0)
+            t_object = t_stack -> getcontrolid(CT_BUTTON, t_script -> GetObjectId(), true);
+        else
+            t_object = t_stack;
+    }
 
 	// If we found a control, resolve the parent script. Otherwise block it.
-	if (t_control != NULL)
+	if (t_object != NULL &&
+        t_object != this)
 	{
-		t_script -> Resolve(t_control);
+		t_script -> Resolve(t_object);
 
 		// MW-2015-05-30: [[ InheritedPscripts ]] Next we must ensure the
 		//   existence of the inheritence hierarchy, so resolve the parentScript's
 		//   parentScript.
-		if (!t_control -> resolveparentscript())
+		if (!t_object -> resolveparentscript())
 			return false;
 
 		// MW-2015-05-30: [[ InheritedPscripts ]] And then make sure it creates its
@@ -4754,19 +4825,10 @@ void MCObject::relayercontrol_insert(MCControl *p_control, MCControl *p_target)
 {
 }
 
-void MCObject::scheduledelete(void)
+void MCObject::scheduledelete(bool p_is_child)
 {
-	appendto(MCtodelete);
-	if (m_weak_handle != nil)
-	{
-		m_weak_handle -> Clear();
-		m_weak_handle = nil;
-	}
-	
-	// MW-2012-10-10: [[ IdCache ]] Remove the object from the stack's id cache
-	//   (if it is in it!).
-	if (m_in_id_cache)
-		getstack() -> uncacheobjectbyid(this);
+    if (!p_is_child)
+        MCDeletedObjectsOnObjectDeleted(this);
 }
 
 MCRectangle MCObject::measuretext(MCStringRef p_text, bool p_is_unicode)
@@ -4795,6 +4857,54 @@ MCRectangle MCObject::measuretext(MCStringRef p_text, bool p_is_unicode)
         unmapfont();
     
     return t_bounds;
+}
+
+// AL-2015-06-30: [[ Bug 15556 ]] Refactored function to sync mouse focus
+void MCObject::sync_mfocus(void)
+{
+    bool needmfocus;
+    needmfocus = false;
+    
+    if (opened && getstack() == MCmousestackptr)
+    {
+        if (!(flags & F_VISIBLE))
+        {
+            MCObject *mfocused = MCmousestackptr->getcard()->getmfocused();
+            // MW-2012-02-22: [[ Bug 10018 ]] If the target is a group then check
+            //   to see if it is the ancestor of the mfocused control; otherwise
+            //   just compare directly.
+            if (mfocused != nil && gettype() == CT_GROUP)
+            {
+                while(mfocused -> gettype() != CT_CARD)
+                {
+                    if (mfocused == this)
+                    {
+                        needmfocus = True;
+                        break;
+                    }
+                    mfocused = mfocused -> getparent();
+                }
+            }
+            else if (this == mfocused)
+                needmfocus = true;
+        }
+        else if (MCU_point_in_rect(rect, MCmousex, MCmousey))
+            needmfocus = true;
+    }
+    
+    if (state & CS_KFOCUSED)
+        getcard(0)->kunfocus();
+    
+    // MW-2008-08-04: [[ Bug 7094 ]] If we change the visibility of the control
+    //   while its grabbed, we should ungrab it - otherwise it sticks to the
+    //   cursor.
+    if (gettype() >= CT_GROUP && getstate(CS_GRAB))
+        state &= ~CS_GRAB;
+    
+    resizeparent();
+    
+    if (needmfocus)
+        MCmousestackptr->getcard()->mfocus(MCmousex, MCmousey);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -4927,3 +5037,212 @@ bool MCObjectHandle::Exists(void)
 {
 	return m_object != NULL;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+// The engine has a tendency to store pointers to objects on the stack and other
+// 'temporary' places as script executes. This means that it is unsafe to delete
+// an object unless we are sure that there is no pointer to it on the stack.
+//
+// The culprit for the stack pointers is the event handling code. Thus, whether
+// or not we can safely delete an object depends which event it was created in
+// response to. More specifically, if an object was created as a result of a wait
+// which is older than the current wait, then its deletion must be deferred because
+// it might be the target or events being handled in the current wait.
+
+struct MCDeletedObjectPool
+{
+    uindex_t references;
+    MCDeletedObjectPool *parent;
+    MCObject *to_delete;
+    bool defunct : 1;
+};
+
+static MCDeletedObjectPool *MCsparedeletedobjectpool = nil;
+static MCDeletedObjectPool *MCdeletedobjectpool = nil;
+
+static bool MCDeletedObjectPoolCreate(MCDeletedObjectPool*& r_pool)
+{
+    MCDeletedObjectPool *t_pool;
+    if (MCsparedeletedobjectpool != nil)
+    {
+        t_pool = MCsparedeletedobjectpool;
+        MCsparedeletedobjectpool = nil;
+        
+        t_pool -> references = 0;
+        t_pool -> parent = nil;
+        t_pool -> to_delete = nil;
+        t_pool -> defunct = false;
+    }
+    else if (!MCMemoryNew(t_pool))
+        return false;
+    
+    r_pool = t_pool;
+    
+    return true;
+}
+
+static void MCDeletedObjectPoolDestroy(MCDeletedObjectPool *p_pool)
+{
+    p_pool -> parent -> references -= 1;
+
+    if (MCsparedeletedobjectpool == nil)
+    {
+        MCsparedeletedobjectpool = p_pool;
+        return;
+    }
+    
+    MCMemoryDelete(p_pool);
+}
+
+void MCDeletedObjectsSetup(void)
+{
+    // Setup occurs before the outer wait loop so if we get here we should not
+    // have a deletedobjectpool.
+    MCAssert(MCdeletedobjectpool == nil);
+    
+    if (!MCMemoryNew(MCdeletedobjectpool))
+        return;
+}
+
+void MCDeletedObjectsTeardown(void)
+{
+    // Teardown occurs after the outer wait loop so we should have a single pool
+    // with no parent.
+    MCAssert(MCdeletedobjectpool != nil && MCdeletedobjectpool -> parent == nil);
+    
+    // Ensure all objects in the pool are deleted.
+    MCDeletedObjectsDoDrain();
+    
+    MCMemoryDelete(MCdeletedobjectpool);
+    MCdeletedobjectpool = nil;
+    
+    if (MCsparedeletedobjectpool != nil)
+    {
+        MCMemoryDelete(MCsparedeletedobjectpool);
+        MCsparedeletedobjectpool = nil;
+    }
+}
+
+void MCDeletedObjectsEnterWait(bool p_dispatching)
+{
+    // If this isn't a dispatching wait, then no objects can be created.
+    if (!p_dispatching)
+        return;
+    
+    // First drain any objects in the current pool.
+    MCDeletedObjectsDoDrain();
+    
+    // Fetch the spare object pool if there is one, otherwise allocate a new
+    // one.
+    MCDeletedObjectPool *t_pool;
+    if (!MCDeletedObjectPoolCreate(t_pool))
+        return;
+    t_pool -> parent = MCdeletedobjectpool;
+    t_pool -> references = 0;
+    t_pool -> to_delete = nil;
+    t_pool -> defunct = false;
+    
+    // Reference the parent pool.
+    t_pool -> parent -> references += 1;
+    
+    // Reference the new pool.
+    MCdeletedobjectpool = t_pool;
+}
+
+void MCDeletedObjectsLeaveWait(bool p_dispatching)
+{
+    // If this isn't a dispatching wait, then no objects can be created.
+    if (!p_dispatching)
+        return;
+    
+    // Drain any objects in the pool.
+    MCDeletedObjectsDoDrain();
+    
+    // Make the parent pool the current one.
+    MCDeletedObjectPool *t_pool;
+    t_pool = MCdeletedobjectpool;
+    MCdeletedobjectpool = MCdeletedobjectpool -> parent;
+    
+    // The previous pool is now defunct.
+    t_pool -> defunct = true;
+    
+    // If the objectpool has no references then we can delete it.
+    if (t_pool -> references == 0)
+        MCDeletedObjectPoolDestroy(t_pool);
+    
+    // Now drain any objects which have accumulated in this pool.
+    MCDeletedObjectsDoDrain();
+}
+
+void MCDeletedObjectsDoDrain(void)
+{
+    if (MCdeletedobjectpool -> to_delete == nil)
+        return;
+    
+    // Actually delete all objects from the pool.
+    while(MCdeletedobjectpool -> to_delete != nil)
+    {
+        MCObject *t_object;
+        t_object = MCdeletedobjectpool -> to_delete -> remove(MCdeletedobjectpool -> to_delete);
+        delete t_object;
+    }
+}
+
+void MCDeletedObjectsOnObjectCreated(MCObject *p_object)
+{
+    MCdeletedobjectpool -> references += 1;
+    p_object -> setdeletedobjectpool(MCdeletedobjectpool);
+}
+
+void MCDeletedObjectsOnObjectDeleted(MCObject *p_object)
+{
+    MCDeletedObjectPool *t_pool;
+    t_pool = p_object -> getdeletedobjectpool();
+    if (t_pool == nil)
+        return;
+    
+    // Unreference the pool.
+    t_pool -> references -= 1;
+    p_object -> setdeletedobjectpool(nil);
+    
+    // Loop through any defunct pools.
+    while(t_pool -> defunct)
+    {
+        MCDeletedObjectPool *t_this_pool;
+        t_this_pool = t_pool;
+        t_pool = t_pool -> parent;
+        
+        if (t_this_pool -> references == 0)
+        {
+            MCDeletedObjectPoolDestroy(t_this_pool);
+        }
+    }
+    
+    // We now have a pool in which to place the object.
+    p_object -> appendto(t_pool -> to_delete);
+    
+    // If the pool is the current one, then schedule a drain.
+    if (t_pool == MCdeletedobjectpool)
+        MCActionsSchedule(kMCActionsDrainDeletedObjects);
+}
+
+void MCDeletedObjectsOnObjectDestroyed(MCObject *p_object)
+{
+    MCDeletedObjectPool *t_pool;
+    t_pool = p_object -> getdeletedobjectpool();
+    if (t_pool == nil)
+        return;
+    
+    // Cleanup any defunct pools in the chain with no references.
+    t_pool -> references -= 1;
+    while(t_pool -> defunct && t_pool -> references == 0)
+    {
+        MCDeletedObjectPool *t_this_pool;
+        t_this_pool = t_pool;
+        t_pool = t_pool -> parent;
+        MCDeletedObjectPoolDestroy(t_this_pool);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////

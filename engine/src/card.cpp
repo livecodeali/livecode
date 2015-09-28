@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -1342,7 +1342,10 @@ Boolean MCCard::del()
 		}
 		while (optr != objptrs);
 	}
-	return True;
+    
+    // MCObject now does things on del(), so we must make sure we finish by
+    // calling its implementation.
+    return MCObject::del();
 }
 
 struct UpdateDataIdsVisitor: public MCObjectVisitor
@@ -2571,7 +2574,8 @@ MCControl *MCCard::getchildbyid(uinteger_t p_id, Chunk_term p_object_type, Chunk
     MCObjptr *t_objects;
     t_objects = getstack() -> getcurcard() -> objptrs;
     
-    if (t_editing != NULL && t_editing -> getcard() -> obj_id == obj_id)
+    // AL-2015-03-31: [[ Bug 15123 ]] Ensure we don't enter the loop if there are no objects
+    if (t_objects != nil && t_editing != NULL && t_editing -> getcard() -> obj_id == obj_id)
     {
         optr = t_objects;
         do
@@ -3714,4 +3718,29 @@ bool MCCard::recomputefonts(MCFontRef p_parent_font)
 	// Return whether anything changed (the card's font has no effect other than
 	// to be provided to children).
 	return t_changed;
+}
+
+void MCCard::scheduledelete(bool p_is_child)
+{
+    MCObject::scheduledelete(p_is_child);
+    
+    if (objptrs != NULL)
+	{
+		MCObjptr *optr = objptrs;
+		do
+		{
+			// MW-2011-08-09: [[ Groups ]] Shared groups just get reparented, rather
+			//   than removed from the stack since they cannot be 'owned' by the card.
+			if (optr->getref()->gettype() == CT_GROUP && static_cast<MCGroup *>(optr->getref())->isshared())
+			{
+                // Do nothing for shared groups as they move to the stack.
+			}
+			else
+			{
+                optr -> getref() -> scheduledelete(true);
+			}
+			optr = optr->next();
+		}
+		while (optr != objptrs);
+	}
 }

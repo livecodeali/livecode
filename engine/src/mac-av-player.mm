@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -115,6 +115,8 @@ private:
     
 	static void DoSwitch(void *context);
     static void DoUpdateCurrentTime(void *ctxt);
+    void Mirror(void);
+    void Unmirror(void);
     
     NSLock *m_lock;
     
@@ -155,8 +157,9 @@ private:
     bool m_synchronizing : 1;
     bool m_frame_changed_pending : 1;
     bool m_finished : 1;
-    bool m_loaded : 1;
-    bool m_stepped : 1;
+    bool m_has_invalid_filename : 1;
+    bool m_mirrored : 1;
+
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -236,6 +239,7 @@ private:
     [t_layer setVideoGravity: AVLayerVideoGravityResize];
     [self setLayer: t_layer];
     [self setWantsLayer: YES];
+    self.layerContentsRedrawPolicy = NSViewLayerContentsRedrawOnSetNeedsDisplay;
 }
 
 @end
@@ -276,17 +280,17 @@ MCAVFoundationPlayer::MCAVFoundationPlayer(void)
     m_synchronizing = false;
     m_frame_changed_pending = false;
     m_finished = false;
-    m_loaded = false;
     
     m_time_scale = 0;
     
     m_selection_start = 0;
     m_selection_finish = 0;
-    m_stepped = false;
     m_buffered_time = 0;
     
     m_time_observer_token = nil;
     m_endtime_observer_token = nil;
+
+    m_mirrored = false;
 }
 
 MCAVFoundationPlayer::~MCAVFoundationPlayer(void)
@@ -353,7 +357,6 @@ void MCAVFoundationPlayer::MovieIsLoading(CMTimeRange p_timerange)
 void MCAVFoundationPlayer::MovieFinished(void)
 {
     m_finished = true;
-    m_stepped = false;
     
     if (m_offscreen)
         CVDisplayLinkStop(m_display_link);
@@ -365,6 +368,38 @@ void MCAVFoundationPlayer::MovieFinished(void)
     }
     else
     {
+        // PM-2104-12-119: [[ Bug 14253 ]] For some videos, when looping and playSelection are true, the controller thumb does not update after one or two loops. To prevent this, remove and re-add the periodicTimeObserver in each loop
+        if (m_time_observer_token != nil)
+        {
+            [m_player removeTimeObserver:m_time_observer_token];
+            m_time_observer_token = nil;
+        }
+        m_time_observer_token = [m_player addPeriodicTimeObserverForInterval:CMTimeMake(30, 1000) queue:nil usingBlock:^(CMTime time) {
+            
+            /*
+             When alwaysBuffer is true and movie finishes, the CVDisplayLink stops. After that, in case currenttime changes
+             (for example when user clicks on the controller well), we have to re-start the CVDisplayLink so as to update
+             the current movie frame
+             */
+            
+            if (m_offscreen && !CVDisplayLinkIsRunning(m_display_link))
+                CVDisplayLinkStart(m_display_link);
+            
+            if (CMTimeCompare(time, m_observed_time) == 0)
+                return;
+            
+            m_observed_time = time;
+            
+            // MW-2014-10-22: [[ Bug 13267 ]] If offscreen and this is called when the rate is 0,
+            //   we must have just been paused by an endtime observer, so force a refresh by updating
+            //   the frame.
+            if (!m_offscreen)
+                HandleCurrentTimeChanged();
+            else if ([m_player rate] == 0.0)
+                DoUpdateCurrentFrame(this);
+            
+        }];
+
         // PM-2014-07-15: [[ Bug 12812 ]] Make sure we loop within start and finish time when playSelection is true 
         if (m_play_selection_only && m_selection_duration > 0)
             // Note: Calling breakSeekToTimeAndWait(m_selection_start) here causes loop property to break
@@ -428,6 +463,9 @@ void MCAVFoundationPlayer::HandleCurrentTimeChanged(void)
 
 void MCAVFoundationPlayer::CacheCurrentFrame(void)
 {
+    // PM_2014-12-17: [[ Bug 14233]] Now currentItem can be nil, if setting an empty or invalid filename
+    if ([m_player currentItem] == nil)
+        return;
     CVImageBufferRef t_image;
     CMTime t_output_time = [m_player currentItem] . currentTime;
     
@@ -481,7 +519,17 @@ CVReturn MCAVFoundationPlayer::MyDisplayLinkCallback (CVDisplayLinkRef displayLi
                                 void *displayLinkContext)
 {
     MCAVFoundationPlayer *t_self = (MCAVFoundationPlayer *)displayLinkContext;
-        
+    
+    // PM-2015-06-12: [[ Bug 15495 ]] If the file has no video component, then just update the currentTime (no need to updateCurrentFrame, since there are no frames)
+    bool t_has_video;
+    t_has_video = ( [[[[t_self -> m_player currentItem] asset] tracksWithMediaType:AVMediaTypeVideo] count] != 0);
+    
+    if (!t_has_video)
+    {
+        t_self -> HandleCurrentTimeChanged();
+        return kCVReturnSuccess;
+    }
+    
     CMTime t_output_item_time = [t_self -> m_player_item_video_output itemTimeForCVTimeStamp:*inOutputTime];
     
     if (![t_self -> m_player_item_video_output hasNewPixelBufferForItemTime:t_output_item_time])
@@ -536,8 +584,6 @@ void MCAVFoundationPlayer::DoUpdateCurrentFrame(void *ctxt)
         t_player -> m_current_frame = t_image;
     }
 
-    // Now video is loaded
-    t_player -> m_loaded = true;
 	MCPlatformCallbackSendPlayerFrameChanged(t_player);
     
     if (t_player -> IsPlaying())
@@ -566,7 +612,8 @@ void MCAVFoundationPlayer::DoSwitch(void *ctxt)
 		if (t_player -> m_view != nil)
 			t_player -> Unrealize();
         
-        if (!CVDisplayLinkIsRunning(t_player -> m_display_link))
+        // PM_2014-12-17: [[ Bug 14233]] Now currentItem can be nil, if setting an empty or invalid filename
+        if (!CVDisplayLinkIsRunning(t_player -> m_display_link) && t_player -> m_player.currentItem != nil)
         {
             CVDisplayLinkStart(t_player -> m_display_link);
         }
@@ -639,6 +686,8 @@ void MCAVFoundationPlayer::Load(MCStringRef p_filename_or_url, bool p_is_url)
         m_player_item_video_output = nil;
         [m_view setPlayer: nil];
         uint4 t_zero_time = 0;
+        // PM-2014-12-17: [[ Bug 14233 ]] Setting the filename to empty should reset the currentItem
+        [m_player replaceCurrentItemWithPlayerItem:nil];
         SetProperty(kMCPlatformPlayerPropertyCurrentTime, kMCPlatformPropertyTypeUInt32, &t_zero_time);
         return;
     }
@@ -681,12 +730,15 @@ void MCAVFoundationPlayer::Load(MCStringRef p_filename_or_url, bool p_is_url)
     {
         if(p_is_url)
             [t_player removeObserver: m_observer forKeyPath: @"currentItem.loadedTimeRanges"];
+        // PM-2014-12-17: [[ Bug 14232 ]] If we reach here it means the filename is invalid
+        m_has_invalid_filename = true;
         [t_player release];
+        // PM-2014-12-17: [[ Bug 14233 ]] Setting an invalid filename should reset a previously opened movie
+        [m_player replaceCurrentItemWithPlayerItem:nil];
         return;
     }
 
-    // Reset this to false when loading a new movie, so as the first frame of the new movie to be displayed
-    m_loaded = false;
+    m_has_invalid_filename = false;
 
     CVDisplayLinkSetOutputCallback(m_display_link, MCAVFoundationPlayer::MyDisplayLinkCallback, this);
     //CVDisplayLinkStop(m_display_link);
@@ -739,6 +791,8 @@ void MCAVFoundationPlayer::Load(MCStringRef p_filename_or_url, bool p_is_url)
     // Now set the player of the view.
     [m_view setPlayer: m_player];
 
+    m_view.layer.affineTransform = CGAffineTransformMakeScale(-1, 1);
+    
     m_last_marker = UINT32_MAX;
 
     [[NSNotificationCenter defaultCenter] removeObserver: m_observer];
@@ -749,8 +803,28 @@ void MCAVFoundationPlayer::Load(MCStringRef p_filename_or_url, bool p_is_url)
     [[NSNotificationCenter defaultCenter] addObserver: m_observer selector:@selector(timeJumped:) name: AVPlayerItemTimeJumpedNotification object: [m_player currentItem]];
     
     m_time_scale = [m_player currentItem] . asset . duration . timescale;
+    
+    // Reset to default values when loading a new video
+    m_selection_duration = 0;
+    m_selection_finish = 0;
+    m_selection_start = 0;
 }
 
+void MCAVFoundationPlayer::Mirror(void)
+{
+    CGAffineTransform t_transform1 = CGAffineTransformMakeScale(-1, 1);
+    
+    CGAffineTransform t_transform2 = CGAffineTransformMakeTranslation(m_view.bounds.size.width, 0);
+    
+    CGAffineTransform t_flip_horizontally = CGAffineTransformConcat(t_transform1, t_transform2);
+    
+    m_view.layer.affineTransform = t_flip_horizontally;
+}
+
+void MCAVFoundationPlayer::Unmirror(void)
+{
+    m_view.layer.affineTransform = CGAffineTransformMakeScale(1, 1);
+}
 
 void MCAVFoundationPlayer::Synchronize(void)
 {
@@ -768,6 +842,11 @@ void MCAVFoundationPlayer::Synchronize(void)
 	[m_view setFrame: t_frame];
     
 	[m_view setHidden: !m_visible];
+    
+    if (m_mirrored)
+        Mirror();
+    else
+        Unmirror();
     
     m_synchronizing = false;
 }
@@ -841,6 +920,10 @@ void MCAVFoundationPlayer::Start(double rate)
                                                                        queue: nil usingBlock: ^(void) {
                                                                            [m_player pause];
                                                                            [m_player seekToTime: t_original_end_time toleranceBefore:kCMTimeZero toleranceAfter:kCMTimeZero];
+                                                                           // PM-2014-11-10: [[ Bug 13968 ]] Make sure we loop within start and finish time when playSelection is true
+                                                                           MovieFinished();
+                                                                           MCPlatformBreakWait();
+                                                                
                                                                        }];
     }
     
@@ -872,7 +955,6 @@ void MCAVFoundationPlayer::Start(double rate)
     
     m_playing = true;
     m_finished = false;
-    m_stepped = false;
     [m_player setRate:rate];
 }
 
@@ -886,7 +968,6 @@ void MCAVFoundationPlayer::Stop(void)
 void MCAVFoundationPlayer::Step(int amount)
 {
     [[m_player currentItem] stepByCount:amount];
-    m_stepped = true;
 }
 
 void MCAVFoundationPlayer::LockBitmap(MCImageBitmap*& r_bitmap)
@@ -921,8 +1002,13 @@ void MCAVFoundationPlayer::LockBitmap(MCImageBitmap*& r_bitmap)
 		CGContextRef t_cg_context;
 		t_cg_context = CGBitmapContextCreate(t_bitmap -> data, t_bitmap -> width, t_bitmap -> height, 8, t_bitmap -> stride, t_colorspace, MCGPixelFormatToCGBitmapInfo(kMCGPixelFormatNative, true));
         
-		CIImage *t_ci_image;
-		t_ci_image = [[CIImage alloc] initWithCVImageBuffer: m_current_frame];
+        CIImage *t_old_ci_image;
+		t_old_ci_image = [[CIImage alloc] initWithCVImageBuffer: m_current_frame];
+        CIImage *t_ci_image;
+        if (m_mirrored)
+            t_ci_image = [t_old_ci_image imageByApplyingTransform:CGAffineTransformMakeScale(-1, 1)];
+        else
+            t_ci_image = t_old_ci_image;
         
         NSAutoreleasePool *t_pool;
         t_pool = [[NSAutoreleasePool alloc] init];
@@ -934,7 +1020,7 @@ void MCAVFoundationPlayer::LockBitmap(MCImageBitmap*& r_bitmap)
         
         [t_pool release];
         
-		[t_ci_image release];
+		[t_old_ci_image release];
         
 		CGContextRelease(t_cg_context);
 		CGColorSpaceRelease(t_colorspace);
@@ -1028,6 +1114,13 @@ void MCAVFoundationPlayer::SetProperty(MCPlatformPlayerProperty p_property, MCPl
 		case kMCPlatformPlayerPropertyLoop:
 			m_looping = *(bool *)p_value;
 			break;
+        case kMCPlatformPlayerPropertyMirrored:
+            m_mirrored = *(bool *)p_value;
+            if (m_mirrored)
+                Mirror();
+            else
+                Unmirror();
+			break;
         case kMCPlatformPlayerPropertyMarkers:
         {
             array_t<uint32_t> *t_markers;
@@ -1084,6 +1177,12 @@ void MCAVFoundationPlayer::GetProperty(MCPlatformPlayerProperty p_property, MCPl
                 t_size . width = 306;
                 t_size . height = 244;
             }
+            // PM-2014-12-17: [[ Bug 14232 ]] Check if the file is corrupted
+            // PM-2015-01-08: [[ Bug 14345 ]] Make sure we mark a filename as invalid if it has a movie rect ze of 0 and is not audio file. Previously we checked only if the movie rect size was 0, and this caused audio files to be marked as invalid.
+            bool t_has_audio;
+            t_has_audio = ( [[[[m_player currentItem] asset] tracksWithMediaType:AVMediaTypeAudio] count] != 0);
+            if (t_size . width == 0 && t_size . height == 0 && !t_has_audio)
+                m_has_invalid_filename = true;
 			*(MCRectangle *)r_value = MCRectangleMake(0, 0, t_size . width, t_size . height);
 		}
         break;
@@ -1140,6 +1239,15 @@ void MCAVFoundationPlayer::GetProperty(MCPlatformPlayerProperty p_property, MCPl
 		case kMCPlatformPlayerPropertyLoop:
 			*(bool *)r_value = m_looping;
 			break;
+
+        // PM-2014-12-17: [[ Bug 14232 ]] Read-only property that indicates if a filename is invalid or if the file is corrupted
+        case kMCPlatformPlayerPropertyInvalidFilename:
+			*(bool *)r_value = m_has_invalid_filename;
+			break;
+
+        case kMCPlatformPlayerPropertyMirrored:
+            *(bool *)r_value = m_mirrored;
+			break;
 	}
 }
 
@@ -1170,21 +1278,22 @@ void MCAVFoundationPlayer::SetTrackProperty(uindex_t p_index, MCPlatformPlayerTr
 		return;
     
     NSArray *t_tracks;
-    t_tracks = [[[m_player currentItem] asset] tracks];
+    t_tracks = [[m_player currentItem] tracks];
     
-    // TODO: Fix error LiveCode-Community[20563:303] -[AVAssetTrack setEnabled:]: unrecognized selector sent to instance 0xb281f50
-    /*AVPlayerItemTrack *t_playerItemTrack;
-    t_playerItemTrack = [t_tracks objectAtIndex:p_index];
-    [t_playerItemTrack setEnabled:*(bool *)p_value];*/
+    // PM-2015-03-23: [[ Bug 15052 ]] Make sure we actually set the enabledTracks
+    AVPlayerItemTrack *t_playerItemTrack;
+    t_playerItemTrack = (AVPlayerItemTrack *)[t_tracks objectAtIndex:p_index];
+    [t_playerItemTrack setEnabled:*(bool *)p_value];
 }
 
 void MCAVFoundationPlayer::GetTrackProperty(uindex_t p_index, MCPlatformPlayerTrackProperty p_property, MCPlatformPropertyType p_type, void *r_value)
 {
-    NSArray *t_tracks;
-    t_tracks = [[[m_player currentItem] asset] tracks];
-    
-    // PM-2014-07-10: [[ Bug 12757 ]] Get the AVAssetTrack from t_tracks 
-    AVAssetTrack *t_asset_track = (AVAssetTrack *)[t_tracks objectAtIndex:p_index];
+    // PM-2015-03-23: [[ Bug 15052 ]] Get the value of the enabledTracks property from the AVPlayerItemTrack
+    NSArray *t_player_item_tracks;
+    t_player_item_tracks = [[m_player currentItem] tracks];
+    AVPlayerItemTrack *t_player_item_track = (AVPlayerItemTrack *)[t_player_item_tracks objectAtIndex:p_index];
+    // PM-2014-07-10: [[ Bug 12757 ]] Get the AVAssetTrack from t_player_item_track
+    AVAssetTrack *t_asset_track = t_player_item_track . assetTrack;
     
 	switch(p_property)
 	{
@@ -1211,7 +1320,8 @@ void MCAVFoundationPlayer::GetTrackProperty(uindex_t p_index, MCPlatformPlayerTr
         }
 			break;
 		case kMCPlatformPlayerTrackPropertyEnabled:
-			*(bool *)r_value = [t_asset_track isEnabled];
+        // PM-2015-03-23: [[ Bug 15052 ]] Get the value of the enabledTracks property from the AVPlayerItemTrack
+			*(bool *)r_value = [t_player_item_track isEnabled];
 			break;
 	}
 }

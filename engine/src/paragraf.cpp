@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -491,8 +491,6 @@ IO_stat MCParagraph::load(IO_handle stream, uint32_t version, bool is_ext)
         if ((stat = IO_read_string_legacy_full(&t_text_data, t_length, stream, 2, true, false)) != IO_NORMAL)
 			return stat;
 
-        MCLog("Read paragraph text of length %d", t_length);
-        
         if (!MCStringCreateMutable(0, m_text))
 			return IO_ERROR;
 
@@ -537,7 +535,10 @@ IO_stat MCParagraph::load(IO_handle stream, uint32_t version, bool is_ext)
 					newblock->GetRange(index, len);
                     t_last_added = index+len;
 
-                    MCLog(" Read block is_unicode=%d, index=%d, len=%d", newblock -> IsSavedAsUnicode(), index, len);
+                    // SN-2014-10-31: [[ Bug 13881 ]] Ensure that the block hasn't been corrupted.
+                    //  (leads to a potential crash, in case the corrupted stack ends up to be valid).
+                    if (index > t_length)
+                        return IO_ERROR;
                     
                     // Some stacks seem to be saved with invalid blocks that
                     // exceed the length of the paragraph character data
@@ -1036,8 +1037,14 @@ void MCParagraph::flow(void)
 	// MW-2012-01-25: [[ ParaStyles ]] Compute the normal and first line layout width for
 	//   wrapping purposes.
 	int32_t pwidth, twidth;
-	computelayoutwidths(pwidth, twidth);
+    computelayoutwidths(pwidth, twidth);
 
+    // SN-2015-01-21: [[ Bug 14229 ]] We want to keep the former lines, to be able
+    //  to update the dirtywidth of a newly empty line with the former line length.
+    MCLine *t_old_line;
+    t_old_line = lines;
+    lines = NULL;
+    
     // Delete all existing lines and segments
     deletelines();
     
@@ -1053,7 +1060,21 @@ void MCParagraph::flow(void)
         
         // Do block fitting on this line and get back a line containing the
         // left-overs that would not fit into the line
-        lptr = lptr->Fit(twidth);
+        
+        // SN-2015-01-21: [[ Bug 14229 ]] We update the dirtywidth of the
+        // the new line with the former line.
+        MCLine* t_leftover;
+        t_leftover = lptr->Fit(twidth);
+        
+        if (t_old_line != NULL)
+        {
+            MCLine *t_line_to_remove;
+            t_line_to_remove = t_old_line->remove(t_old_line);
+            lptr -> takewidth(t_line_to_remove);
+            delete t_line_to_remove;
+        }
+        
+        lptr = t_leftover;
         
         // MW-2008-06-12: [[ Bug 6482 ]] Make sure we only take the firstIndent into account
 		//   on the first line of the paragraph.
@@ -4297,9 +4318,17 @@ Boolean MCParagraph::pageheight(uint2 fixedheight, uint2 &theight,
 	if (lptr == NULL)
 		lptr = lines;
     
+    // FG-2014-12-03: [[ Bug 11688 ]] Hidden paragraphs have a zero height
+    if (gethidden())
+    {
+        lptr = NULL;
+        return True;
+    }
+    
     // SN-2014-09-17: [[ Bug 13462 ]] Added the space above and below each paragraph
+    // FG-2014-11-03: [[ Bug 11688 ]] Take all of the top margin into account
     if (attrs != nil)
-        theight -= attrs -> space_above;
+        theight -= computetopmargin();
     
 	do
 	{
@@ -4314,8 +4343,9 @@ Boolean MCParagraph::pageheight(uint2 fixedheight, uint2 &theight,
     
     // SN-2014-09-17: [[ Bug 13462 ]] Added the space above and below each paragraph.
     // There is no failure for this paragraph if only the space below does not fit in the field
+    // FG-2014-12-03: [[ Bug 11688 ]] Take all of the bottom margin into account
     if (attrs != nil)
-        theight = MCU_max(((int32_t)theight) - attrs -> space_below, 0);
+        theight = MCU_max(((int32_t)theight) - computebottommargin(), 0);
     
 	return True;
 }
@@ -4327,6 +4357,19 @@ Boolean MCParagraph::pagerange(uint2 fixedheight, uint2 &theight,
 {
 	if (lptr == NULL)
 		lptr = lines;
+    
+    // SN-2014-09-17: [[ Bug 13462 ]] Added the space above and below each paragraph
+    // FG-2014-12-03: [[ Bug 11688 ]] Hidden paragraphs have a zero height
+    if (gethidden())
+    {
+        lptr = NULL;
+        return True;
+    }
+    
+    // FG-2014-11-03: [[ Bug 11688 ]] Take all of the top margin into account
+    if (attrs != nil)
+        theight -= computetopmargin();
+    
 	do
 	{
 		uint2 lheight = fixedheight == 0 ? lptr->getheight() : fixedheight;
@@ -4340,6 +4383,13 @@ Boolean MCParagraph::pagerange(uint2 fixedheight, uint2 &theight,
 	}
 	while (lptr != lines);
 	lptr = NULL;
+    
+    // SN-2014-09-17: [[ Bug 13462 ]] Added the space above and below each paragraph.
+    // There is no failure for this paragraph if only the space below does not fit in the field
+    // FG-2014-12-03: [[ Bug 11688 ]] Take all of the bottom margin into account
+    if (attrs != nil)
+        theight = MCU_max(((int32_t)theight) - computebottommargin(), 0);
+    
 	return True;
 }
 

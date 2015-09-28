@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -21,6 +21,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "objdefs.h"
 #include "parsedef.h"
 #include "mcio.h"
+#include "mode.h"
 
 #include "globals.h"
 #include "osspec.h"
@@ -254,9 +255,18 @@ void MCFilesEvalSpecialFolderPath(MCExecContext& ctxt, MCStringRef p_folder, MCS
 		return;
 	}
 
+    bool t_error;
     MCNewAutoNameRef t_path;
+    t_error = false;
     MCNameCreate(p_folder, &t_path);
-	if (MCS_getspecialfolder(*t_path, r_path))
+    // We have a special, mode-specific resource folder
+    if (MCNameIsEqualTo(*t_path, MCN_resources, kMCStringOptionCompareCaseless))
+        MCModeGetResourcesFolder(r_path);
+    else if (!MCS_getspecialfolder(*t_path, r_path))
+        t_error = true;
+
+    // MCModeGetResourcesFolder won't fail, but can return an empty path
+    if (!t_error)
 	{
 		if (MCStringIsEmpty(r_path))
 			ctxt.SetTheResultToCString("folder not found");
@@ -455,6 +465,8 @@ void MCFilesEvalQueryRegistryWithType(MCExecContext& ctxt, MCStringRef p_key, MC
 		{
 			ctxt.SetTheResultToValue(*t_error);
 			r_string = MCValueRetain(kMCEmptyString);
+            // SN-2014-11-18: [[ Bug 14052 ]] Assign the empty string to the type as well.
+            r_type = MCValueRetain(kMCEmptyString);
 		}
 		else
 			ctxt.SetTheResultToEmpty();
@@ -1312,7 +1324,8 @@ uint4 MCFilesExecPerformReadCodeUnit(MCExecContext& ctxt, int4 p_index, intenum_
 				MCStringAppendNativeChar(x_buffer, (char)t_bytes.Bytes()[0]);
 				t_codeunit_added = 1;
 			}
-			else
+            // SN-2014-12-02: [[ Bug 14135 ]] Do not wait if reading empty may occur
+			else if (!p_empty_allowed)
 				MCFilesExecPerformWait(ctxt, p_index, x_duration, r_stat);
 			break;
 
@@ -1335,8 +1348,9 @@ uint4 MCFilesExecPerformReadCodeUnit(MCExecContext& ctxt, int4 p_index, intenum_
 
 				MCStringAppendChar(x_buffer, t_codeunit);
 				t_codeunit_added = 1;
-			}
-			else
+            }
+            // SN-2014-12-02: [[ Bug 14135 ]] Do not wait if reading empty may occur
+			else if (!p_empty_allowed)
 				MCFilesExecPerformWait(ctxt, p_index, x_duration, r_stat);
             break;
                 
@@ -1356,7 +1370,8 @@ uint4 MCFilesExecPerformReadCodeUnit(MCExecContext& ctxt, int4 p_index, intenum_
                 
                 t_codeunit_added = MCStringGetLength(*t_string);
             }
-            else
+            // SN-2014-12-02: [[ Bug 14135 ]] Do not wait if reading empty may occur
+            else if (!p_empty_allowed)
                 MCFilesExecPerformWait(ctxt, p_index, x_duration, r_stat);
             break;
                 
@@ -1435,8 +1450,9 @@ uint4 MCFilesExecPerformReadCodeUnit(MCExecContext& ctxt, int4 p_index, intenum_
 					if (r_stat == IO_NORMAL)
 						MCS_putback(t_bytes . Bytes()[t_bytes_read - 1], p_stream);
 				}
-			}
-			else
+            }
+            // SN-2014-12-02: [[ Bug 14135 ]] Do not wait if reading empty may occur
+			else if (!p_empty_allowed)
 				MCFilesExecPerformWait(ctxt, p_index, x_duration, r_stat);
 
 			break;

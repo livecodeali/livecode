@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -152,6 +152,11 @@ MCDispatch::MCDispatch()
 	m_externals = nil;
 
     m_transient_stacks = nil;
+    
+    // AL-2015-02-10: [[ Standalone Inclusions ]] Add resource mapping array to MCDispatch. This stores
+    //  any universal name / relative path pairs included in a standalone executable for locating included
+    //  resources.
+    /* UNCHECKED */ MCArrayCreateMutable(m_library_mapping);
 }
 
 MCDispatch::~MCDispatch()
@@ -173,6 +178,8 @@ MCDispatch::~MCDispatch()
 	delete enginedir;
 	
 	delete m_externals;
+    // AL-2015-02-10: [[ Standalone Inclusions ]] Delete library mapping
+    MCValueRelease(m_library_mapping);
 }
 
 bool MCDispatch::isdragsource(void)
@@ -268,7 +275,6 @@ Boolean MCDispatch::cut(Boolean home)
 	return MCnoui || (flags & F_WAS_LICENSED) != 0;
 }
 
-//extern Exec_stat MCHandlePlatformMessage(Handler_type htype, const MCString& mess, MCParameter *params);
 Exec_stat MCDispatch::handle(Handler_type htype, MCNameRef mess, MCParameter *params, MCObject *pass_from)
 {
 	Exec_stat stat = ES_NOT_HANDLED;
@@ -334,29 +340,6 @@ Exec_stat MCDispatch::handle(Handler_type htype, MCNameRef mess, MCParameter *pa
 		if (oldstat == ES_PASS && stat == ES_NOT_HANDLED)
 			stat = ES_PASS;
 	}
-
-//#ifdef TARGET_SUBPLATFORM_IPHONE
-//	extern Exec_stat MCIPhoneHandleMessage(MCNameRef message, MCParameter *params);
-//	if (stat == ES_NOT_HANDLED || stat == ES_PASS)
-//	{
-//		stat = MCIPhoneHandleMessage(mess, params);
-//		
-//		if (stat != ES_NOT_HANDLED && stat != ES_PASS)
-//			return stat;
-//	}
-//#endif
-//
-//#ifdef _MOBILE
-//	if (stat == ES_NOT_HANDLED || stat == ES_PASS)
-//	{
-//		stat = MCHandlePlatformMessage(htype, MCNameGetOldString(mess), params);
-//
-//		// MW-2011-08-22: [[ Bug 9686 ]] Make sure we exit as soon as the
-//		//   message is handled.
-//		if (stat != ES_NOT_HANDLED && stat != ES_PASS)
-//			return stat;
-//	}
-//#endif
 
 	if (MCmessagemessages && stat != ES_PASS)
 		MCtargetptr->sendmessage(htype, mess, False);
@@ -955,7 +938,7 @@ IO_stat MCDispatch::doreadfile(MCStringRef p_openpath, MCStringRef p_name, IO_ha
 
 IO_stat MCDispatch::loadfile(MCStringRef p_name, MCStack *&sptr)
 {
-	IO_handle stream;
+    IO_handle stream;
 	MCAutoStringRef t_open_path;
 
 	bool t_found;
@@ -963,70 +946,64 @@ IO_stat MCDispatch::loadfile(MCStringRef p_name, MCStack *&sptr)
 	if (!t_found)
 	{
 		if ((stream = MCS_open(p_name, kMCOpenFileModeRead, True, False, 0)) != NULL)
-		{
-			// This should probably use resolvepath().
-			if (MCStringGetCharAtIndex(p_name, 0) != PATH_SEPARATOR 
-				&& MCStringGetCharAtIndex(p_name, 1) != ':')
-			{
-				MCAutoStringRef t_curpath;
-				
-				/* UNCHECKED */ MCS_getcurdir(&t_curpath);
-				/* UNCHECKED */ MCStringFormat(&t_open_path, "%@/%@", *t_curpath, p_name); 
-			}
-			else
-				t_open_path = p_name;
-
-			t_found = true;
+        {
+            // SN-20015-06-01: [[ Bug 15432 ]] We want to use MCS_resolvepath to
+            //  keep consistency and let '~' be resolved as it is in MCS_open
+            //  MCS_resolve_path leaves a backslash-delimited path on Windows,
+            //  and MCS_get_canonical_path is made to cope with this.
+            //  In 7.0, MCS_resolvepath does not return a native path.
+            t_found = MCS_resolvepath(p_name, &t_open_path);
 		}
 	}
-
+    
 	if (!t_found)
-	{
-		MCAutoStringRef t_leaf_name;
+    {
+        // SN-2014-11-18: [[ Bug 14043 ]] If p_path is was not correct, we then use the leaf, and append it to different locations
+        //  in all the next steps.
+        MCAutoStringRef t_leaf_name;
 		uindex_t t_leaf_index;
 		if (MCStringLastIndexOfChar(p_name, PATH_SEPARATOR, UINDEX_MAX, kMCStringOptionCompareExact, t_leaf_index))
 			/* UNCHECKED */ MCStringCopySubstring(p_name, MCRangeMake(t_leaf_index + 1, MCStringGetLength(p_name) - (t_leaf_index + 1)), &t_leaf_name);
 		else
 			t_leaf_name = p_name;
 		if ((stream = MCS_open(*t_leaf_name, kMCOpenFileModeRead, True, False, 0)) != NULL)
-		{
-			MCAutoStringRef t_curpath;
-			/* UNCHECKED */ MCS_getcurdir(&t_curpath);
-			/* UNCHECKED */ MCStringFormat(&t_open_path, "%@/%@", *t_curpath, p_name); 
-			t_found = true;
+        {
+            t_found = MCS_resolvepath(*t_leaf_name, &t_open_path);
 		}
-	}
 
-	if (!t_found)
-	{
-		if (openstartup(p_name, &t_open_path, stream) ||
-		        openenv(p_name, MCSTR("MCPATH"), &t_open_path, stream, 0) ||
-		        openenv(p_name, MCSTR("PATH"), &t_open_path, stream, 0))
-			t_found = true;
-	}
-
-	if (!t_found)
-	{
-
-		MCAutoStringRef t_homename;
-		if (MCS_getenv(MCSTR("HOME"), &t_homename) && !MCStringIsEmpty(*t_homename))
-		{
-			MCAutoStringRef t_trimmed_homename;
-			if (MCStringGetCharAtIndex(*t_homename, MCStringGetLength(*t_homename) - 1) == '/')
-				/* UNCHECKED */ MCStringCopySubstring(*t_homename, MCRangeMake(0, MCStringGetLength(*t_homename) - 1), &t_trimmed_homename);
-			else
-				t_trimmed_homename = *t_homename;
-
-			if (!t_found)
-				t_found = attempt_to_loadfile(stream, &t_open_path, "%@/%@", *t_trimmed_homename, p_name);
-
-			if (!t_found)
-				t_found = attempt_to_loadfile(stream, &t_open_path, "%@/stacks/%@", *t_trimmed_homename, p_name);
-
-			if (!t_found)
-				t_found = attempt_to_loadfile(stream, &t_open_path, "%@/components/%@", *t_trimmed_homename, p_name);
-		}
-	}
+        if (!t_found)
+        {
+            // SN-2014-11-18: [[ Bug 14043 ]] The whole path was appended, instead of only the leaf.
+            if (openstartup(*t_leaf_name, &t_open_path, stream) ||
+                openenv(*t_leaf_name, MCSTR("MCPATH"), &t_open_path, stream, 0) ||
+                openenv(*t_leaf_name, MCSTR("PATH"), &t_open_path, stream, 0))
+                t_found = true;
+        }
+        
+        if (!t_found)
+        {
+            
+            MCAutoStringRef t_homename;
+            if (MCS_getenv(MCSTR("HOME"), &t_homename) && !MCStringIsEmpty(*t_homename))
+            {
+                MCAutoStringRef t_trimmed_homename;
+                if (MCStringGetCharAtIndex(*t_homename, MCStringGetLength(*t_homename) - 1) == '/')
+                /* UNCHECKED */ MCStringCopySubstring(*t_homename, MCRangeMake(0, MCStringGetLength(*t_homename) - 1), &t_trimmed_homename);
+                else
+                    t_trimmed_homename = *t_homename;
+                
+                // SN-2014-11-18: [[ Bug 14043 ]] The whole path was appended, instead of only the leaf.
+                if (!t_found)
+                    t_found = attempt_to_loadfile(stream, &t_open_path, "%@/%@", *t_trimmed_homename, *t_leaf_name);
+                
+                if (!t_found)
+                    t_found = attempt_to_loadfile(stream, &t_open_path, "%@/stacks/%@", *t_trimmed_homename, *t_leaf_name);
+                
+                if (!t_found)
+                    t_found = attempt_to_loadfile(stream, &t_open_path, "%@/components/%@", *t_trimmed_homename, *t_leaf_name);
+            }
+        }
+    }
 
 
 	if (stream == NULL)
@@ -1726,6 +1703,28 @@ MCStack *MCDispatch::findstackid(uint4 fid)
 	return NULL;
 }
 
+bool MCDispatch::foreachstack(MCStackForEachCallback p_callback, void *p_context)
+{
+	bool t_continue;
+	t_continue = true;
+	
+	if (stacks)
+	{
+		MCStack *t_stack;
+		t_stack = stacks;
+		
+		do
+		{
+			t_continue = t_stack->foreachstack(p_callback, p_context);
+			
+			t_stack = (MCStack*)t_stack->next();
+		}
+		while (t_continue && t_stack != stacks);
+	}
+	
+	return t_continue;
+}
+
 bool MCDispatch::foreachchildstack(MCStack *p_stack, MCStackForEachCallback p_callback, void *p_context)
 {
 	bool t_continue;
@@ -1748,7 +1747,7 @@ bool MCDispatch::foreachchildstack(MCStack *p_stack, MCStackForEachCallback p_ca
 	return t_continue;
 }
 
-MCStack *MCDispatch::findstackwindowid(uint32_t p_win_id)
+MCStack *MCDispatch::findstackwindowid(uintptr_t p_win_id)
 {
 	if (p_win_id == 0)
 		return NULL;
@@ -1797,7 +1796,7 @@ MCStack *MCDispatch::findstackwindowid(uint32_t p_win_id)
 MCStack *MCDispatch::findstackd(Window w)
 {
 	// IM-2014-07-09: [[ Bug 12225 ]] Use window ID to find stack
-	return findstackwindowid(MCscreen->dtouint4((Drawable)w));
+	return findstackwindowid(MCscreen->dtouint((Drawable)w));
 }
 
 MCObject *MCDispatch::getobjid(Chunk_term type, uint4 inid)
@@ -2021,26 +2020,9 @@ bool MCDispatch::loadexternal(MCStringRef p_external)
 	}
     
     MCValueRelease(t_external_leaf);
-#elif !defined(_SERVER)
-	if (MCStringBeginsWithCString(p_external, (const char_t *)"/", kMCStringOptionCompareExact))
-	{
-		t_filename = MCValueRetain(p_external);
-	}
-	else
-	{
-		uindex_t t_separator;
-		MCStringLastIndexOfChar(MCcmd, '/', UINDEX_MAX, kMCStringOptionCompareExact, t_separator);
-		if (!MCStringMutableCopySubstring(MCcmd, MCRangeMake(0, t_separator), t_filename))
-			return false;
-		if (!MCStringAppendFormat(t_filename, "/%@", p_external))
-		{
-			MCValueRelease(t_filename);
-			return false;
-		}
-	}
-
 #else
-	t_filename = MCValueRetain(p_external);
+    // AL-2015-02-10: [[ SB Inclusions ]] New module loading utility deals with path resolution
+    t_filename = MCValueRetain(p_external);
 #endif
 	
 	if (m_externals == nil)
@@ -2189,7 +2171,7 @@ void MCDispatch::dodrop(bool p_source)
 		m_drag_end_sent = true;
 		MCdragsource -> message(MCM_drag_end);
 
-		// OK-2008-10-21 : [[Bug 7316]] - Cursor in script editor follows mouse after dragging to non-Revolution target.
+		// OK-2008-10-21 : [[Bug 7316]] - Cursor in script editor follows mouse after dragging to non-LiveCode target.
 		// I have no idea why this apparently only happens in the script editor, but this seems to fix it and doesn't seem too risky :)
 		// MW-2008-10-28: [[ Bug 7316 ]] - This happens because the script editor is doing stuff with drag messages
 		//   causing the default engine behaviour to be overriden. In this case, some things have to happen to the field
@@ -2428,9 +2410,16 @@ MCFontlist *MCFontlistGetCurrent(void)
 
 bool MCDispatch::GetColor(MCExecContext& ctxt, Properties which, bool effective, MCInterfaceNamedColor& r_color)
 {
-    if (which == P_FORE_COLOR)
+    // SN-2014-12-05: [[ Bug 14154 ]] Added forgotten properties
+    if (which == P_FORE_COLOR
+            || which ==  P_BORDER_COLOR
+            || which == P_TOP_COLOR
+            || which == P_BOTTOM_COLOR
+            || which == P_SHADOW_COLOR
+            || which == P_FOCUS_COLOR)
         GetDefaultForeColor(ctxt, r_color);
-    else if (which == P_BACK_COLOR)
+    else if (which == P_BACK_COLOR
+             || which == P_HILITE_COLOR)
         GetDefaultBackColor(ctxt, r_color);
     else
         r_color . name = MCValueRetain(kMCEmptyString);
@@ -2503,3 +2492,37 @@ void MCDispatch::GetDefaultPattern(MCExecContext& ctxt, uinteger_t*& r_pattern)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+// AL-2015-02-10: [[ Standalone Inclusions ]] Add functions to fetch relative paths present
+//  in the resource mapping array of MCdispatcher.
+void MCDispatch::addlibrarymapping(MCStringRef p_mapping)
+{
+    MCAutoStringRef t_name, t_target;
+    MCNewAutoNameRef t_name_as_nameRef;
+
+    if (!MCStringDivideAtChar(p_mapping, ':', kMCStringOptionCompareExact, &t_name, &t_target)
+            || !MCNameCreate(*t_name, &t_name_as_nameRef))
+        return;
+
+    MCArrayStoreValue(m_library_mapping, false, *t_name_as_nameRef, *t_target);
+}
+
+// SN-2015-04-07: [[ Bug 15164 ]] Change p_name to be a StringRef.
+bool MCDispatch::fetchlibrarymapping(MCStringRef p_name, MCStringRef& r_path)
+{
+    MCNewAutoNameRef t_name;
+    MCStringRef t_value;
+
+    if (!MCNameCreate(p_name, &t_name))
+        return false;
+
+    // m_library_mapping only stores strings (function above)
+    if (!MCArrayFetchValue(m_library_mapping, false, *t_name, (MCValueRef&)t_value))
+        return false;
+
+    if (MCStringIsEmpty(t_value))
+        return false;
+
+    r_path = MCValueRetain(t_value);
+    return true;
+}

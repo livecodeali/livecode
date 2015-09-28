@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -171,6 +171,7 @@ bool MCUuidFromCString(const char *p_string, MCUuid& r_uuid)
 		char t_hex_byte[3];
 		t_hex_byte[0] = p_string[24 + i * 2];
 		t_hex_byte[1] = p_string[24 + i * 2 + 1];
+		t_hex_byte[2] = 0;
 		r_uuid . node[i] = (uint8_t)strtoul(t_hex_byte, NULL, 16);
 	}
 	

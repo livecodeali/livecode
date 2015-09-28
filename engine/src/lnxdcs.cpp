@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -1003,13 +1003,13 @@ void MCScreenDC::setfunction(uint4 rop)
         gdk_gc_set_function(getgc(), XOpToGdkOp(rop));
 }
 
-uint4 MCScreenDC::dtouint4(Drawable d)
+uintptr_t MCScreenDC::dtouint(Drawable d)
 {
 	// Return the XID
     return d != DNULL ? x11::gdk_x11_drawable_get_xid(d) : 0;
 }
 
-Boolean MCScreenDC::uint4towindow(uint4 id, Window &w)
+Boolean MCScreenDC::uinttowindow(uintptr_t id, Window &w)
 {
     // Look up the XID in GDK's window table
     w = x11::gdk_x11_window_lookup_for_display(dpy, id);
@@ -1231,7 +1231,7 @@ MCImageBitmap *MCScreenDC::snapshot(MCRectangle &r, uint4 window, MCStringRef di
         }
         
         // Release the grabs and other resources that were acquired
-        gdk_pointer_ungrab(GDK_CURRENT_TIME);
+        gdk_display_pointer_ungrab(dpy, GDK_CURRENT_TIME);
         gdk_cursor_unref(t_cursor);
         g_object_unref(t_gc);
         gdk_display_flush(t_display);

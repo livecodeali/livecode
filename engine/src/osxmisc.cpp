@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -264,8 +264,6 @@ IO_stat MCHcstak::macreadresources(void)
 //  MISC 
 //
 
-#include "systhreads.h"
-
 extern bool MCMacPlatformGetImageColorSpace(CGColorSpaceRef &r_colorspace);
 
 bool MCMacThemeGetBackgroundPattern(Window_mode p_mode, bool p_active, MCPatternRef &r_pattern)
@@ -338,12 +336,10 @@ bool MCMacThemeGetBackgroundPattern(Window_mode p_mode, bool p_active, MCPattern
 		return true;
 	}
     
-    MCThreadMutexLock(MCpatternmutex);
     
 	if (s_patterns[t_index] != nil)
 	{
 		r_pattern = s_patterns[t_index];
-        MCThreadMutexUnlock(MCpatternmutex);
 		return true;
 	}
     
@@ -378,8 +374,6 @@ bool MCMacThemeGetBackgroundPattern(Window_mode p_mode, bool p_active, MCPattern
 	
     CGContextRelease(t_context);
     CGColorSpaceRelease(t_colorspace);
-	
-    MCThreadMutexUnlock(MCpatternmutex);
     
 	return t_success;
 }

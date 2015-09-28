@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -70,8 +70,14 @@ static MCIPhoneImagePickerDialog *s_image_picker = nil;
 	return t_data;
 }
 
+// PM-2015-02-17: [[ Bug 11544 ]] Make sure the visibility of the status bar is respected when presenting a UIImagePickerController
+- (void)navigationController:(UINavigationController *)navigationController willShowViewController:(UIViewController *)viewController animated:(BOOL)animated
+{
+    [[UIApplication sharedApplication] setStatusBarHidden:m_status_bar_hidden];
+}
+
 // MW-2011-01-18: [[ Bug 9303 ]] Make sure we take account of scale and orientation of the UIImage.
-- imagePickerController: (UIImagePickerController*)controller didFinishPickingImage: (UIImage *)p_image editingInfo: (NSDictionary*)info
+- (void)imagePickerController: (UIImagePickerController*)controller didFinishPickingImage: (UIImage *)p_image editingInfo: (NSDictionary*)info
 {
 	uint32_t t_width, t_height;
 	t_width = [p_image size] . width * [p_image scale];
@@ -113,7 +119,7 @@ static MCIPhoneImagePickerDialog *s_image_picker = nil;
 	MCscreen -> pingwait();
 }
 
-- imagePickerControllerDidCancel: (UIImagePickerController*)controller
+- (void)imagePickerControllerDidCancel: (UIImagePickerController*)controller
 {
 	m_running = false;
 	
@@ -121,7 +127,7 @@ static MCIPhoneImagePickerDialog *s_image_picker = nil;
 	MCscreen -> pingwait();
 }
 
-- popoverControllerDidDismissPopover: (UIPopoverController *)popoverController
+- (void)popoverControllerDidDismissPopover: (UIPopoverController *)popoverController
 {
 	m_running = false;
 	
@@ -129,7 +135,7 @@ static MCIPhoneImagePickerDialog *s_image_picker = nil;
 	MCscreen -> pingwait();
 }
 
-- preWait
+- (void)preWait
 {	
 	// MM-2012-03-01: [[ BUG 10033 ]] Store the status bar style as it appears on iOS 5, this is overwittern by album picker
     m_status_bar_hidden = [[UIApplication sharedApplication] isStatusBarHidden];
@@ -191,7 +197,7 @@ static MCIPhoneImagePickerDialog *s_image_picker = nil;
 		[ MCIPhoneGetViewController() presentModalViewController: self animated: YES ];
 }
 
-- postWait
+- (void)postWait
 {
 	if (m_popover_controller != nil)
 	{
@@ -207,7 +213,7 @@ static MCIPhoneImagePickerDialog *s_image_picker = nil;
     [[UIApplication sharedApplication] setStatusBarStyle: m_status_bar_style animated: NO];
 }
 
-+ prepare
++ (void)prepare
 {
 	// MM-2011-12-09: [[ Bug 9902 ]] Destroy previous picker.  Fixes bug with iOS 5 where 
 	//		cameraDevice is ignored on second running of pickPhoto.
@@ -355,6 +361,8 @@ MCCamerasFeaturesType MCSystemGetAllCameraFeatures()
     
     t_features |= t_front_features;
     t_features |= (t_rear_features << kMCCameraFeatureRearShift);
+    
+    return t_features;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

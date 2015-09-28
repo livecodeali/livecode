@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -40,6 +40,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "scrolbar.h"
 
 #include "exec-interface.h"
+
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -162,6 +163,8 @@ void MCGroup::GetHilitedButton(MCExecContext& ctxt, uint32_t part, integer_t& r_
 {
 	if (controls != NULL)
 	{
+        bool t_found;
+        t_found = false;
 		MCControl *cptr = controls;
 		uint2 which = 1;
 		do
@@ -171,13 +174,17 @@ void MCGroup::GetHilitedButton(MCExecContext& ctxt, uint32_t part, integer_t& r_
 				MCButton *bptr = (MCButton *)cptr;
 				if (!(mgrabbed == True && cptr == mfocused)
 				        && bptr->gethilite(part))
+                {
+                    t_found = true;
 					break;
+                }
 				which++;
 			}
 			cptr = cptr->next();
 		}
 		while (cptr != controls);
-		r_button = (integer_t)which;
+        // PM-2014-12-08: [[ Bug 14170 ]] Return 0 in case there is no hilitedButton
+		r_button = (t_found ? (integer_t)which : 0);
 	}
 	else
 		r_button = 0;
@@ -789,4 +796,14 @@ void MCGroup::SetClipsToRect(MCExecContext& ctxt, bool p_clips_to_rect)
 void MCGroup::GetClipsToRect(MCExecContext& ctxt, bool& r_clips_to_rect)
 {
     r_clips_to_rect = m_clips_to_rect;
+}
+
+void MCGroup::SetVisible(MCExecContext& ctxt, uinteger_t part, bool setting)
+{
+    SetVisibility(ctxt, part, setting, true);
+}
+
+void MCGroup::SetInvisible(MCExecContext& ctxt, uinteger_t part, bool setting)
+{
+    SetVisibility(ctxt, part, setting, false);
 }

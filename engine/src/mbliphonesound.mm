@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -62,10 +62,7 @@ public:
         m_media = MCValueRetain(p_media);
 	}
     
-    ~MCFinishedPlayingSound()
-    {
-        MCValueRelease(m_media);
-    }
+    // PM-2015-01-29 [[ Bug 14463 ]] Removed ~MCFinishedPlayingSound() code, since it caused over-releasing of m_media and crash
     
 	void Destroy(void)
 	{
@@ -122,10 +119,15 @@ bool MCSystemSoundFinalize()
 
 -(id)init
 {
-    m_asset = nil;
-	m_player = nil;
-	m_player_item = nil;
-    m_looping = false;
+    if (self = [super init])
+    {
+        m_asset = nil;
+        m_player = nil;
+        m_player_item = nil;
+        m_looping = false;
+    }
+    
+    return self;
 }
 
 -(void)cleanUp
