@@ -945,8 +945,11 @@ void MCWidget::SendError(void)
 {
     MCExecContext ctxt(this, nil, nil);
     MCExtensionCatchError(ctxt);
-    if (MCerrorptr == NULL)
-        MCerrorptr = this;
+    if (MCerrorptr . object == NULL)
+    {
+        MCerrorptr . object = this;
+        MCerrorptr . part_id = 0;
+    }
     senderror();
 }
 

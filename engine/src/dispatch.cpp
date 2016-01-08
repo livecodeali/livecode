@@ -287,7 +287,8 @@ Exec_stat MCDispatch::handle(Handler_type htype, MCNameRef mess, MCParameter *pa
 	if (MCcheckstack && MCU_abs(MCstackbottom - (char *)&stat) > MCrecursionlimit)
 	{
 		MCeerror->add(EE_RECURSION_LIMIT, 0, 0);
-		MCerrorptr = stacks;
+		MCerrorptr . object = stacks;
+        MCerrorptr . part_id = 0;
 		return ES_ERROR;
 	}
 
@@ -373,7 +374,7 @@ Exec_stat MCDispatch::handle(Handler_type htype, MCNameRef mess, MCParameter *pa
     }
     
 	if (MCmessagemessages && stat != ES_PASS)
-		MCtargetptr->sendmessage(htype, mess, False);
+		MCtargetptr . object -> sendmessage(htype, mess, False);
 		
 	if (t_has_passed)
 		return ES_PASS;

@@ -202,8 +202,11 @@ void MCKeywordsExecCommandOrFunction(MCExecContext& ctxt, bool resolved, MCHandl
             case ES_ERROR:
             case ES_PASS:
                 MCeerror->add(is_function ? EE_FUNCTION_BADFUNCTION : EE_STATEMENT_BADCOMMAND, line, pos, handler -> getname());
-                if (MCerrorptr == NULL)
-                    MCerrorptr = p;
+                if (MCerrorptr . object == NULL)
+                {
+                    MCerrorptr . object = p;
+                    MCerrorptr . part_id = 0;
+                }
                 stat = ES_ERROR;
                 break;
                 

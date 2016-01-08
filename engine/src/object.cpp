@@ -279,8 +279,8 @@ MCObject::~MCObject()
 	// MW-2009-11-03: Clear all current breakpoints for this object
 	MCB_clearbreaks(this);
 
-	if (MCerrorptr == this)
-		MCerrorptr = NULL;
+	if (MCerrorptr . object == this)
+		MCerrorptr . object = NULL;
 	if (state & CS_SELECTED)
 		MCselected->remove(this);
 	IO_freeobject(this);
@@ -886,7 +886,8 @@ Exec_stat MCObject::exechandler(MCHandler *hptr, MCParameter *params)
 	if (MCcheckstack && MCU_abs(MCstackbottom - (char *)&stat) > MCrecursionlimit)
 	{
 		MCeerror->add(EE_RECURSION_LIMIT, 0, 0);
-		MCerrorptr = this;
+		MCerrorptr . object = this;
+        MCerrorptr . part_id = 0;
 		return ES_ERROR;
 	}
 
@@ -941,7 +942,8 @@ Exec_stat MCObject::execparenthandler(MCHandler *hptr, MCParameter *params, MCPa
 	if (MCcheckstack && MCU_abs(MCstackbottom - (char *)&stat) > MCrecursionlimit)
 	{
 		MCeerror->add(EE_RECURSION_LIMIT, 0, 0);
-		MCerrorptr = this;
+		MCerrorptr . object = this;
+        MCerrorptr . part_id = 0;
 		return ES_ERROR;
 	}
 
@@ -1134,8 +1136,11 @@ Exec_stat MCObject::handle(Handler_type htype, MCNameRef mess, MCParameter *para
 		}
 	}
 
-	if (stat == ES_ERROR && MCerrorptr == NULL)
-		MCerrorptr = this;
+	if (stat == ES_ERROR && MCerrorptr . object == NULL)
+    {
+		MCerrorptr . object = this;
+        MCerrorptr . part_id = 0;
+    }
 
 	return stat;
 }
@@ -1162,8 +1167,10 @@ void MCObject::closemenu(Boolean kfocus, Boolean disarm)
 		attachedmenu->close();
 		attachedmenu = NULL;
 		menudepth--;
-		if (MCmenuobjectptr == this)
-			MCmenuobjectptr = NULL;
+		if (MCmenuobjectptr . object == this)
+        {
+			MCmenuobjectptr . object = nil;
+        }
 	}
 }
 
@@ -2044,7 +2051,7 @@ Exec_stat MCObject::dispatch(Handler_type p_type, MCNameRef p_message, MCParamet
 	// Fetch current default stack and target settings
 	MCStack *t_old_stack;
 	t_old_stack = MCdefaultstackptr;
-	MCObject *t_old_target;
+	MCObjectPtr t_old_target;
 	t_old_target = MCtargetptr;
 	
 	// Cache the current 'this stack' (used to see if we should switch back
@@ -2054,7 +2061,8 @@ Exec_stat MCObject::dispatch(Handler_type p_type, MCNameRef p_message, MCParamet
 	
 	// Retarget this stack and the target to be relative to the target object
 	MCdefaultstackptr = t_this_stack;
-	MCtargetptr = this;
+	MCtargetptr . object = this;
+    MCtargetptr . part_id = 0;
 
 	// Dispatch the message
 	Exec_stat t_stat;
@@ -2089,18 +2097,20 @@ Exec_stat MCObject::message(MCNameRef mess, MCParameter *paramptr, Boolean chang
 	MCscreen->flush(mystack->getw());
 
 	MCStack *oldstackptr = MCdefaultstackptr;
-	MCObject *oldtargetptr = MCtargetptr;
+	MCObjectPtr oldtargetptr = MCtargetptr;
 	if (changedefault)
 	{
 		MCdefaultstackptr = mystack;
-		MCtargetptr = this;
+		MCtargetptr . object = this;
+        MCtargetptr . part_id = 0;
 	}
 	Boolean olddynamic = MCdynamicpath;
 	MCdynamicpath = False;
 	Exec_stat stat = ES_NOT_HANDLED;
 	if (MCscreen->abortkey())
 	{
-		MCerrorptr = this;
+        MCerrorptr . object = this;
+        MCerrorptr . part_id = 0;
 		stat = ES_ERROR;
 	}
 	else
@@ -2232,19 +2242,21 @@ void MCObject::senderror()
     {
         MCExecContext ctxt(this, nil, nil);
         MCAutoStringRef t_id;
-		MCerrorptr->getstringprop(ctxt, 0, P_LONG_ID, False, &t_id);
-		MCperror->add
-        (PE_OBJECT_NAME, 0, 0, *t_id);
+		MCerrorptr . object -> getstringprop(ctxt, MCerrorptr . part_id, P_LONG_ID, False, &t_id);
+		MCperror->add(PE_OBJECT_NAME, 0, 0, *t_id);
 		/* UNCHECKED */ MCperror->copyasstringref(&t_perror);
 		MCperror->clear();
 	}
-	if (MCerrorptr == NULL)
-		MCerrorptr = this;
+	if (MCerrorptr . object == NULL)
+    {
+		MCerrorptr . object = this;
+        MCerrorptr . part_id = 0;
+    }
 	MCAutoStringRef t_eerror;
 	/* UNCHECKED */ MCeerror->copyasstringref(&t_eerror);
-	MCscreen->delaymessage(MCerrorlockptr == NULL ? MCerrorptr : MCerrorlockptr, MCM_error_dialog, *t_eerror, *t_perror);
+	MCscreen->delaymessage(MCerrorlockptr . object == NULL ? MCerrorptr . object : MCerrorlockptr . object, MCM_error_dialog, *t_eerror, *t_perror);
 	MCeerror->clear();
-	MCerrorptr = NULL;
+	MCerrorptr . object = NULL;
 }
 
 void MCObject::sendmessage(Handler_type htype, MCNameRef m, Boolean h)
@@ -2291,97 +2303,108 @@ Exec_stat MCObject::names_old(Properties which, MCExecPoint& ep, uint32_t parid)
 }
 #endif
 
-bool MCObject::names(Properties which, MCValueRef& r_name_val)
+bool MCObject::getnameproperty(Properties which, uint32_t p_part_id, MCValueRef& r_name_val)
 {
-	MCStringRef &r_name = (MCStringRef&)r_name_val;
-	
-	const char *itypestring = gettypestring();
-	MCAutoPointer<char> tmptypestring;
-	if (parent != NULL && gettype() >= CT_BUTTON && getstack()->hcaddress())
-	{
-		tmptypestring = new char[strlen(itypestring) + 7];
-		if (parent->gettype() == CT_GROUP)
-			sprintf(*tmptypestring, "%s %s", "bkgnd", itypestring);
-		else
-			sprintf(*tmptypestring, "%s %s", "card", itypestring);
-		itypestring = *tmptypestring;
-	}
-	switch (which)
-	{
-	case P_ID:
-	case P_SHORT_ID:
-		return MCStringFormat(r_name, "%u", obj_id);
-	case P_ABBREV_ID:
-		return MCStringFormat(r_name, "%s id %d", itypestring, obj_id);
-
-	// The stack object has its own version of long * which we check for here. We
-	// could make 'names()' virtual and do this that way, but since there shouldn't
-	// really be an exception to how id is formatted (and there won't be for any
-	// future object types) we handle it here.
-	case P_LONG_NAME:
-	case P_LONG_ID:
-		if (gettype() == CT_STACK)
-		{
-			MCStack *t_this;
-			t_this = static_cast<MCStack *>(this);
-			
-			MCStringRef t_filename;
-			t_filename = t_this -> getfilename();
-			if (MCStringIsEmpty(t_filename))
-			{
-				if (MCdispatcher->ismainstack(t_this))
-				{
-					if (!isunnamed())
-						return MCStringFormat(r_name, "stack \"%@\"", getname());
-					r_name = MCValueRetain(kMCEmptyString);
-					return true;
-				}
-				if (isunnamed())
-				{
-					r_name = MCValueRetain(kMCEmptyString);
-					return true;
-				}
-				which = P_LONG_NAME;
-			}
-			else
-				return MCStringFormat(r_name, "stack \"%@\"", t_filename);
-		}
-
-		// MW-2013-01-15: [[ Bug 2629 ]] If this control is unnamed, use the abbrev id form
-		//   but *only* for this control (continue with names the rest of the way).
-		Properties t_which_requested;
-		t_which_requested = which;
-		if (which == P_LONG_NAME && isunnamed())
-			which = P_LONG_ID;
-		if (parent != NULL)
-		{
-			MCAutoValueRef t_parent;
-			if (!parent -> names(t_which_requested, &t_parent))
-				return false;
-			if (gettype() == CT_GROUP && parent->gettype() == CT_STACK)
-				itypestring = "bkgnd";
-			if (which == P_LONG_ID)
-				return MCStringFormat(r_name, "%s id %d of %@", itypestring, obj_id, *t_parent);
-			return MCStringFormat(r_name, "%s \"%@\" of %@", itypestring, getname(), *t_parent);
-		}
-		return MCStringFormat(r_name, "the template%c%s", MCS_toupper(itypestring[0]), itypestring + 1);
-
-	case P_NAME:
-	case P_ABBREV_NAME:
-		if (isunnamed())
-            return names(P_ABBREV_ID, r_name_val);
-		return MCStringFormat(r_name, "%s \"%@\"", itypestring, getname());
-	case P_SHORT_NAME:
+    MCStringRef &r_name = (MCStringRef&)r_name_val;
+    
+    const char *itypestring = gettypestring();
+    MCAutoPointer<char> tmptypestring;
+    if (parent != NULL && gettype() >= CT_BUTTON && getstack()->hcaddress())
+    {
+        tmptypestring = new char[strlen(itypestring) + 7];
+        if (parent->gettype() == CT_GROUP)
+            sprintf(*tmptypestring, "%s %s", "bkgnd", itypestring);
+        else
+            sprintf(*tmptypestring, "%s %s", "card", itypestring);
+        itypestring = *tmptypestring;
+    }
+    switch (which)
+    {
+        case P_ID:
+        case P_SHORT_ID:
+            return MCStringFormat(r_name, "%u", obj_id);
+        case P_ABBREV_ID:
+            return MCStringFormat(r_name, "%s id %d", itypestring, obj_id);
+            
+            // The stack object has its own version of long * which we check for here. We
+            // could make 'names()' virtual and do this that way, but since there shouldn't
+            // really be an exception to how id is formatted (and there won't be for any
+            // future object types) we handle it here.
+        case P_LONG_NAME:
+        case P_LONG_ID:
+            if (gettype() == CT_STACK)
+            {
+                MCStack *t_this;
+                t_this = static_cast<MCStack *>(this);
+                
+                MCStringRef t_filename;
+                t_filename = t_this -> getfilename();
+                if (MCStringIsEmpty(t_filename))
+                {
+                    if (MCdispatcher->ismainstack(t_this))
+                    {
+                        if (!isunnamed())
+                            return MCStringFormat(r_name, "stack \"%@\"", getname());
+                        r_name = MCValueRetain(kMCEmptyString);
+                        return true;
+                    }
+                    if (isunnamed())
+                    {
+                        r_name = MCValueRetain(kMCEmptyString);
+                        return true;
+                    }
+                    which = P_LONG_NAME;
+                }
+                else
+                    return MCStringFormat(r_name, "stack \"%@\"", t_filename);
+            }
+            
+            // MW-2013-01-15: [[ Bug 2629 ]] If this control is unnamed, use the abbrev id form
+            //   but *only* for this control (continue with names the rest of the way).
+            Properties t_which_requested;
+            t_which_requested = which;
+            if (which == P_LONG_NAME && isunnamed())
+                which = P_LONG_ID;
+            if (parent != NULL)
+            {
+                MCObject *t_parent_object;
+                if (parent -> gettype() == CT_CARD)
+                    t_parent_object = getcard(p_part_id);
+                else
+                    t_parent_object = parent;
+                
+                MCAutoValueRef t_parent;
+                if (!t_parent_object -> getnameproperty(t_which_requested, p_part_id, &t_parent))
+                    return false;
+                if (gettype() == CT_GROUP && t_parent_object->gettype() == CT_STACK)
+                    itypestring = "bkgnd";
+                if (which == P_LONG_ID)
+                    return MCStringFormat(r_name, "%s id %d of %@", itypestring, obj_id, *t_parent);
+                return MCStringFormat(r_name, "%s \"%@\" of %@", itypestring, getname(), *t_parent);
+            }
+            return MCStringFormat(r_name, "the template%c%s", MCS_toupper(itypestring[0]), itypestring + 1);
+            
+        case P_NAME:
+        case P_ABBREV_NAME:
+            if (isunnamed())
+                return names(P_ABBREV_ID, r_name_val);
+            return MCStringFormat(r_name, "%s \"%@\"", itypestring, getname());
+        case P_SHORT_NAME:
             if (isunnamed())
                 return names(P_ABBREV_ID, r_name_val);
             r_name = MCValueRetain(MCNameGetString(getname()));
-		return true;
-	default:
-		break;
-	}
+            return true;
+        default:
+            break;
+    }
+    
+    // Shouldn't actually get here, so just return false.
+    return false;
+}
 
-	// Shouldn't actually get here, so just return false.
-	return false;
+bool MCObject::names(Properties which, MCValueRef& r_name_val)
+{
+    return getnameproperty(which, 0, r_name_val);
 }
 
 // MW-2012-10-17: [[ Bug 10476 ]] Returns true if message should be fired.
@@ -2830,8 +2853,9 @@ Exec_stat MCObject::domess(MCStringRef sptr)
 		return ES_ERROR;
 	}
 	MCerrorlock--;
-	MCObject *oldtargetptr = MCtargetptr;
-	MCtargetptr = this;
+	MCObjectPtr oldtargetptr = MCtargetptr;
+	MCtargetptr . object = this;
+    MCtargetptr . part_id = 0;
 	MCHandler *hptr;
     handlist->findhandler(HT_MESSAGE, MCM_message, hptr);
 
@@ -2864,8 +2888,9 @@ void MCObject::eval(MCExecContext &ctxt, MCStringRef p_script, MCValueRef &r_val
 		ctxt.Throw();
 		return;
 	}
-	MCObject *oldtargetptr = MCtargetptr;
-	MCtargetptr = this;
+	MCObjectPtr oldtargetptr = MCtargetptr;
+	MCtargetptr . object = this;
+    MCtargetptr . part_id = 0;
 	MCHandler *hptr;
 	MCHandler *oldhandler = ctxt.GetHandler();
 	MCHandlerlist *oldhlist = ctxt.GetHandlerList();
@@ -2930,7 +2955,8 @@ Boolean MCObject::attachmenu(MCStack *sptr)
 	MCdispatcher->addmenu(this);
 	state |= CS_MENU_ATTACHED;
 	menudepth++;
-	MCmenuobjectptr = this;
+	MCmenuobjectptr . object = this;
+    MCmenuobjectptr . part_id = 0;
 	startx = MCmousex;
 	starty = MCmousey;
 	return True;

@@ -2804,7 +2804,7 @@ void MCInterfaceExecPopupButton(MCExecContext& ctxt, MCButton *p_target, MCPoint
 		while (t_state)
 		{
 			if (t_state & 0x1)
-				MCtargetptr -> mup(t_which, true);
+				MCtargetptr . object -> mup(t_which, true);
 			t_state >>= 1;
 			t_which += 1;
 		}
@@ -2816,7 +2816,7 @@ void MCInterfaceExecPopupButton(MCExecContext& ctxt, MCButton *p_target, MCPoint
 void MCInterfaceExecSubwindow(MCExecContext& ctxt, MCStack *p_target, MCStack *p_parent, MCRectangle p_rect, int p_at, int p_aligned, int p_mode)
 {
 	if (p_mode != WM_PULLDOWN && p_mode != WM_POPUP && p_mode != WM_OPTION)
-    	MCU_watchcursor(ctxt . GetObject()->getstack(), False);
+    	MCU_watchcursor(ctxt . GetObject() -> getstack(), False);
         
 	// MW-2007-05-01: Reverting this as it causes problems :o(
 	//stackptr -> setflag(True, F_VISIBLE);
@@ -2945,7 +2945,7 @@ void MCInterfaceExecOpenStack(MCExecContext& ctxt, MCStack *p_target, int p_mode
 void MCInterfaceExecOpenStackByName(MCExecContext& ctxt, MCNameRef p_name, int p_mode)
 {
 	MCStack *sptr;
-	sptr = ctxt . GetObject()->getstack()->findstackname(p_name);
+	sptr = ctxt . GetObject() -> getstack() -> findstackname(p_name);
 
 	if (sptr == nil)
 	{
@@ -2960,13 +2960,13 @@ void MCInterfaceExecOpenStackByName(MCExecContext& ctxt, MCNameRef p_name, int p
 void MCInterfaceExecPopupStack(MCExecContext& ctxt, MCStack *p_target, MCPoint *p_at, int p_mode)
 {
 	// MW-2007-04-10: [[ Bug 4260 ]] We shouldn't attempt to attach a menu to a control that is descendent of itself
-	if (MCtargetptr -> getstack() == p_target)
+	if (MCtargetptr . object -> getstack() == p_target)
 	{
 		ctxt . LegacyThrow(EE_SUBWINDOW_BADEXP);
 		return;
 	}
 
-	if (MCtargetptr->attachmenu(p_target))
+	if (MCtargetptr . object -> attachmenu(p_target))
 	{
 		if (p_mode == WM_POPUP && p_at != nil)
 		{
@@ -2974,7 +2974,7 @@ void MCInterfaceExecPopupStack(MCExecContext& ctxt, MCStack *p_target, MCPoint *
 			MCmousey = p_at -> y;
 		}
 		MCRectangle t_rect;
-		t_rect = MCU_recttoroot(MCtargetptr->getstack(), MCtargetptr->getrect());
+		t_rect = MCU_recttoroot(MCtargetptr . object -> getstack(), MCtargetptr . object -> getrect());
 		MCInterfaceExecSubwindow(ctxt, p_target, nil, t_rect, WP_DEFAULT, OP_NONE, p_mode);
 		if (!MCabortscript)
 			return;
@@ -2986,7 +2986,7 @@ void MCInterfaceExecPopupStack(MCExecContext& ctxt, MCStack *p_target, MCPoint *
 void MCInterfaceExecPopupStackByName(MCExecContext& ctxt, MCNameRef p_name, MCPoint *p_at, int p_mode)
 {
 	MCStack *sptr;
-	sptr = ctxt . GetObject()->getstack()->findstackname(p_name);
+	sptr = ctxt . GetObject() -> getstack() -> findstackname(p_name);
 
 	if (sptr == nil)
 	{

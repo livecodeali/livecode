@@ -172,7 +172,7 @@ void MCU_resetprops(Boolean update)
 	MCerrorlock.Reset();
 	MClockerrors = MClockmessages = MClockrecent = False;
 	MCscreen->setlockmoves(False);
-	MCerrorlockptr = NULL;
+	MCerrorlockptr . object = nil;
 	MCinterrupt = False;
 	MCdragspeed = 0;
 	MCdynamiccard = NULL;

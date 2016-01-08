@@ -1481,8 +1481,11 @@ Exec_stat MCCard::handle(Handler_type htype, MCNameRef mess, MCParameter *params
 		}
 	}
 
-	if (stat == ES_ERROR && MCerrorptr == NULL)
-		MCerrorptr = this;
+	if (stat == ES_ERROR && MCerrorptr . object == NULL)
+    {
+		MCerrorptr . object = this;
+        MCerrorptr . part_id = obj_id;
+    }
 
 	return stat;
 }
