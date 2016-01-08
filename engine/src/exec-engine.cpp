@@ -1449,7 +1449,7 @@ void MCEngineExecSendInTime(MCExecContext& ctxt, MCStringRef p_script, MCObjectP
 void MCEngineExecLockErrors(MCExecContext& ctxt)
 {
 	MClockerrors = True;
-	MCerrorlockptr = ctxt . GetObject();
+	MCerrorlockptr = ctxt . GetObjectPtr();
 }
 
 void MCEngineExecLockMessages(MCExecContext& ctxt)
@@ -1866,10 +1866,9 @@ void MCEngineEvalMeAsObject(MCExecContext& ctxt, MCObjectPtr& r_object)
 
 void MCEngineEvalMenuObjectAsObject(MCExecContext& ctxt, MCObjectPtr& r_object)
 {
-    if (MCmenuobjectptr != nil)
+    if (MCmenuobjectptr . object != nil)
     {
-        r_object . object = MCmenuobjectptr;
-        r_object . part_id = 0;
+        r_object = MCmenuobjectptr;
         return;
     }
     
@@ -1889,10 +1888,9 @@ void MCEngineEvalTargetAsObject(MCExecContext& ctxt, MCObjectPtr& r_object)
 
 void MCEngineEvalErrorObjectAsObject(MCExecContext& ctxt, MCObjectPtr& r_object)
 {
-    if (MCerrorptr != nil)
+    if (MCerrorptr . object != nil)
     {
-        r_object . object = MCerrorptr;
-        r_object . part_id = 0;
+        r_object = MCerrorptr;
         return;
     }
     

@@ -39,8 +39,8 @@ typedef struct
 	Boolean interrupt;
 	uint2 dragspeed;
 	MCCard *dynamiccard;
-	MCObject *errorptr;
-	MCObject *errorlockptr;
+	MCObjectPtr errorptr;
+	MCObjectPtr errorlockptr;
 	Boolean exitall;
 }
 MCSaveprops;

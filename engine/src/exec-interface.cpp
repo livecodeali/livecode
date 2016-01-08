@@ -2816,7 +2816,7 @@ void MCInterfaceExecPopupButton(MCExecContext& ctxt, MCButton *p_target, MCPoint
 void MCInterfaceExecSubwindow(MCExecContext& ctxt, MCStack *p_target, MCStack *p_parent, MCRectangle p_rect, int p_at, int p_aligned, int p_mode)
 {
 	if (p_mode != WM_PULLDOWN && p_mode != WM_POPUP && p_mode != WM_OPTION)
-    	MCU_watchcursor(ctxt . GetObject()->getstack(), False);
+    	MCU_watchcursor(ctxt . GetObject() -> getstack(), False);
         
 	// MW-2007-05-01: Reverting this as it causes problems :o(
 	//stackptr -> setflag(True, F_VISIBLE);
@@ -2945,7 +2945,7 @@ void MCInterfaceExecOpenStack(MCExecContext& ctxt, MCStack *p_target, int p_mode
 void MCInterfaceExecOpenStackByName(MCExecContext& ctxt, MCNameRef p_name, int p_mode)
 {
 	MCStack *sptr;
-	sptr = ctxt . GetObject()->getstack()->findstackname(p_name);
+	sptr = ctxt . GetObject() -> getstack() -> findstackname(p_name);
 
 	if (sptr == nil)
 	{
@@ -2986,7 +2986,7 @@ void MCInterfaceExecPopupStack(MCExecContext& ctxt, MCStack *p_target, MCPoint *
 void MCInterfaceExecPopupStackByName(MCExecContext& ctxt, MCNameRef p_name, MCPoint *p_at, int p_mode)
 {
 	MCStack *sptr;
-	sptr = ctxt . GetObject()->getstack()->findstackname(p_name);
+	sptr = ctxt . GetObject() -> getstack() -> findstackname(p_name);
 
 	if (sptr == nil)
 	{

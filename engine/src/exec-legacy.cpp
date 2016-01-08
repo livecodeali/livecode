@@ -276,13 +276,13 @@ void MCLegacyEvalTextHeightSum(MCExecContext& ctxt, MCObjectPtr p_object, intege
 
 void MCLegacyEvalMenuObject(MCExecContext& ctxt, MCStringRef& r_object)
 {
-	if (MCmenuobjectptr == nil)
+	if (MCmenuobjectptr . object == nil)
 	{
 		r_object = (MCStringRef)MCValueRetain(kMCEmptyString);
 		return;
 	}
 
-	MCmenuobjectptr -> getstringprop(ctxt, 0, P_NAME, False, r_object);
+	MCmenuobjectptr . object -> getstringprop(ctxt, MCmenuobjectptr . part_id, P_NAME, False, r_object);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

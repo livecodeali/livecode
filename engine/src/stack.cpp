@@ -3070,8 +3070,11 @@ Exec_stat MCStack::handle(Handler_type htype, MCNameRef message, MCParameter *pa
 			stat = ES_PASS;
 	}
 
-	if (stat == ES_ERROR && MCerrorptr == NULL)
-		MCerrorptr = this;
+	if (stat == ES_ERROR && MCerrorptr . object == NULL)
+    {
+		MCerrorptr . object = this;
+        MCerrorptr . part_id = 0;
+    }
 
 	return stat;
 }

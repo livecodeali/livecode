@@ -1617,7 +1617,7 @@ void MCInterfaceGetLockErrors(MCExecContext& ctxt, bool& r_value)
 
 void MCInterfaceSetLockErrors(MCExecContext& ctxt, bool p_value)
 {			
-	MCerrorlockptr = ctxt . GetObject();
+	MCerrorlockptr = ctxt . GetObjectPtr();
 	MClockerrors = p_value ? True : False;
 }
 

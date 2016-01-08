@@ -1278,8 +1278,8 @@ bool MCModeHandleMessageBoxChanged(MCExecContext& ctxt, MCStringRef p_string)
 	}
 	
 	MCObject *t_src_object = nil;
-	if (ctxt.GetObject() != nil)
-		t_src_object = ctxt.GetObject();
+	if (ctxt . GetObject() != nil)
+		t_src_object = ctxt . GetObject();
 	
 	bool t_in_msg_box = false;
 	
@@ -1333,7 +1333,7 @@ bool MCModeHandleMessageBoxChanged(MCExecContext& ctxt, MCStringRef p_string)
 			/* UNCHECKED */ t_msg_changed . CreateWithCString("msgchanged");
 			
 			bool t_added = false;
-			if (MCnexecutioncontexts < MAX_CONTEXTS && ctxt.GetObject() != nil)
+			if (MCnexecutioncontexts < MAX_CONTEXTS && ctxt . GetObject() != nil)
 			{
 				MCexecutioncontexts[MCnexecutioncontexts++] = &ctxt;
 				t_added = true;

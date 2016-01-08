@@ -181,7 +181,7 @@ void MCB_message(MCExecContext &ctxt, MCNameRef mess, MCParameter *p)
 	if (MCtracestackptr != NULL)
 		MCtracewindow = MCtracestackptr->getw();
 	else
-		MCtracewindow = ctxt.GetObject()->getw();
+		MCtracewindow = ctxt . GetObject() -> getw();
 	MCVariable *oldresult = MCresult;
 	/* UNCHECKED */ MCVariable::createwithname(MCNAME("MCdebugresult"), MCresult);
 	MCtracereturn = False;
@@ -208,7 +208,7 @@ void MCB_message(MCExecContext &ctxt, MCNameRef mess, MCParameter *p)
 		}
 		//  depth--;
 		if (MCtracedobject == NULL)
-			MCtracedobject = ctxt.GetObject();
+			MCtracedobject = ctxt . GetObject();
 		if (MCtraceabort)
 		{
 			MCtraceabort = False;
@@ -247,7 +247,7 @@ void MCB_prepmessage(MCExecContext &ctxt, MCNameRef mess, uint2 line, uint2 pos,
 		MCeerror->add(id, line, pos);
 
 		MCAutoValueRef t_val;
-		ctxt.GetObject()->names(P_LONG_ID, &t_val);
+		ctxt . GetObject() -> names(P_LONG_ID, &t_val);
 		MCeerror->add(EE_OBJECT_NAME, 0, 0, *t_val);
 
         MCAutoStringRef t_error;

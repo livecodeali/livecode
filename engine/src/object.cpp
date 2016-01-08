@@ -279,8 +279,8 @@ MCObject::~MCObject()
 	// MW-2009-11-03: Clear all current breakpoints for this object
 	MCB_clearbreaks(this);
 
-	if (MCerrorptr == this)
-		MCerrorptr = NULL;
+	if (MCerrorptr . object == this)
+		MCerrorptr . object = NULL;
 	if (state & CS_SELECTED)
 		MCselected->remove(this);
 	IO_freeobject(this);
@@ -886,7 +886,8 @@ Exec_stat MCObject::exechandler(MCHandler *hptr, MCParameter *params)
 	if (MCcheckstack && MCU_abs(MCstackbottom - (char *)&stat) > MCrecursionlimit)
 	{
 		MCeerror->add(EE_RECURSION_LIMIT, 0, 0);
-		MCerrorptr = this;
+		MCerrorptr . object = this;
+        MCerrorptr . part_id = 0;
 		return ES_ERROR;
 	}
 
@@ -941,7 +942,8 @@ Exec_stat MCObject::execparenthandler(MCHandler *hptr, MCParameter *params, MCPa
 	if (MCcheckstack && MCU_abs(MCstackbottom - (char *)&stat) > MCrecursionlimit)
 	{
 		MCeerror->add(EE_RECURSION_LIMIT, 0, 0);
-		MCerrorptr = this;
+		MCerrorptr . object = this;
+        MCerrorptr . part_id = 0;
 		return ES_ERROR;
 	}
 
@@ -1134,8 +1136,11 @@ Exec_stat MCObject::handle(Handler_type htype, MCNameRef mess, MCParameter *para
 		}
 	}
 
-	if (stat == ES_ERROR && MCerrorptr == NULL)
-		MCerrorptr = this;
+	if (stat == ES_ERROR && MCerrorptr . object == NULL)
+    {
+		MCerrorptr . object = this;
+        MCerrorptr . part_id = 0;
+    }
 
 	return stat;
 }
@@ -1162,8 +1167,10 @@ void MCObject::closemenu(Boolean kfocus, Boolean disarm)
 		attachedmenu->close();
 		attachedmenu = NULL;
 		menudepth--;
-		if (MCmenuobjectptr == this)
-			MCmenuobjectptr = NULL;
+		if (MCmenuobjectptr . object == this)
+        {
+			MCmenuobjectptr . object = nil;
+        }
 	}
 }
 
@@ -2102,7 +2109,8 @@ Exec_stat MCObject::message(MCNameRef mess, MCParameter *paramptr, Boolean chang
 	Exec_stat stat = ES_NOT_HANDLED;
 	if (MCscreen->abortkey())
 	{
-		MCerrorptr = this;
+        MCerrorptr . object = this;
+        MCerrorptr . part_id = 0;
 		stat = ES_ERROR;
 	}
 	else
@@ -2234,19 +2242,21 @@ void MCObject::senderror()
     {
         MCExecContext ctxt(this, nil, nil);
         MCAutoStringRef t_id;
-		MCerrorptr->getstringprop(ctxt, 0, P_LONG_ID, False, &t_id);
-		MCperror->add
-        (PE_OBJECT_NAME, 0, 0, *t_id);
+		MCerrorptr . object -> getstringprop(ctxt, MCerrorptr . part_id, P_LONG_ID, False, &t_id);
+		MCperror->add(PE_OBJECT_NAME, 0, 0, *t_id);
 		/* UNCHECKED */ MCperror->copyasstringref(&t_perror);
 		MCperror->clear();
 	}
-	if (MCerrorptr == NULL)
-		MCerrorptr = this;
+	if (MCerrorptr . object == NULL)
+    {
+		MCerrorptr . object = this;
+        MCerrorptr . part_id = 0;
+    }
 	MCAutoStringRef t_eerror;
 	/* UNCHECKED */ MCeerror->copyasstringref(&t_eerror);
-	MCscreen->delaymessage(MCerrorlockptr == NULL ? MCerrorptr : MCerrorlockptr, MCM_error_dialog, *t_eerror, *t_perror);
+	MCscreen->delaymessage(MCerrorlockptr . object == NULL ? MCerrorptr . object : MCerrorlockptr . object, MCM_error_dialog, *t_eerror, *t_perror);
 	MCeerror->clear();
-	MCerrorptr = NULL;
+	MCerrorptr . object = NULL;
 }
 
 void MCObject::sendmessage(Handler_type htype, MCNameRef m, Boolean h)
@@ -2945,7 +2955,8 @@ Boolean MCObject::attachmenu(MCStack *sptr)
 	MCdispatcher->addmenu(this);
 	state |= CS_MENU_ATTACHED;
 	menudepth++;
-	MCmenuobjectptr = this;
+	MCmenuobjectptr . object = this;
+    MCmenuobjectptr . part_id = 0;
 	startx = MCmousex;
 	starty = MCmousey;
 	return True;
