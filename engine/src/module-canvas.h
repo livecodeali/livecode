@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2014 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -155,6 +155,10 @@ extern MC_DLLEXPORT MCTypeInfoRef kMCCanvasImageRepLockErrorTypeInfo;
 extern MC_DLLEXPORT MCTypeInfoRef kMCCanvasGradientStopRangeErrorTypeInfo;
 extern MC_DLLEXPORT MCTypeInfoRef kMCCanvasGradientStopOrderErrorTypeInfo;
 extern MC_DLLEXPORT MCTypeInfoRef kMCCanvasGradientTypeErrorTypeInfo;
+
+extern MC_DLLEXPORT MCTypeInfoRef kMCCanvasEffectInvalidPropertyErrorTypeInfo;
+extern MC_DLLEXPORT MCTypeInfoRef kMCCanvasEffectPropertyNotAvailableErrorTypeInfo;
+extern MC_DLLEXPORT MCTypeInfoRef kMCCanvasEffectPropertyInvalidValueErrorTypeInfo;
 
 extern MC_DLLEXPORT MCTypeInfoRef kMCCanvasPathPointListFormatErrorTypeInfo;
 extern MC_DLLEXPORT MCTypeInfoRef kMCCanvasSVGPathParseErrorTypeInfo;
@@ -453,6 +457,7 @@ extern "C" MC_DLLEXPORT void MCCanvasPathEllipticArcToWithRadiiAsList(MCCanvasPo
 extern "C" MC_DLLEXPORT void MCCanvasEffectEvaluateType(integer_t p_type, integer_t &r_type);
 
 // Constructors
+extern "C" MC_DLLEXPORT void MCCanvasEffectMake(integer_t p_type, MCCanvasEffectRef &r_effect);
 extern "C" MC_DLLEXPORT void MCCanvasEffectMakeWithPropertyArray(integer_t p_type, MCArrayRef p_properties, MCCanvasEffectRef &r_effect);
 
 // Properties
@@ -471,6 +476,10 @@ extern "C" MC_DLLEXPORT void MCCanvasEffectGetDistance(MCCanvasEffectRef p_effec
 extern "C" MC_DLLEXPORT void MCCanvasEffectSetDistance(MCCanvasFloat p_distance, MCCanvasEffectRef &x_effect);
 extern "C" MC_DLLEXPORT void MCCanvasEffectGetAngle(MCCanvasEffectRef p_effect, MCCanvasFloat &r_angle);
 extern "C" MC_DLLEXPORT void MCCanvasEffectSetAngle(MCCanvasFloat p_angle, MCCanvasEffectRef &x_effect);
+extern "C" MC_DLLEXPORT void MCCanvasEffectGetKnockOut(MCCanvasEffectRef p_effect, bool &r_knockout);
+extern "C" MC_DLLEXPORT void MCCanvasEffectSetKnockOut(bool p_knockout, MCCanvasEffectRef &x_effect);
+extern "C" MC_DLLEXPORT void MCCanvasEffectGetSourceAsString(MCCanvasEffectRef p_effect, MCStringRef &r_source);
+extern "C" MC_DLLEXPORT void MCCanvasEffectSetSourceAsString(MCStringRef p_source, MCCanvasEffectRef &x_effect);
 
 //////////
 
@@ -536,6 +545,7 @@ extern "C" MC_DLLEXPORT void MCCanvasGetDashes(MCCanvasRef p_canvas, MCProperLis
 extern "C" MC_DLLEXPORT void MCCanvasSetDashes(MCProperListRef p_dashes, MCCanvasRef p_canvas);
 extern "C" MC_DLLEXPORT void MCCanvasGetDashPhase(MCCanvasRef p_canvas, MCCanvasFloat &r_phase);
 extern "C" MC_DLLEXPORT void MCCanvasSetDashPhase(MCCanvasFloat p_phase, MCCanvasRef p_canvas);
+extern "C" MC_DLLEXPORT void MCCanvasGetClipBounds(MCCanvasRef p_canvas, MCCanvasRectangleRef &r_bounds);
 
 // Operations
 extern "C" MC_DLLEXPORT void MCCanvasTransform(MCCanvasRef p_canvas, MCCanvasTransformRef p_transform);

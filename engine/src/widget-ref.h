@@ -1,4 +1,4 @@
-/* Copyright (C) 2014 Runtime Revolution Ltd.
+/* Copyright (C) 2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -43,11 +43,20 @@ public:
     bool SetProperty(MCNameRef property, MCValueRef value);
     bool GetProperty(MCNameRef property, MCValueRef& r_value);
 
+    bool HasPropertyOfChunk(MCNameRef p_property, MCNameRef p_chunk_name, bool p_is_getter);
+    
+    bool QueryPropertyOfChunk(MCNameRef p_property, MCNameRef p_chunk_name, bool p_is_getter, MCTypeInfoRef& r_type_info);
+    bool SetPropertyOfChunk(MCNameRef property, MCNameRef p_chunk_name, MCProperListRef p_path, MCValueRef value);
+    bool GetPropertyOfChunk(MCNameRef property, MCNameRef p_chunk_name, MCProperListRef p_path, MCValueRef& r_value);
+
     bool OnLoad(MCValueRef rep);
     bool OnSave(MCValueRef& r_rep);
     
     bool OnOpen(void);
     bool OnClose(void);
+    
+    bool OnAttach();
+    bool OnDetach();
     
     bool OnTimer(void);
     
@@ -67,8 +76,10 @@ public:
     bool OnClick(bool& r_bubble);
     
     bool OnGeometryChanged(void);
+    bool OnLayerChanged();
     bool OnParentPropertyChanged(void);
     bool OnToolChanged(Tool tool);
+    bool OnVisibilityChanged(bool p_visible);
     
     bool CopyAnnotation(MCNameRef annotation, MCValueRef& r_value);
     bool SetAnnotation(MCNameRef annotation, MCValueRef value);
@@ -118,12 +129,17 @@ private:
         kDispatchOrderTopDownAfter,
         kDispatchOrderBottomUp,
         kDispatchOrderTopDown,
-    };
-    
-    // Dispatch an event to the widget.
+	};
+	
+	// Inner method for dispatching an event.
+	bool DoDispatch(MCNameRef event, MCValueRef *x_args = nil, uindex_t arg_count = 0, MCValueRef *r_result = nil);
+	
+    // Dispatch an event to the widget allowing script access.
+	// Any errors are sent to the host (if any).
     bool Dispatch(MCNameRef event, MCValueRef *x_args = nil, uindex_t arg_count = 0, MCValueRef *r_result = nil);
     
-    // Dispatch an event to the widget but don't allow script access.
+	// Dispatch an event to the widget but don't allow script access.
+	// Any errors are sent to the host (if any).
     bool DispatchRestricted(MCNameRef event, MCValueRef *args = nil, uindex_t arg_count = 0, MCValueRef *r_result = nil);
     
     // Dispatch an event to the widget, don't allow script access and swallow

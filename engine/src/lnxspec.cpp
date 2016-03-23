@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -403,7 +403,8 @@ void MCS_startprocess(char *name, char *doc, Open_mode mode, Boolean elevated)
 				}
 				else
 					close(0);
-				execvp(name, argv);
+                // The executable name should be argv[0].
+                execvp(argv[0], argv);
 				_exit(-1);
 			}
 			MCS_checkprocesses();
@@ -894,8 +895,11 @@ IO_handle MCS_open(const char *path, const char *mode,
 		struct stat64 buf;
 		if (fd != -1 && !fstat64(fd, &buf))
 		{
-			uint4 len = buf.st_size - offset;
-			if (len != 0)
+			// The length of a file could be > 32-bit, so we have to check that
+			// the file size fits into a 32-bit integer as that is what the
+			// IO_header form we use supports.
+			off_t len = buf.st_size - offset;
+			if (len != 0 && len < UINT32_MAX)
 			{
 				char *buffer = (char *)mmap(NULL, len, PROT_READ, MAP_SHARED,
 				                            fd, offset);
@@ -905,7 +909,7 @@ IO_handle MCS_open(const char *path, const char *mode,
 				if (buffer != MAP_FAILED)
 				{
 					delete newpath;
-					handle = new IO_header(NULL, buffer, len, fd, 0);
+					handle = new IO_header(NULL, buffer, (uint4)len, fd, 0);
 					return handle;
 				}
 			}
@@ -1689,7 +1693,6 @@ Boolean MCS_poll(real8 delay, int fd)
 	int4 n;
 	uint2 i;
 	Boolean wasalarm = alarmpending;
-	Boolean handled = False;
 	if (alarmpending)
 		MCS_alarm(0.0);
 	
@@ -1717,27 +1720,6 @@ Boolean MCS_poll(real8 delay, int fd)
 		if (MCinputfd > maxfd)
 			maxfd = MCinputfd;
 	}
-	for (i = 0 ; i < MCnsockets ; i++)
-	{
-		if (MCsockets[i]->resolve_state != kMCSocketStateResolving &&
-		   MCsockets[i]->resolve_state != kMCSocketStateError)
-		{
-			if (MCsockets[i]->connected && !MCsockets[i]->closing
-				&& !MCsockets[i]->shared || MCsockets[i]->accepting)
-				FD_SET(MCsockets[i]->fd, &rmaskfd);
-			if (!MCsockets[i]->connected || MCsockets[i]->wevents != NULL)
-				FD_SET(MCsockets[i]->fd, &wmaskfd);
-			FD_SET(MCsockets[i]->fd, &emaskfd);
-			if (MCsockets[i]->fd > maxfd)
-				maxfd = MCsockets[i]->fd;
-			if (MCsockets[i]->added)
-			{
-				delay = 0.0;
-				MCsockets[i]->added = False;
-				handled = True;
-			}
-		}
-	}
 
 	if (g_notify_pipe[0] != -1)
 	{
@@ -1754,34 +1736,12 @@ Boolean MCS_poll(real8 delay, int fd)
 	
 		n = select(maxfd + 1, &rmaskfd, &wmaskfd, &emaskfd, &timeoutval);
 	if (n <= 0)
-		return handled;
+		return False;
 	if (MCshellfd != -1 && FD_ISSET(MCshellfd, &rmaskfd))
 		return True;
 	if (MCinputfd != -1 && FD_ISSET(MCinputfd, &rmaskfd))
 		readinput = True;
-	for (i = 0 ; i < MCnsockets ; i++)
-	{
-		if (FD_ISSET(MCsockets[i]->fd, &emaskfd))
-		{
-			if (!MCsockets[i]->waiting)
-			{
-				MCsockets[i]->error = strclone("select error");
-				MCsockets[i]->doclose();
-			}
-		}
-		else
-		{
-			/* read first here, otherwise a situation can arise when select indicates
-			 * read & write on the socket as part of the sslconnect handshaking
-			 * and so consumed during writesome() leaving no data to read
-			 */
-			if (FD_ISSET(MCsockets[i]->fd, &rmaskfd) && !MCsockets[i]->shared)
-				MCsockets[i]->readsome();
-			if (FD_ISSET(MCsockets[i]->fd, &wmaskfd))
-				MCsockets[i]->writesome();
-		}
-	}
-	
+    
 	if (g_notify_pipe[0] != -1 && FD_ISSET(g_notify_pipe[0], &rmaskfd))
 	{
 		char t_notify_char;

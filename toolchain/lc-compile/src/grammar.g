@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -221,8 +221,11 @@
     'rule' ImportDefinition(-> type(Position, public, Id, foreign(Position, ""))):
         "foreign" @(-> Position) "type" Identifier(-> Id)
     
-    'rule' ImportDefinition(-> type(Position, public, Id, handler(Position, Signature))):
+    'rule' ImportDefinition(-> type(Position, public, Id, handler(Position, normal, Signature))):
         "handler" @(-> Position) "type" Identifier(-> Id) Signature(-> Signature)
+
+    'rule' ImportDefinition(-> type(Position, public, Id, handler(Position, foreign, Signature))):
+        "foreign" @(-> Position) "handler" "type" Identifier(-> Id) Signature(-> Signature)
         
     'rule' ImportDefinition(-> type(Position, public, Id, Type)):
         "type" @(-> Position) Identifier(-> Id) "is" Type(-> Type)
@@ -358,7 +361,7 @@
     'rule' OptionalTypeClause(-> Type):
         "as" Type(-> Type)
         
-    'rule' OptionalTypeClause(-> optional(Position, any(Position))):
+    'rule' OptionalTypeClause(-> unspecified):
         @(-> Position)
 
 ---------- Type
@@ -370,7 +373,6 @@
     
     'rule' TypeDefinition(-> type(Position, Access, Name, foreign(Position, Binding))):
         Access(-> Access) "foreign" @(-> Position) "type" Identifier(-> Name) "binds" "to" STRING_LITERAL(-> Binding)
-
         
     'rule' TypeDefinition(-> type(Position, Access, Name, record(Position, Base, Fields))):
         Access(-> Access) "record" @(-> Position) "type" Identifier(-> Name) OptionalBaseType(-> Base) Separator
@@ -382,8 +384,11 @@
             EnumFields(-> Fields)
         "end" "type"
         
-    'rule' TypeDefinition(-> type(Position, Access, Name, handler(Position, Signature))):
+    'rule' TypeDefinition(-> type(Position, Access, Name, handler(Position, normal, Signature))):
         Access(-> Access) "handler" @(-> Position) "type" Identifier(-> Name) Signature(-> Signature)
+
+    'rule' TypeDefinition(-> type(Position, Access, Name, handler(Position, foreign, Signature))):
+        Access(-> Access) "foreign" @(-> Position) "handler" "type" Identifier(-> Name) Signature(-> Signature)
 
 --
 
@@ -476,14 +481,10 @@
 
 'nonterm' OptionalReturnsClause(-> TYPE)
 
-    'rule' OptionalReturnsClause(-> Type):
-        "as" @(-> Position) Type(-> Type)
-        Warning_UsingAsForHandlerReturnTypeDeprecated(Position)
-
     'rule' OptionalReturnsClause(-> Type)
         "returns" @(-> Position) Type(-> Type)
 
-    'rule' OptionalReturnsClause(-> optional(Position, any(Position)))
+    'rule' OptionalReturnsClause(-> unspecified)
         @(-> Position)
 
 'nonterm' OptionalParameterList(-> PARAMETERLIST)
@@ -527,7 +528,10 @@
 
     'rule' PropertyDefinition(-> property(Position, public, Name, Getter, Setter)):
         "property" @(-> Position) Identifier(-> Name) "get" Identifier(-> Getter) OptionalSetClause(-> Setter)
-        
+
+    'rule' PropertyDefinition(-> property(Position, public, Name, Getter, Setter)):
+        "property" @(-> Position) StringyIdentifier(-> Name) "get" Identifier(-> Getter) OptionalSetClause(-> Setter)
+
 'nonterm' OptionalSetClause(-> OPTIONALID)
 
     'rule' OptionalSetClause(-> id(Setter)):
@@ -575,13 +579,13 @@
         "is" "iterator"
 
     'rule' SyntaxClass(-> prefix(Precedence)):
-        "is" "prefix" "operator" "with" "precedence" INTEGER_LITERAL(-> Precedence)
+        "is" "prefix" "operator" "with" SyntaxPrecedence(-> Precedence) "precedence"
 
     'rule' SyntaxClass(-> postfix(Precedence)):
-        "is" "postfix" "operator" "with" "precedence" INTEGER_LITERAL(-> Precedence)
+        "is" "postfix" "operator" "with" SyntaxPrecedence(-> Precedence) "precedence"
 
     'rule' SyntaxClass(-> binary(Assoc, Precedence)):
-        "is" SyntaxAssoc(-> Assoc) "binary" "operator" "with" "precedence" INTEGER_LITERAL(-> Precedence)
+        "is" SyntaxAssoc(-> Assoc) "binary" "operator" "with" SyntaxPrecedence(-> Precedence) "precedence"
 
     'rule' SyntaxClass(-> phrase):
         "is" "phrase"
@@ -596,6 +600,77 @@
         
     'rule' SyntaxAssoc(-> right):
         "right"
+
+'nonterm' SyntaxPrecedence(-> SYNTAXPRECEDENCE)
+
+    'rule' SyntaxPrecedence(-> scoperesolution):
+        "scope" "resolution"
+
+    'rule' SyntaxPrecedence(-> functioncall):
+        "function" "call"
+
+    'rule' SyntaxPrecedence(-> subscript):
+        "subscript"
+
+    'rule' SyntaxPrecedence(-> property):
+        "property"
+
+    'rule' SyntaxPrecedence(-> subscriptchunk):
+        "subscript chunk"
+
+    'rule' SyntaxPrecedence(-> functionchunk):
+        "function chunk"
+
+    'rule' SyntaxPrecedence(-> constructor):
+        "constructor"
+
+    'rule' SyntaxPrecedence(-> conversion):
+        "conversion"
+
+    'rule' SyntaxPrecedence(-> exponentiation):
+        "exponentiation"
+
+    'rule' SyntaxPrecedence(-> modifier):
+        "modifier"
+
+    'rule' SyntaxPrecedence(-> multiplication):
+        "multiplication"
+
+    'rule' SyntaxPrecedence(-> addition):
+        "addition"
+
+    'rule' SyntaxPrecedence(-> bitwiseshift):
+        "bitwise shift"
+
+    'rule' SyntaxPrecedence(-> concatenation):
+        "concatenation"
+
+    'rule' SyntaxPrecedence(-> comparison):
+        "comparison"
+
+    'rule' SyntaxPrecedence(-> classification):
+        "classification"
+
+    'rule' SyntaxPrecedence(-> bitwiseand):
+        "bitwise and"
+
+    'rule' SyntaxPrecedence(-> bitwisexor):
+        "bitwise xor"
+
+    'rule' SyntaxPrecedence(-> bitwiseor):
+        "bitwise or"
+
+    'rule' SyntaxPrecedence(-> logicalnot):
+        "logical not"
+
+    'rule' SyntaxPrecedence(-> logicaland):
+        "logical and"
+
+    'rule' SyntaxPrecedence(-> logicalor):
+        "logical or"
+
+    'rule' SyntaxPrecedence(-> sequence):
+        "sequence"
 
 'nonterm' SyntaxMethods(-> SYNTAXMETHODLIST)
 
@@ -628,51 +703,27 @@
 
     'rule' Type(-> boolean(Position)):
         "Boolean" @(-> Position)
-    'rule' Type(-> boolean(Position)):
-        "boolean" @(-> Position)
-        Warning_DeprecatedTypeName(Position, "Boolean")
 
     'rule' Type(-> integer(Position)):
         "Integer" @(-> Position)
-    'rule' Type(-> integer(Position)):
-        "integer" @(-> Position)
-        Warning_DeprecatedTypeName(Position, "Integer")
 
     'rule' Type(-> real(Position)):
         "Real" @(-> Position)
-    'rule' Type(-> real(Position)):
-        "real" @(-> Position)
-        Warning_DeprecatedTypeName(Position, "Real")
 
     'rule' Type(-> number(Position)):
         "Number" @(-> Position)
-    'rule' Type(-> number(Position)):
-        "number" @(-> Position)
-        Warning_DeprecatedTypeName(Position, "Number")
 
     'rule' Type(-> string(Position)):
         "String" @(-> Position)
-    'rule' Type(-> string(Position)):
-        "string" @(-> Position)
-        Warning_DeprecatedTypeName(Position, "String")
 
     'rule' Type(-> data(Position)):
         "Data" @(-> Position)
-    'rule' Type(-> data(Position)):
-        "data" @(-> Position)
-        Warning_DeprecatedTypeName(Position, "Data")
 
     'rule' Type(-> array(Position)):
         "Array" @(-> Position)
-    'rule' Type(-> array(Position)):
-        "array" @(-> Position)
-        Warning_DeprecatedTypeName(Position, "Array")
 
     'rule' Type(-> list(Position, ElementType)):
         "List" @(-> Position) OptionalElementType(-> ElementType)
-    'rule' Type(-> list(Position, ElementType)):
-        "list" @(-> Position) OptionalElementType(-> ElementType)
-        Warning_DeprecatedTypeName(Position, "List")
 
     'rule' Type(-> undefined(Position)):
         "undefined" @(-> Position)
@@ -686,7 +737,7 @@
     'rule' OptionalElementType(-> Type)
         "of" Type(-> Type)
         
-    'rule' OptionalElementType(-> optional(Position, any(Position))):
+    'rule' OptionalElementType(-> unspecified):
         @(-> Position)
 
 --------------------------------------------------------------------------------
@@ -946,6 +997,9 @@
     'rule' TermExpression(-> list(Position, List)):
         "[" @(-> Position) OptionalExpressionList(-> List) "]"
 
+    'rule' TermExpression(-> array(Position, Pairs)):
+        "{" @(-> Position) OptionalExpressionArray(-> Pairs) "}"
+
     'rule' TermExpression(-> Expression):
         "(" Expression(-> Expression) ")"
 
@@ -1009,6 +1063,29 @@
 
     'rule' ExpressionListAsExpression(-> list(Position, List)):
         ExpressionList(-> List) @(-> Position)
+
+----------
+
+'nonterm' OptionalExpressionArray(-> EXPRESSIONLIST)
+
+    'rule' OptionalExpressionArray(-> Pairs):
+        ExpressionArray(-> Pairs)
+
+    'rule' OptionalExpressionArray(-> nil):
+        -- empty
+
+'nonterm' ExpressionArray(-> EXPRESSIONLIST)
+
+    'rule' ExpressionArray(-> expressionlist(Head, Tail)):
+        ExpressionArrayEntry(-> Head) "," ExpressionArray(-> Tail)
+
+    'rule' ExpressionArray(-> expressionlist(Head, nil)):
+        ExpressionArrayEntry(-> Head)
+
+'nonterm' ExpressionArrayEntry(-> EXPRESSION)
+
+    'rule' ExpressionArrayEntry(-> pair(Position, Key, Value)):
+        Expression(-> Key) ":" @(-> Position) Expression(-> Value)
 
 --------------------------------------------------------------------------------
 -- Syntax Syntax

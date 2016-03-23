@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -315,15 +315,15 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 	
 	g_mainthread_errno = _errno();
 	int r = X_close();
-
+    
+    MCValueRelease(MCcmdline);
+    
     MCScriptFinalize();
     MCModulesFinalize();
 	MCFinalize();
 
 	if (t_tsf_mgr != nil)
 		t_tsf_mgr -> Release();
-
-	MCValueRelease(MCcmdline);
 
 	return r;
 }

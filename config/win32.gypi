@@ -21,6 +21,8 @@
 			'ext_suffix': '.dll',
 			'exe_suffix': '.exe',
 			'debug_info_suffix': '',
+
+			'silence_warnings': 0,
 		},
 		
 		# Don't assume a Cygwin environment when invoking actions
@@ -53,7 +55,7 @@
 				'target_conditions':
 				[
 					[
-						'_suppress_warnings == 0',
+						'silence_warnings == 0',
 						{
 							'msvs_settings':
 							{
@@ -120,6 +122,8 @@
 			'_CRT_SECURE_NO_DEPRECATE',
 			'_CRT_DISABLE_PERFCRIT_LOCKS',
 			'__LITTLE_ENDIAN__',
+			'WINVER=0x0501',		# Windows XP
+			'_WIN32_WINNT=0x0501',		# Windows XP
 		],
 		
 		'target_conditions':
@@ -143,6 +147,27 @@
 					],
 				},
 			],
+			[
+				'silence_warnings == 0',
+				{
+					'msvs_settings':
+					{
+						'VCCLCompilerTool':
+						{
+							'WarningLevel': '3',
+						},
+					},
+				},
+				{
+					'msvs_settings':
+					{
+						'VCCLCompilerTool':
+						{
+							'WarningLevel': '0',
+						},
+					},
+				},
+			],
 		],
 		
 		'msvs_settings':
@@ -152,7 +177,6 @@
 				'ExceptionHandling': '0',
 				'BufferSecurityCheck': 'false',
 				'RuntimeTypeInfo': 'false',
-				'WarningLevel': '3',
 				'Detect64BitPortabilityProblems': 'false',
 			},
 			

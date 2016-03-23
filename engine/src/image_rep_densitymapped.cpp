@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -575,7 +575,6 @@ bool MCImageRepGetDensityMapped(MCStringRef p_filename, MCImageRep *&r_rep)
 		
 		if (MCCachedImageRep::FindWithKey(p_filename, t_cached_rep))
 		{
-			MCLog("image rep cache hit for file %@", p_filename);
 			t_rep = t_cached_rep->Retain();
 		}
 		else

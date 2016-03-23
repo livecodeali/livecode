@@ -1,10 +1,9 @@
 #!/bin/bash
 
 source "${BASEDIR}/scripts/platform.inc"
+source "${BASEDIR}/scripts/lib_versions.inc"
 
-# Version and configuration flags
-ICU_VERSION=52.1
-ICU_VERSION_MAJOR=52
+# Configuration flags
 ICU_CONFIG="--disable-shared --enable-static --prefix=/ --with-data-packaging=static --disable-samples --disable-tests --disable-extras"
 ICU_CFLAGS="-DU_USING_ICU_NAMESPACE=0 -DUNISTR_FROM_CHAR_EXPLICIT=explicit -DUNISTR_FROM_STRING_EXPLICIT=explicit"
 
@@ -22,6 +21,9 @@ case $(uname) in
 		;;
 	Darwin*)
 		HOST_ICU_DIR="${BUILDDIR}/icu-${ICU_VERSION}-mac-i386"
+		;;
+	CYGWIN*)
+		HOST_ICU_DIR="${BUILDDIR}/icu-${ICU_VERSION}-win32-i386"
 		;;
 esac
 
@@ -74,9 +76,15 @@ function buildICU {
 				export ANDROID_CFLAGS="-D__STDC_INT64__ -DU_HAVE_NL_LANGINFO_CODESET=0"
 				export ANDROID_CXXFLAGS="${ANDROID_CFLAGS}"
 				;;
+			emscripten)
+				CONFIG_FLAGS="--with-cross-build=${HOST_ICU_DIR}"
+				;;
 			ios)
 				CONFIG_TYPE=
 				CONFIG_FLAGS="--host=arm-apple-darwin --with-cross-build=${HOST_ICU_DIR} --disable-tools"
+				;;
+			win32)
+				CONFIG_TYPE="Cygwin/MSVC"
 				;;
 		esac
 	
@@ -117,7 +125,7 @@ function buildICU {
 			
 			# Method for configuration depends on the platform
 			if [ -z "${CONFIG_TYPE}" ] ; then
-				"../${ICU_SRC}/source/configure" ${ICU_CONFIG} ${CONFIG_FLAGS} > "${ICU_ARCH_LOG}" 2>&1
+				${EMCONFIGURE} "../${ICU_SRC}/source/configure" ${ICU_CONFIG} ${CONFIG_FLAGS} > "${ICU_ARCH_LOG}" 2>&1
 			else
 				"../${ICU_SRC}/source/runConfigureICU" ${CONFIG_TYPE} ${ICU_CONFIG} ${CONFIG_FLAGS} > "${ICU_ARCH_LOG}" 2>&1
 			fi
@@ -131,7 +139,9 @@ function buildICU {
 
 			echo "Building ICU for ${NAME}"
 			export VERBOSE=1
-			make clean >> "${ICU_ARCH_LOG}" 2>&1 && make ${MAKEFLAGS} >> "${ICU_ARCH_LOG}" 2>&1 && make DESTDIR="${INSTALL_DIR}/${NAME}" install >> "${ICU_ARCH_LOG}" 2>&1
+			${EMMAKE} make clean >> "${ICU_ARCH_LOG}" 2>&1 && \
+			    ${EMMAKE} make ${MAKEFLAGS} >> "${ICU_ARCH_LOG}" 2>&1 && \
+			    ${EMMAKE} make DESTDIR="${INSTALL_DIR}/${NAME}" install >> "${ICU_ARCH_LOG}" 2>&1
 			RESULT=$?
 			cd ..
 			
@@ -163,7 +173,7 @@ function buildICU {
 		if [ ! -d "out-${PLATFORM}-${ARCH}" ] ; then
 			mkdir -p "temp"
 			mkdir -p "out-${PLATFORM}-${ARCH}"
-			"${HOST_ICU_DIR}/bin/pkgdata" --bldopt "../../${ICU_ARCH_SRC}/data/icupkg.inc" --quiet --copyright --sourcedir "./extracted" --destdir "./out-${PLATFORM}-${ARCH}" --entrypoint icudt${ICU_VERSION_MAJOR} --tempdir "./temp" --name "icudt${ICU_VERSION_MAJOR}l" --mode static --revision "${ICU_VERSION}" --libname icudata "icudt${ICU_VERSION_MAJOR}.lst"
+			"${HOST_ICU_DIR}/bin/pkgdata" --without-assembly --bldopt "../../${ICU_ARCH_SRC}/data/icupkg.inc" --quiet --copyright --sourcedir "./extracted" --destdir "./out-${PLATFORM}-${ARCH}" --entrypoint icudt${ICU_VERSION_MAJOR} --tempdir "./temp" --name "icudt${ICU_VERSION_MAJOR}l" --mode static --revision "${ICU_VERSION}" --libname icudata "icudt${ICU_VERSION_MAJOR}.lst"
 
 			# Copy the data
 			rm -r "${INSTALL_DIR}/${NAME}/lib/libicudata.a"

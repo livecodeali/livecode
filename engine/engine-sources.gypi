@@ -145,7 +145,6 @@
 			'src/securemode.h',
 			'src/sha1.h',
 			'src/text.h',
-			'src/transfer.h',
 			'src/uidc.h',
 			'src/unicode.h',
 			'src/util.h',
@@ -170,7 +169,6 @@
 			'src/securemode.cpp',
 			'src/sha1.cpp',			
 			'src/text.cpp',
-			'src/transfer.cpp',
 			'src/uidc.cpp',
 			'src/unicode.cpp',
 			'src/util.cpp',
@@ -183,7 +181,7 @@
 			'src/card.h',
 			'src/cardlst.h',
 			'src/cdata.h',
-			'src/control.h',
+			'src/mccontrol.h',
 			'src/cpalette.h',
 			'src/dispatch.h',
 			'src/edittool.h',
@@ -254,6 +252,7 @@
 			'src/image_rep.cpp',
 			'src/image_rep_densitymapped.cpp',
 			'src/image_rep_encoded.cpp',
+			'src/image_rep_gimage.cpp',
 			'src/image_rep_mutable.cpp',
 			'src/image_rep_resampled.cpp',
 			'src/imagebitmap.cpp',
@@ -343,6 +342,7 @@
 			'src/exec-interface-scrollbar.cpp',
 			'src/exec-interface-stack.cpp',
 			'src/exec-interface-vclip.cpp',
+			'src/exec-interface-widget.cpp',
 			'src/exec-keywords.cpp',
 			'src/exec-legacy.cpp',
 			'src/exec-logic.cpp',
@@ -385,7 +385,6 @@
 			'src/mblstore.h',
 			'src/mblsyntax.h',
 			'src/mblad.cpp',
-			'src/mblalert.cpp',
 			'src/mblcalendar.cpp',
 			'src/mblcamera.cpp',
 			'src/mblcontact.cpp',
@@ -395,7 +394,6 @@
 			'src/mblflst.cpp',
 			'src/mblhandlers.cpp',
 			'src/mblmain.cpp',
-			'src/mblnetwork.cpp',
 			'src/mblnotification.cpp',
 			'src/mblsensor.cpp',
 			'src/mblspec.cpp',
@@ -499,6 +497,7 @@
 			'src/syslnxregion.cpp',
 			'src/sysosxregion.cpp',
 			'src/sysspec.cpp',
+			'src/sysspec-url.cpp',
 			'src/sysunxdate.cpp',
 			'src/sysunxnetwork.cpp',
 			'src/sysw32fs.cpp',
@@ -508,33 +507,33 @@
 			
 			# Group "Text"
 			'src/text.h',
-			'src/text-api.h',
-			'src/text-block.h',
-			'src/text-breakblock.h',
-			'src/text-breakingengine.h',
-			'src/text-cell.h',
-			'src/text-controlblock.h',
-			'src/text-imageblock.h',
-			'src/text-line.h',
-			'src/text-pane.h',
-			'src/text-paragraph.h',
-			'src/text-run.h',
-			'src/text-segment.h',
-			'src/text-simplebreakingengine.h',
+			#'src/text-api.h',
+			#'src/text-block.h',
+			#'src/text-breakblock.h',
+			#'src/text-breakingengine.h',
+			#'src/text-cell.h',
+			#'src/text-controlblock.h',
+			#'src/text-imageblock.h',
+			#'src/text-line.h',
+			#'src/text-pane.h',
+			#'src/text-paragraph.h',
+			#'src/text-run.h',
+			#'src/text-segment.h',
+			#'src/text-simplebreakingengine.h',
 			'src/text.cpp',
-			'src/text-api.cpp',
-			'src/text-block.cpp',
-			'src/text-breakblock.cpp',
-			'src/text-breakingengine.cpp',
-			'src/text-cell.cpp',
-			'src/text-controlblock.cpp',
-			'src/text-imageblock.cpp',
-			'src/text-line.cpp',
-			'src/text-pane.cpp',
-			'src/text-paragraph.cpp',
-			'src/text-run.cpp',
-			'src/text-segment.cpp',
-			'src/text-simplebreakingengine.cpp',
+			#'src/text-api.cpp',
+			#'src/text-block.cpp',
+			#'src/text-breakblock.cpp',
+			#'src/text-breakingengine.cpp',
+			#'src/text-cell.cpp',
+			#'src/text-controlblock.cpp',
+			#'src/text-imageblock.cpp',
+			#'src/text-line.cpp',
+			#'src/text-pane.cpp',
+			#'src/text-paragraph.cpp',
+			#'src/text-run.cpp',
+			#'src/text-segment.cpp',
+			#'src/text-simplebreakingengine.cpp',
 			
 			# Group "Desktop"
 			'src/quicktime.cpp',
@@ -542,19 +541,23 @@
 			'<(SHARED_INTERMEDIATE_DIR)/src/quicktimestubs.mac.cpp',
 			
 			# Group "Desktop - Mac"
-			'src/coretextfonts.cpp',
+			'src/coretextfonts.mm',
 			'src/osxflst.cpp',
 			
 			# Group "Desktop - Linux"
 			'src/lnxelevate.cpp',
 			'src/lnxflst.cpp',
 			
-			# Group "Desktop - Windows"
-			'src/w32date.cpp',
+            # Group "Desktop - Windows"
+            'src/w32date.cpp',
+            'src/w32flst.h',
+            'src/w32flst.cpp',
 							
 			# Group "Theming"
 			'src/linux-theme.cpp',
 			'src/mac-theme.mm',
+			'src/mblandroid-theme.cpp',
+			'src/mbliphone-theme.mm',
 			'src/windows-theme.cpp',
 				
 			# Group "Syntax"
@@ -563,6 +566,29 @@
 			
 			# Other files
 			'src/socket_resolve.cpp',
+
+			'src/clipboard.h',
+			'src/em-clipboard.h',
+			'src/lnx-clipboard.h',
+			'src/mac-clipboard.h',
+			'src/mblandroid-clipboard.h',
+			'src/mbliphone-clipboard.h',
+			'src/raw-clipboard.h',
+			'src/w32-clipboard.h',
+			'src/clipboard.cpp',
+			'src/em-clipboard.cpp',
+			'src/lnx-clipboard.cpp',
+			'src/mac-clipboard.mm',
+			'src/mblandroid-clipboard.cpp',
+			'src/mbliphone-clipboard.mm',
+			'src/raw-clipboard.cpp',
+			'src/w32-clipboard.cpp',
+
+			'src/mixin-refcounted.h',
+			
+			# Native layers
+			'src/native-layer.h',
+			'src/native-layer.cpp',
 		],
 		
 		# Sources that are only for desktop mode
@@ -578,7 +604,6 @@
 			'src/desktop-dc.cpp',
 			'src/desktop-stack.cpp',
 			'src/desktop-menu.cpp',
-			'src/desktop-pasteboard.cpp',
 			'src/desktop-image.cpp',
 			'src/desktop-ans.cpp',
 			'src/legacy_spec.cpp',
@@ -591,23 +616,33 @@
 			'src/platform-surface.cpp',
 			'src/platform-window.cpp',
 			
+			# Group "Native Layer"
+			'src/native-layer.cpp',
+			'src/native-layer.h',
+			'src/native-layer-android.cpp',
+			'src/native-layer-android.h',
+			'src/native-layer-ios.h',
+			'src/native-layer-ios.mm',
+			'src/native-layer-mac.h',
+			'src/native-layer-mac.mm',
+			'src/native-layer-win32.cpp',
+			'src/native-layer-win32.h',
+			'src/native-layer-x11.cpp',
+			'src/native-layer-x11.h',
+			
 			# Group "Desktop - Linux"
 			'src/lnxans.h',
 			'src/lnxaudio.h',
 			'src/lnxdc.h',
-			'src/lnxdnd.h',
 			'src/lnxflst.h',
 			'src/lnxgtkthemedrawing.h',
 			'src/lnximagecache.h',
 			'src/lnxmplayer.h',
-			'src/lnxpasteboard.h',
 			'src/lnxprefix.h',
 			'src/lnxpsprinter.h',
 			'src/lnxtheme.h',
-			'src/lnxtransfer.h',
 			'src/lnxans.cpp',
 			'src/lnxaudio.cpp',
-			'src/lnxclipboard.cpp',
 			'src/lnxcolor.cpp',
 			'src/lnxcursor.cpp',
 			'src/lnxdc.cpp',
@@ -623,12 +658,10 @@
 			'src/lnxkeymapping.cpp',
 			'src/lnxmisc.cpp',
 			'src/lnxmplayer.cpp',
-			'src/lnxpasteboard.cpp',
 			'src/lnxpsprinter.cpp',
 			'src/lnxspec.cpp',
 			'src/lnxstack.cpp',
 			'src/lnxtextlayout.cpp',
-			'src/lnxtransfer.cpp',
 			
 			# Group "Desktop - Mac"
 			'src/mac-internal.h',
@@ -662,25 +695,21 @@
 			'src/osxfield.cpp',
 			'src/osxfiles.cpp',
 			'src/osximage.cpp',
-			'src/osxmisc.cpp',
+			'src/osxmisc.mm',
 			'src/osxprinter.cpp',
 			'src/osxstack.cpp',
-			'src/osxtextlayout.cpp',
-			'src/osxtheme.cpp',
+			'src/osxtheme.mm',
 			
 			# Group "Desktop - Windows"
 			'src/w32compat.h',
 			'src/w32dc.h',
 			'src/w32defs.h',
 			'src/w32dnd.h',
-			'src/w32flst.h',
 			'src/w32prefix.h',
 			'src/w32printer.h',
 			'src/w32text.h',
 			'src/w32theme.h',
-			'src/w32transfer.h',
 			'src/w32ans.cpp',
-			'src/w32clipboard.cpp',
 			'src/w32color.cpp',
 			'src/w32compat.cpp',
 			'src/w32cursor.cpp',
@@ -702,7 +731,42 @@
 			'src/w32text.cpp',
 			'src/w32textlayout.cpp',
 			'src/w32theme.cpp',
-			'src/w32transfer.cpp',
+
+			# Group "Desktop - Emscripten"
+			'src/em-async.h',
+			'src/em-async.js',
+			'src/em-dc-mainloop.h',
+			'src/em-dc-mainloop.cpp',
+			'src/em-dc.h',
+			'src/em-dc.cpp',
+			'src/em-dialog.js',
+			'src/em-event.h',
+			'src/em-event.cpp',
+			'src/em-event.js',
+			'src/em-filehandle.h',
+			'src/em-filehandle.cpp',
+			'src/em-fontlist.h',
+			'src/em-fontlist.cpp',
+			'src/em-main.cpp',
+			'src/em-osspec-misc.cpp',
+			'src/em-osspec-network.cpp',
+			'src/em-preamble.js',
+			'src/em-resolution.cpp',
+			'src/em-stack.cpp',
+			'src/em-standalone.h',
+			'src/em-standalone.cpp',
+			'src/em-standalone.js',
+			'src/em-surface.h',
+			'src/em-surface.cpp',
+			'src/em-system.h',
+			'src/em-system.cpp',
+			'src/em-theme.cpp',
+			'src/em-url.cpp',
+			'src/em-url.js',
+			'src/em-util.h',
+			'src/em-util.js',
+			'src/em-view.h',
+			'src/em-view.cpp',
 		],
 		
 		# Sources that need to be compiled separately for each mode
@@ -732,6 +796,7 @@
 			'src/deploy.cpp',
 			'src/deploy_capsule.cpp',
 			'src/deploy_dmg.cpp',
+			'src/deploy_emscripten.cpp',
 			'src/deploy_file.cpp',
 			'src/deploy_linux.cpp',
 			'src/deploy_macosx.cpp',
@@ -743,17 +808,22 @@
 			'src/internal_development.cpp',
 			'src/mode_development.cpp',
 		],
-		
+
+		# Sources for minizip
+		'engine_minizip_source_files':
+		[
+			'src/minizip.h',
+			'src/minizip.cpp',
+		],
+
 		# Sources for the installer engine
 		'engine_installer_mode_source_files':
 		[
-			'src/minizip.h',
 			'src/bsdiff_apply.cpp',
 			'src/internal.cpp',
-			'src/minizip.cpp',
 			'src/mode_installer.cpp',
 			'src/mode_installer_lnx.cpp',
-			'src/mode_installer_osx.cpp',
+			'src/mode_installer_osx.mm',
 			'src/mode_installer_w32.cpp',
 		],
 		
@@ -768,7 +838,6 @@
 		[
 			'src/srvcgi.h',
 			'src/srvdebug.h',
-			'src/srvflst.h',
 			'src/srvmain.h',
 			'src/srvmultipart.h',
 			'src/srvscript.h',
@@ -776,7 +845,6 @@
 			'src/mode_server.cpp',
 			'src/srvcgi.cpp',
 			'src/srvdebug.cpp',
-			'src/srvflst.cpp',
 			'src/srvmain.cpp',
 			'src/srvmultipart.cpp',
 			'src/srvoutput.cpp',
@@ -787,6 +855,7 @@
 			'src/srvtheme.cpp',
 			'src/srvspec.cpp',
 			'src/srvstack.cpp',
+			'src/native-layer-srv.cpp',
 		],
 		
 		# Java sources for Android
@@ -840,6 +909,8 @@
 			'src/java/com/runrev/android/nativecontrol/NativeControlModule.java',
 			'src/java/com/runrev/android/nativecontrol/ScrollerControl.java',
 			'src/java/com/runrev/android/nativecontrol/VideoControl.java',
+			
+			'src/java/com/runrev/android/libraries/LibBrowser.java',
 		],
 		
 		# AIDL sources for Android
@@ -878,20 +949,29 @@
 			'src/module-canvas.cpp',
 			'src/module-engine.cpp',
 			'src/module-resources.cpp',
+			
+			'src/module-browser.cpp',
 		],
 		
 		# Engine LCB files containing syntax
 		'engine_syntax_lcb_files':
 		[
-			'src/canvas.mlc',
-			'src/engine.mlc',
-			'src/widget.mlc',
+			'src/canvas.lcb',
+			'src/engine.lcb',
+			'src/widget.lcb',
 		],
 		
 		# Other engine LCB files
 		'engine_other_lcb_files':
 		[
-		
+			'src/browser.lcb',
+		],
+
+		# Engine cpptest source files
+		'engine_test_source_files':
+		[
+			'test/test_lextable.cpp',
+			'test/test_new.cpp',
 		],
 	},
 	
@@ -925,11 +1005,14 @@
 						['exclude', '(^|/)sysosx.*\\.(cpp|mm)$'],
 						['exclude', '\\.mac\\.'],
 						['exclude', '(^|/)mac-'],
+						['exclude', '-mac\.(mm|cpp)$'],
 					],
 					
 					'sources!':
 					[
 						'src/dskmac.cpp',
+						'src/srvmac.cpp',
+						'src/native-layer-mac.mm',
 					],
 				},
 			],
@@ -941,6 +1024,12 @@
 						['exclude', '(^|/)dsklnx.*\\.cpp$'],
 						['exclude', '(^|/)syslnx.*\\.cpp$'],
 						['exclude', '(^|/)linux-'],
+						['exclude', '-x11\.cpp$'],
+					],
+					
+					'sources!':
+					[
+						'src/native-layer-x11.cpp',
 					],
 				},
 			],
@@ -952,11 +1041,50 @@
 						['exclude', '(^|/)sysw32.*\\.cpp$'],
 						['exclude', '(^|/)dskw32.*\\.cpp$'],
 						['exclude', '(^|/)win(dows|32)?-'],
+						['exclude', '-win32\.cpp$'],
 					],
 					
 					'sources!':
 					[
 						'src/srvwindows.cpp',
+						'src/native-layer-win32.cpp',
+					],
+				},
+			],
+			[
+				'OS != "emscripten"',
+				{
+					'sources/':
+					[
+						['exclude', '(^|/)em-.*\\.cpp$'],
+					],
+				},
+			],
+			[
+				'OS != "android"',
+				{
+					'sources/':
+					[
+						['exclude', '-android\.cpp$'],
+					],
+
+					'sources!':
+					[
+						'src/native-layer-android.cpp',
+					],
+				},
+			],
+			[
+				'OS != "ios"',
+				{
+					'sources/':
+					[
+						['exclude', '-ios\.(mm|cpp)$'],
+					],
+
+					'sources!':
+					[
+						'src/native-layer-ios.mm',
 					],
 				},
 			],
@@ -1000,7 +1128,6 @@
 						'src/desktop-dc.cpp',
 						'src/desktop-image.cpp',
 						'src/desktop-menu.cpp',
-						'src/desktop-pasteboard.cpp',
 						'src/desktop-stack.cpp',
 						'src/platform.cpp',
 						'src/platform-recorder.cpp',
@@ -1009,13 +1136,21 @@
 					],
 				},
 			],
+            [
+                'OS == "mac" and target_sdk=="macosx10.6"',
+                {
+                    'sources!':
+                    [
+                        'src/mac-av-player.mm',
+                    ],
+                },
+            ],
 			[
 				'OS != "mac" and OS != "ios"',
 				{
 					'sources!':
 					[
 						'src/cgimageutil.cpp',
-						'src/coretextfonts.cpp',
 						'src/syscfdate.cpp',
 						'src/tilecachecg.cpp',
 					],
@@ -1048,6 +1183,7 @@
 					[
 						'src/stacke.cpp',
 						'src/sysunxdate.cpp',
+						'src/sysunxrandom.cpp',
 						
 						'src/mbliphoneembedded.mm',
 						'src/mbliphoneembeddedtest.mm',
@@ -1060,6 +1196,17 @@
 					'sources!':
 					[
 						'src/srvposix.cpp',
+					],
+				},
+			],
+			[
+				'OS == "emscripten"',
+				{
+					'sources!':
+					[
+						'src/tilecachegl.cpp',
+						'src/mcssl.cpp',
+						'src/notify.cpp',
 					],
 				},
 			],

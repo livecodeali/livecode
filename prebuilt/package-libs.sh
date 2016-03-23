@@ -1,10 +1,7 @@
 #!/bin/bash
 
 # Versions
-OPENSSL_VERSION="1.0.1m"
-CURL_VERSION="7.21.1"
-ICU_VERSION="52.1"
-CEF_VERSION="39.0.2171.95"
+source "scripts/lib_versions.inc"
 
 # Package directory
 PACKAGE_DIR="`pwd`/packaged"
@@ -32,7 +29,7 @@ function doPackage {
 
 	local LIBPATH="lib/${PLATFORM}/${ARCHDIR}/${SUBPLATFORM}"
 
-	local OPENSSL_TAR="${PACKAGE_DIR}/OpenSSL-${OPENSSL_VERSION}${SUFFIX}.tar"
+	local OPENSSL_TAR="${PACKAGE_DIR}/OpenSSL-${OpenSSL_VERSION}${SUFFIX}.tar"
 	local CURL_TAR="${PACKAGE_DIR}/Curl-${CURL_VERSION}${SUFFIX}.tar"
 	local ICU_TAR="${PACKAGE_DIR}/ICU-${ICU_VERSION}${SUFFIX}.tar"
 	local CEF_TAR="${PACKAGE_DIR}/CEF-${CEF_VERSION}${SUFFIX}.tar"
@@ -75,8 +72,6 @@ function doPackage {
 	# Package up CEF
 	if [ "$PLATFORM" = "win32" -o "$PLATFORM" = "linux" ] ; then
 		tar -cf "${CEF_TAR}" "${LIBPATH}/CEF"
-	elif [ "$PLATFORM" = "mac" ] ; then
-		tar -cf "${CEF_TAR}" "${LIBPATH}/Chromium Embedded Framework.framework"
 	fi
 
 	# Compress the packages
@@ -111,7 +106,7 @@ for PLATFORM in `find lib/ -mindepth 1 -maxdepth 1 -type d` ; do
 done
 
 # Package up the includes
-OPENSSL_HDR_TAR="${PACKAGE_DIR}/OpenSSL-${OPENSSL_VERSION}-All-Universal-Headers.tar"
+OPENSSL_HDR_TAR="${PACKAGE_DIR}/OpenSSL-${OpenSSL_VERSION}-All-Universal-Headers.tar"
 ICU_HDR_TAR="${PACKAGE_DIR}/ICU-${ICU_VERSION}-All-Universal-Headers.tar"
 tar -cf "${OPENSSL_HDR_TAR}" include/openssl/*.h
 tar -cf "${ICU_HDR_TAR}" include/layout/*.h include/unicode/*.h

@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -49,6 +49,7 @@
 #include "uuid.h"
 
 #include "libscript/script.h"
+#include "libscript/script-auto.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -168,30 +169,59 @@ bool MCEngineLookupResourcePathForModule(MCScriptModuleRef p_module, MCStringRef
 
 void MCEngineLoadExtensionFromData(MCExecContext& ctxt, MCDataRef p_extension_data, MCStringRef p_resource_path)
 {
-    MCStreamRef t_stream;
-    /* UNCHECKED */ MCMemoryInputStreamCreate(MCDataGetBytePtr(p_extension_data), MCDataGetLength(p_extension_data), t_stream);
-    
-    MCScriptModuleRef t_module;
-    if (!MCScriptCreateModuleFromStream(t_stream, t_module))
+    MCAutoScriptModuleRef t_module;
+    if (!MCScriptCreateModuleFromData(p_extension_data, &t_module))
     {
         MCAutoErrorRef t_error;
         if (MCErrorCatch(Out(t_error)))
             ctxt . SetTheResultToValue(MCErrorGetMessage(In(t_error)));
         else
             ctxt . SetTheResultToStaticCString("failed to load module");
-        MCValueRelease(t_stream);
         return;
     }
     
-    MCValueRelease(t_stream);
-    
-    MCEngineAddExtensionFromModule(t_module);
+    MCEngineAddExtensionFromModule(*t_module);
     if (p_resource_path != nil)
-        MCEngineAddResourcePathForModule(t_module, p_resource_path);
-    
-    MCScriptReleaseModule(t_module);
+        MCEngineAddResourcePathForModule(*t_module, p_resource_path);
     
     return;
+}
+
+// This is the callback given to libscript so that it can resolve the absolute
+// path of native code libraries used by foreign handlers in the module. At
+// the moment we use the resources path of the module, however it will need to be
+// changed to a separate location at some point with explicit declaration so that
+// iOS linkage and Android placement issues can be resolved.
+//
+// Currently it expects:
+//   <resources>
+//     code/
+//       mac/<name>.dylib
+//       linux-x86/<name>.so
+//       linux-x86_64/<name>.so
+//       win-x86/<name>.dll
+//
+static bool MCEngineResolveSharedLibrary(MCScriptModuleRef p_module, MCStringRef p_name, MCStringRef& r_path)
+{
+    // If the module has no resource path, then it has no code.
+    MCAutoStringRef t_resource_path;
+    if (!MCEngineLookupResourcePathForModule(p_module, Out(t_resource_path)))
+        return false;
+    
+    if (MCStringIsEmpty(*t_resource_path))
+        return false;
+    
+#if defined(_MACOSX)
+    return MCStringFormat(r_path, "%@/code/mac/%@.dylib", *t_resource_path, p_name);
+#elif defined(_LINUX) && defined(__32_BIT__)
+    return MCStringFormat(r_path, "%@/code/linux-x86/%@.so", *t_resource_path, p_name);
+#elif defined(_LINUX) && defined(__64_BIT__)
+    return MCStringFormat(r_path, "%@/code/linux-x86_64/%@.so", *t_resource_path, p_name);
+#elif defined(_WINDOWS)
+    return MCStringFormat(r_path, "%@/code/win-x86/%@.dll", *t_resource_path, p_name);
+#else
+    return false;
+#endif
 }
 
 void MCEngineExecLoadExtension(MCExecContext& ctxt, MCStringRef p_filename, MCStringRef p_resource_path)
@@ -206,6 +236,10 @@ void MCEngineExecLoadExtension(MCExecContext& ctxt, MCStringRef p_filename, MCSt
     if (!MCS_loadbinaryfile(*t_resolved_filename, &t_data))
         return;
     
+    // Make sure we set the shared library callback - this should be done in
+    // module init for 'extension' when we have such a mechanism.
+    MCScriptSetResolveSharedLibraryCallback(MCEngineResolveSharedLibrary);
+    
     MCEngineLoadExtensionFromData(ctxt, *t_data, p_resource_path);
  }
 
@@ -217,6 +251,14 @@ void MCEngineExecUnloadExtension(MCExecContext& ctxt, MCStringRef p_module_name)
     for(MCLoadedExtension *t_previous = nil, *t_ext = MCextensions; t_ext != nil; t_previous = t_ext, t_ext = t_ext -> next)
         if (MCNameIsEqualTo(t_ext -> module_name, *t_name))
         {
+			// If the retain count of the module is not 1, then it can't be
+			// unloaded.
+			if (MCScriptGetRetainCountOfModule(t_ext -> module) != 1)
+			{
+				ctxt . SetTheResultToCString("module in use");
+				return;
+			}
+			
             if (t_ext -> instance != nil)
                 MCScriptReleaseInstance(t_ext -> instance);
             MCScriptReleaseModule(t_ext -> module);
@@ -230,8 +272,11 @@ void MCEngineExecUnloadExtension(MCExecContext& ctxt, MCStringRef p_module_name)
             
             MCextensionschanged = true;
             
-            break;
+			return;
         }
+	
+	// If we get here the module was not found.
+	ctxt . SetTheResultToCString("module not loaded");
 }
 
 void MCEngineGetLoadedExtensions(MCExecContext& ctxt, MCProperListRef& r_list)
@@ -288,9 +333,10 @@ Exec_stat MCEngineHandleLibraryMessage(MCNameRef p_message, MCParameter *p_param
     t_param = p_parameters;
     for(uindex_t i = 0; i < t_arg_count && t_success; i++)
     {
-        // Wrong number of parameters error.
+        // Too few parameters error.
         if (t_param == nil)
         {
+			MCECptr -> LegacyThrow(EE_INVOKE_TOOFEWARGS);
             t_success = false;
             break;
         }
@@ -328,12 +374,19 @@ Exec_stat MCEngineHandleLibraryMessage(MCNameRef p_message, MCParameter *p_param
         
         t_param = t_param -> getnext();
     }
-    
+	
+	// Too many parameters error.
+	if (t_param != nil)
+	{
+		MCECptr -> LegacyThrow(EE_INVOKE_TOOMANYARGS);
+		t_success = false;
+	}
+	
     MCValueRef t_result;
     t_result = nil;
-    if (MCScriptCallHandlerOfInstance(t_ext -> instance, p_message, t_arguments . Ptr(), t_arguments . Size(), t_result))
+    if (t_success &&
+        MCScriptCallHandlerOfInstance(t_ext -> instance, p_message, t_arguments . Ptr(), t_arguments . Size(), t_result))
     {
-        MCParameter *t_param;
         t_param = p_parameters;
         for(uindex_t i = 0; i < t_arg_count && t_success; i++)
         {
@@ -379,7 +432,11 @@ Exec_stat MCEngineHandleLibraryMessage(MCNameRef p_message, MCParameter *p_param
     // If we failed, then catch the error and create a suitable MCerror unwinding.
     if (t_success)
         return ES_NORMAL;
-    
+	
+	// If the exec context is already in error, use that.
+	if (MCECptr -> HasError())
+		return ES_ERROR;
+	
     return MCExtensionCatchError(*MCECptr);
 }
 
@@ -644,12 +701,12 @@ bool MCExtensionTryToConvertFromScriptType(MCExecContext& ctxt, MCTypeInfoRef p_
         if (!__script_try_to_convert_to_list(ctxt, x_value, r_converted))
             return false;
     }
-    else if (MCTypeInfoIsRecord(t_resolved_type . named_type))
+    else if (MCTypeInfoIsRecord(t_resolved_type . type))
     {
         if (!__script_try_to_convert_to_record(ctxt, t_resolved_type . named_type, x_value, r_converted))
             return false;
     }
-    else if (MCTypeInfoIsForeign(t_resolved_type . named_type))
+    else if (MCTypeInfoIsForeign(t_resolved_type . type))
     {
         if (!__script_try_to_convert_to_foreign(ctxt, t_resolved_type . named_type, x_value, r_converted))
             return false;

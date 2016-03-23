@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -35,8 +35,14 @@ typedef MCScriptInstance *MCScriptInstanceRef;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+typedef bool (*MCScriptResolveSharedLibraryCallback)(MCScriptModuleRef module, MCStringRef name, MCStringRef& r_path);
+
 bool MCScriptInitialize(void);
 void MCScriptFinalize(void);
+
+void MCScriptSetResolveSharedLibraryCallback(MCScriptResolveSharedLibraryCallback callback);
+
+bool MCScriptResolveSharedLibrary(MCScriptModuleRef module, MCStringRef name, MCStringRef& r_path);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -156,6 +162,9 @@ bool MCScriptUnloadPackage(MCScriptPackageRef package);
 // Load a module from a stream.
 bool MCScriptCreateModuleFromStream(MCStreamRef stream, MCScriptModuleRef& r_module);
 
+// Load a module from a blob
+MC_DLLEXPORT bool MCScriptCreateModuleFromData(MCDataRef data, MCScriptModuleRef & r_module);
+
 // Lookup the module with the given name. Returns false if no such module exists.
 bool MCScriptLookupModule(MCNameRef name, MCScriptModuleRef& r_module);
 
@@ -201,6 +210,9 @@ MCScriptModuleRef MCScriptRetainModule(MCScriptModuleRef module);
 
 // Release a module.
 void MCScriptReleaseModule(MCScriptModuleRef module);
+
+// Return the reference count of the given module.
+uint32_t MCScriptGetRetainCountOfModule(MCScriptModuleRef module);
 
 // Gets the module ptr for the most recent LCB stack frame on the current thread's stack.
 MCScriptModuleRef MCScriptGetCurrentModule(void);
@@ -295,11 +307,15 @@ void MCScriptAddValueToModule(MCScriptModuleBuilderRef builder, MCValueRef value
 void MCScriptBeginListValueInModule(MCScriptModuleBuilderRef builder);
 void MCScriptContinueListValueInModule(MCScriptModuleBuilderRef builder, uindex_t index);
 void MCScriptEndListValueInModule(MCScriptModuleBuilderRef builder, uindex_t& r_index);
+void MCScriptBeginArrayValueInModule(MCScriptModuleBuilderRef builder);
+void MCScriptContinueArrayValueInModule(MCScriptModuleBuilderRef builder, uindex_t key_index, uindex_t value_index);
+void MCScriptEndArrayValueInModule(MCScriptModuleBuilderRef builder, uindex_t& r_index);
 
 void MCScriptAddDefinedTypeToModule(MCScriptModuleBuilderRef builder, uindex_t index, uindex_t& r_type);
 void MCScriptAddForeignTypeToModule(MCScriptModuleBuilderRef builder, MCStringRef p_binding, uindex_t& r_type);
 void MCScriptAddOptionalTypeToModule(MCScriptModuleBuilderRef builder, uindex_t type, uindex_t& r_new_type);
 void MCScriptBeginHandlerTypeInModule(MCScriptModuleBuilderRef builder, uindex_t return_type);
+void MCScriptBeginForeignHandlerTypeInModule(MCScriptModuleBuilderRef builder, uindex_t return_type);
 void MCScriptContinueHandlerTypeInModule(MCScriptModuleBuilderRef builder, MCScriptHandlerTypeParameterMode mode, MCNameRef name, uindex_t type);
 void MCScriptEndHandlerTypeInModule(MCScriptModuleBuilderRef builder, uindex_t& r_new_type);
 void MCScriptBeginRecordTypeInModule(MCScriptModuleBuilderRef builder, uindex_t base_type);
@@ -349,6 +365,9 @@ void MCScriptEmitAssignInModule(MCScriptModuleBuilderRef builder, uindex_t dst_r
 void MCScriptEmitBeginAssignListInModule(MCScriptModuleBuilderRef builder, uindex_t reg);
 void MCScriptEmitContinueAssignListInModule(MCScriptModuleBuilderRef builder, uindex_t reg);
 void MCScriptEmitEndAssignListInModule(MCScriptModuleBuilderRef builder);
+void MCScriptEmitBeginAssignArrayInModule(MCScriptModuleBuilderRef builder, uindex_t reg);
+void MCScriptEmitContinueAssignArrayInModule(MCScriptModuleBuilderRef builder, uindex_t reg);
+void MCScriptEmitEndAssignArrayInModule(MCScriptModuleBuilderRef builder);
 void MCScriptEmitReturnInModule(MCScriptModuleBuilderRef builder, uindex_t reg);
 void MCScriptEmitReturnUndefinedInModule(MCScriptModuleBuilderRef builder);
 void MCScriptBeginInvokeInModule(MCScriptModuleBuilderRef builder, uindex_t handler_index, uindex_t result_reg);

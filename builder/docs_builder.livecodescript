@@ -24,8 +24,9 @@ end errorShow
 
 command docsBuilderRun pEdition, pVersion
    set the itemdelimiter to "."
-   if item 1 of pVersion > 7 then
-      docsBuilderGenerateDocsNew
+   if item 1 of pVersion > 7 then   
+      start using stack (builderRepoFolder() & slash & "ide-support/revdocsparser.livecodescript")
+      docsBuilderGenerateDocsNew pEdition, pVersion
       exit docsBuilderRun
    end if
    
@@ -1907,96 +1908,248 @@ private function escape pString, pConvertLineEndings
    return (quote & pString & quote)
 end escape
 
-command docsBuilderGenerateDocsNew
+command docsBuilderGenerateDocsNew pEdition, pVersion   
    start using stack (builderRepoFolder() & slash & "ide-support" & slash & "revdocsparser.livecodescript")
-   builderLog "report", "Building guide into" && builderGuideFolder() & slash & "distributed_guide.js"
-   docsBuilderGenerateDistributedGuide
-   builderLog "report", "Building api into" && builderAPIFolder() & slash & "distributed_api.js"
-   docsBuilderGenerateDistributedAPI   
+   
+   -- Ensure we have downloaded and extracted all the mergExt data 
+   -- needed to build the docs for this edition
+   docsBuilderEnsureMergExt pEdition
+   
+   builderLog "report", "Building guide into" && builderGuideFolder(pEdition) & slash & "distributed_guide.js"
+   pathEnsure (builderGuideFolder(pEdition))
+   docsBuilderGenerateDistributedGuide pEdition
+   builderLog "report", "Building api into" && builderAPIFolder(pEdition) & slash & "distributed_api.js"
+   pathEnsure (builderAPIFolder(pEdition))
+   docsBuilderGenerateDistributedAPI pEdition
+   
+   docsBuilderGenerateZip pEdition, pVersion
+
    builderLog "report", "Built docs"
 end docsBuilderGenerateDocsNew
 
-/*
-command errorShow pError
-   builderLog "error", pError
-   throw pError
-end errorShow
-*/
-command docsBuilderGenerateDistributedGuide
-   local tGuideFolder
-   put builderIDEDocsFolder() & slash & "guides" into tGuideFolder
-   set the defaultfolder to tGuideFolder
+private function escape pString, pConvertLineEndings
+   replace "\" with "\\" in pString
+   replace quote with ("\" & quote) in pString
    
-   local tGuideData, tGuideName
-   set the itemdelimiter to "."
-   repeat for each line tFile in the files
-      if tFile begins with "."  then next repeat
-      docsBuilderProgressUpdate "", "Building guide" && tGuideFolder & slash & tFile
-      put item 1 to -2 of tFile into tGuideName
-      get url ("binfile:" & tGuideFolder & slash & tFile)
-      if it is not empty then
-         get textDecode(it, "utf-8")
-         replace "[toc]" with empty in it
-         put tab & "{" & CR & tab & escape("guide") & ":" & escape(tGuideName) & comma & CR & tab & escape("data") & ":" & escape(it, true) & CR & tab & "}," after tGuideData
-      end if
+   if pConvertLineEndings is true then
+      replace (numToChar(13) & CR) with (CR & numToChar(13)) in pString
+      replace (CR & numToChar(13)) with CR in pString
+   end if
+   replace CR with "\n" in pString
+   replace tab with "\t" in pString
+   return (quote & pString & quote)
+end escape
+
+private command addToList pElement, @xArray
+   local tCount
+   put the number of elements in xArray into tCount
+   put pElement into xArray[tCount + 1]
+end addToList
+
+private command addFolderToListIfExists pFolder, pThrowIfNot, @xArray
+   if there is a folder pFolder then
+      addToList pFolder, xArray
+      exit addFolderToListIfExists
+   end if
+   
+   if pThrowIfNot then
+      builderLog "error", "Expected docs folder" && pFolder && "doesn't exist"
+   else 
+      builderLog "message", "Folder" && pFolder && "doesn't exist"
+   end if
+end addFolderToListIfExists
+
+private function RepoIndyDocsFolder
+   return builderPrivateRepoFolder() & slash & "docs" & slash & "indy"
+end RepoIndyDocsFolder
+
+private function RepoBusinessDocsFolder
+   return builderPrivateRepoFolder() & slash & "docs" & slash & "business"
+end RepoBusinessDocsFolder
+
+private command docsBuilderGetGuideFolders pEdition, @xFolders
+   local tRepoGuides
+   put builderRepoFolder() & slash & "docs" & slash & "guides" into tRepoGuides
+   addFolderToListIfExists tRepoGuides, true, xFolders
+   
+   local tIDEGuides
+   put builderIDEDocsFolder() & slash & "guides" into tIDEGuides
+   addFolderToListIfExists tIDEGuides, true, xFolders
+   
+   if pEdition is not "community" then
+      local tIndyGuides
+      put RepoIndyDocsFolder() & slash & "guides" into tIndyGuides
+      addFolderToListIfExists tIndyGuides, false, xFolders
+   end if
+   
+   if pEdition is "business" then
+      local tBusinessGuides
+      put RepoBusinessDocsFolder() & slash & "guides" into tBusinessGuides
+      addFolderToListIfExists tBusinessGuides, false, xFolders
+   end if
+end docsBuilderGetGuideFolders
+
+private command docsBuilderAddMergExtFolders pEdition, @xFolders
+   local tDefaultFolder
+   put the defaultFolder into tDefaultFolder
+   
+   local tTargetFolder
+   put docsBuilderMergExtExtractedDocsFolder(pEdition) into tTargetFolder
+   set the defaultFolder to tTargetFolder
+   
+   repeat for each line tFolder in the folders
+      if tFolder is ".." then next repeat
+      addFolderToListIfExists tTargetFolder & slash & tFolder, true, xFolders
+   end repeat
+   
+   set the defaultFolder to tDefaultFolder
+end docsBuilderAddMergExtFolders
+
+private command docsBuilderGetAdditionalDictionaryFolders pEdition, @xFolders
+   docsBuilderEnsureMergExt "community"
+   docsBuilderAddMergExtFolders "community", xFolders
+   
+   if pEdition is not "community" then
+      docsBuilderEnsureMergExt "indy"
+      docsBuilderAddMergExtFolders "indy", xFolders
+   end if
+   
+   if pEdition is "business" then
+      docsBuilderEnsureMergExt "business"
+      docsBuilderAddMergExtFolders "business", xFolders
+   end if
+end docsBuilderGetAdditionalDictionaryFolders
+
+private command docsBuilderGetDictionaryFolders pEdition, @xFolders
+   local tCommunityDocs
+   put builderRepoFolder() & slash & "docs" into tCommunityDocs
+   addFolderToListIfExists tCommunityDocs, true, xFolders
+   
+   if pEdition is not "community" then
+      addFolderToListIfExists RepoIndyDocsFolder(), true, xFolders
+   end if
+   
+   if pEdition is "business" then
+      addFolderToListIfExists RepoBusinessDocsFolder(), false, xFolders
+   end if
+end docsBuilderGetDictionaryFolders
+
+command docsBuilderGenerateDistributedGuide pEdition
+   local tGuideFoldersA
+   docsBuilderGetGuideFolders pEdition, tGuideFoldersA
+   
+   local tGuideFoldersWithLocationA
+   repeat for each element tElement in tGuideFoldersA
+      local tGuideWithLocation
+      put tElement into tGuideWIthLocation["folder"]
+      # All these guides will be in the ide guide folder when installed
+      put "ide" into tGuideWithLocation["location"]
+      addToList tGuideWithLocation, tGuideFoldersWithLocationA
+   end repeat
+   
+   local tOrderedGuidesA, tOrderFolder
+   put builderIDEDocsFolder() & slash & "guides" into tOrderFolder
+   put revDocsOrderedGuideData(tGuideFoldersWithLocationA, tOrderFolder) into tOrderedGuidesA
+   
+   local tGuideData
+   repeat for each element tGuideA in tOrderedGuidesA
+      docsBuilderProgressUpdate "", "Building guide" && tGuideA["file"]
+      put tab & "{" after tGuideData
+      put return & revDocsFormatGuideDataAsJSON(tGuideA) after tGuideData
+      put return & tab & "}," after tGuideData
    end repeat
    delete the last char of tGuideData
-   put textEncode(tGuideData, "utf-8") into url ("binfile:" & builderGuideFolder() & slash & "distributed_guide.js")
+   put textEncode(tGuideData, "utf-8") into url ("binfile:" & builderGuideFolder(pEdition) & slash & "distributed_guide.js")
 end docsBuilderGenerateDistributedGuide
+
+private function docsFileGetUTF8Contents pPath, pConvertLineEndings
+   local tData, tText
+   put url ("binfile:" & pPath) into tData
+   put textDecode(tData, "utf-8") into tText
+   if pConvertLineEndings then
+      replace numToChar(13) & numToChar(10) with numToChar(10) in tText
+      replace numToChar(13) with numToChar(10) in tText
+   end if
+   return tText
+end docsFileGetUTF8Contents
+
+-- Find all lcdoc files in pFolder and add them to the list of docs 
+-- data in xLibraryA
+private command addToDictionaryFromFolder pFolder, @xLibraryA
+   local tDefaultFolder
+   put the defaultFolder into tDefaultFolder
+   
+   docsBuilderProgressUpdate "", "Building dictionary from folder" && pFolder
+   set the defaultfolder to pFolder
+   get the files
+   filter it with "*.lcdoc"
+   repeat for each line tFile in it
+      local tText, tParsedA
+      wait 0 with messages
+      put docsFileGetUTF8Contents(pFolder & slash & tFile, true) into tText
+      put revDocsParseDocText(tText) into tParsedA
+      repeat for each element tDoc in tParsedA["doc"]
+         -- TODO: Work out why something empty is returned
+         if tDoc["display name"] is empty then next repeat
+         addToList tDoc, xLibraryA
+      end repeat
+   end repeat
+   set the defaultFolder to tDefaultFolder
+end addToDictionaryFromFolder
 
 /*
 Summary: Parses the current directory into a library array.
 
-pRootDir (string): The path to the root directory of the dictionary
+pRootDirs (array): An array of paths to the relevant root folders of the 
+dictionary.
 */
 
-function docsBuilderParseDictionaryToLibraryArray pRootDir
-   if there is not a folder pRootDir then
-      return empty
-   end if
+command docsBuilderParseDictionaryToLibraryArray pRootDirs, @xDocsA
+   local tDefaultFolder
+   put the defaultFolder into tDefaultFolder
    
    # Get the list of canonical glossary entries
    local tGlossaryA
-   put revDocsCollectGlossarySynonyms(pRootDir) into tGlossaryA
+   repeat for each element tRootDir in pRootDirs
+      union tGlossaryA with revDocsCollectGlossarySynonyms(tRootDir)
+   end repeat
    
-   local tDictionaryRoot, tGlossaryRoot
-   put pRootDir & slash & "dictionary" into tDictionaryRoot
-   put pRootDir & slash & "glossary" into tGlossaryRoot
-   
-   local tCount
-   put 1 into tCount
-   
-   local tText, tLibraryA, tParsedA
-   
-   repeat for each item tRoot in (tDictionaryRoot & "," & tGlossaryRoot)
-      set the defaultfolder to tRoot
-      repeat for each line tLine in the folders
-         if tLine is ".." then next repeat
-         docsBuilderProgressUpdate "", "Building dictionary from folder" && tRoot & slash & tLine
-         set the defaultfolder to tRoot & slash & tLine
-         get the files
-         filter it with "*.lcdoc"
-         repeat for each line tFile in it
-            wait 0 with messages
-            put textDecode(url ("binfile:" & tRoot & slash & tLine & slash & tFile), "utf-8") into tText
-            put revDocsParseDocText(tText) into tParsedA
-            put tParsedA["doc"][1] into tLibraryA[tCount]
-            add 1 to tCount
+   repeat for each element tRootDir in pRootDirs      
+      local tDictionaryRoot, tGlossaryRoot
+      put tRootDir & slash & "dictionary" into tDictionaryRoot
+      put tRootDir & slash & "glossary" into tGlossaryRoot
+      
+      repeat for each item tRoot in (tDictionaryRoot & "," & tGlossaryRoot)
+         set the defaultfolder to tRoot
+         repeat for each line tLine in the folders
+            if tLine is ".." then next repeat
+            addToDictionaryFromFolder tRoot & slash & tLine, xDocsA
          end repeat
       end repeat
    end repeat
-   return tLibraryA
+   set the defaultFolder to tDefaultFolder
 end docsBuilderParseDictionaryToLibraryArray
 
-function docsBuilderParseDictionary pLibraryName, pAuthor, pRootDir, pRecursive
+command docsBuilderParseAdditionalFoldersToLibraryArray pDirs, @xDocsA
+   local tFolder
+   repeat for each element tFolder in pDirs      
+      addToDictionaryFromFolder tFolder, xDocsA
+   end repeat
+end docsBuilderParseAdditionalFoldersToLibraryArray
+
+function docsBuilderParseDictionary pLibraryName, pAuthor, pRootDirsA, pAdditionalDirsA, pRecursive
    local tLibraryA
-   if there is a folder pRootDir then
-      put pLibraryName into tLibraryA["name"]
-      put pAuthor into tLibraryA["author"]
-      put "dictionary" into tLibraryA["type"]
-      
-      put docsBuilderParseDictionaryToLibraryArray(pRootDir) into tLibraryA["doc"]
-   end if
+   
+   put revDocsModifyForUrl(pLibraryName) into tLibraryA["name"]
+   put pLibraryName into tLibraryA["display name"]
+   put pAuthor into tLibraryA["author"]
+   put "dictionary" into tLibraryA["type"]
+   
+   -- Special case for the dictionary / glossary data extraction
+   docsBuilderParseDictionaryToLibraryArray pRootDirsA, tLibraryA["doc"]
+   
+   -- Add any additional docs to the dictionary
+   docsBuilderParseAdditionalFoldersToLibraryArray pAdditionalDirsA, tLibraryA["doc"]
    
    if tLibraryA["doc"] is not empty then
       return tLibraryA
@@ -2004,25 +2157,23 @@ function docsBuilderParseDictionary pLibraryName, pAuthor, pRootDir, pRecursive
    
    return empty
 end docsBuilderParseDictionary
-   
-end docsBuilderParseScriptDirectory
 
-command docsBuilderGenerateDistributedAPI
-   local tList, tDictionaryFolder
-   set the itemdelimiter to slash
-   put builderDocsFolder() into tDictionaryFolder
-   set the itemdelimiter to comma
-   if there is not a folder tDictionaryFolder then
-      answer "No dictionary data found at" && tDictionaryFolder
-   end if
-   put "LiveCode Script," & tDictionaryFolder & ",dictionary" into tList
+command docsBuilderGenerateDistributedAPI pEdition
+   local tDictionaryFolders, tAdditionalFolders
+   docsBuilderGetDictionaryFolders pEdition, tDictionaryFolders
+   docsBuilderGetAdditionalDictionaryFolders pEdition, tAdditionalFolders
    
-   local tLibrariesA, tCount
-   put 1 into tCount
-   repeat for each line tLine in tList
-      put docsBuilderParseDictionary(item 1 of tLine, "LiveCode", item 2 of tLine, false) into tLibrariesA[tCount]
-      add 1 to tCount
-   end repeat
+   local tLibrariesA
+   
+   local tLCSDictionaryA
+   put docsBuilderParseDictionary("LiveCode Script", "LiveCode", tDictionaryFolders, tAdditionalFolders, false) into tLCSDictionaryA
+   
+   if tLCSDictionaryA is empty then
+      builderLog "error", "Couldn't parse script dictionary data for" && pEdition
+      exit docsBuilderGenerateDistributedAPI
+   end if
+   
+   addToList tLCSDictionaryA, tLibrariesA
    
    local tModuleList, tModularA, tModularCount, tBlocksA, tParsedA
    put 1 into tModularCount
@@ -2041,25 +2192,190 @@ command docsBuilderGenerateDistributedAPI
       end if
    end repeat
    
+   local tLCBDictionaryA
    put 1 into tModularCount
    repeat for each element tElement in tModularA
       put revDocsParseDocText(tElement) into tParsedA
       repeat for each key tEntry in tParsedA["doc"]
-         put tParsedA["doc"][tEntry] into tLibrariesA[tCount]["doc"][tModularCount]
+         put tParsedA["doc"][tEntry] into tLCBDictionaryA["doc"][tModularCount]
          add 1 to tModularCount
       end repeat
       put empty into tParsedA
    end repeat
-   put "LiveCode Builder" into tLibrariesA[tCount]["name"]
-   put "LiveCode" into tLibrariesA[tCount]["author"]
-   put "dictionary" into tLibrariesA[tCount]["type"]
-   add 1 to tCount
+   put "LiveCode Builder" into tLCBDictionaryA["display name"]
+   put revDocsModifyForUrl("LiveCode Builder") into tLCBDictionaryA["name"]
+   put "LiveCode" into tLCBDictionaryA["author"]
+   put "dictionary" into tLCBDictionaryA["type"]
+   
+   if tLCBDictionaryA is empty then
+      builderLog "error", "Couldn't parse builder dictionary data for" && pEdition
+      exit docsBuilderGenerateDistributedAPI
+   end if
+   
+   addToList tLCBDictionaryA, tLibrariesA
    
    local tJSON
    put revDocsFormatLibrariesArrayAsJSON(tLibrariesA) into tJSON
    
-   put textEncode(tJSON, "utf-8") into url ("binfile:" & builderAPIFolder() & slash & "distributed_api.js")
+   docsBuilderPopulateDatabase pEdition, tLibrariesA
+   
+   put textEncode(tJSON, "utf-8") into url ("binfile:" & builderAPIFolder(pEdition) & slash & "distributed_api.js")
 end docsBuilderGenerateDistributedAPI
+
+on docsBuilderPopulateDatabase pEdition, pLibrariesA
+   -- Ensure any existing api database is not updated
+   local tExistingAPI
+   put revDocsAPIDatabasePath(builderAPIFolder(pEdition)) into tExistingAPI
+   if there is a file tExistingAPI then
+      delete file tExistingAPI
+   end if
+   
+   local tConnection
+   revDocsOpenAPIDatabase builderAPIFolder(pEdition)
+   
+   put the result into tConnection
+   if tConnection is not a number then
+      builderLog "error", the result
+      exit docsBuilderPopulateDatabase
+   end if
+   
+   revExecuteSQL tConnection,"BEGIN TRANSACTION"
+   
+   repeat for each key tKey in pLibrariesA   	  
+      builderLog "message", "adding library" && pLibrariesA[tKey]["display name"] && "to docs database"
+      revDocsUpdateDatabase tConnection, pLibrariesA[tKey]
+      if the result is not empty then
+         builderLog "error", the result
+         exit docsBuilderPopulateDatabase
+      end if
+   end repeat
+   
+   revExecuteSQL tConnection,"COMMIT"
+   revCloseDatabase tConnection
+end docsBuilderPopulateDatabase
+
+private command docsBuilderGenerateZip pEdition, pVersion
+   -- Ensure edition string is in titlecase
+   put toLower(pEdition) into pEdition
+   put toUpper(char 1 of pEdition) into char 1 of pEdition
+   put replaceText(pVersion, "[-,\.]", "_") into pVersion
+
+   local tInputs, tZipPath
+   
+   -- Make a list of folders that need to make it into the archived docs
+   -- FIXME This has to be kept in sync with the installer manifest, probably
+   docsBuilderGetGuideFolders pEdition, tInputs
+   put builderIDEDocsFolder() & slash & "html_viewer" into tInputs[the number of elements in tInputs + 1]
+   
+   -- Figure out a filename for the docs archive
+   put builderOutputFolder() & slash & \
+         merge("LiveCode[[pEdition]]Docs-[[pVersion]].zip") into tZipPath
+   
+   -- Use the "zip" command to store the data
+   local tDocItem, tCmd, tCmdOutput
+   repeat for each element tDocItem in tInputs
+      builderLog "message", merge("Archiving [[tDocItem]]")
+      put merge("cd $(dirname '[[tDocItem]]') && zip -r '[[tZipPath]]' $(basename '[[tDocItem]]')") into tCmd
+      put shell(tCmd) into tCmdOutput
+      if the result is not 0 then
+         builderLog "error", "Archiving failed"
+         exit docsBuilderGenerateZip
+      end if
+   end repeat
+
+   builderLog "message", merge("Generated [[tZipPath]]")
+end docsBuilderGenerateZip
+
+function docsBuilderMergExtZipPath pEdition
+   -- Ensure edition has upper case first letter
+   put toUpper(char 1 of pEdition) & char 2 to -1 of pEdition into pEdition
+   return "https://downloads.livecode.com/mergext/mergExt_" & pEdition & ".zip"
+end docsBuilderMergExtZipPath
+
+function docsBuilderMergExtUnzipFolder
+   local tUnzipDirectory
+   put builderWorkFolder() & slash & "mergext" into tUnzipDirectory
+   pathEnsure tUnzipDirectory
+   return tUnzipDirectory
+end docsBuilderMergExtUnzipFolder
+
+function docsBuilderMergExtUnzipPath pEdition
+   put toUpper(char 1 of pEdition) & char 2 to -1 of pEdition into pEdition
+   return docsBuilderMergExtUnzipFolder() & slash & "mergExt_" & pEdition & ".zip"
+end docsBuilderMergExtUnzipPath
+
+function docsBuilderMergExtExtractedDocsFolder pEdition
+   local tExtractFolder
+   put docsBuilderMergExtUnzipFolder() & slash & pEdition into tExtractFolder
+   return tExtractFolder
+end docsBuilderMergExtExtractedDocsFolder
+
+command docsBuilderEnsureMergExt pEdition
+   local tDownloaded
+   put docsBuilderMergExtUnzipPath(pEdition) into tDownloaded
+   
+   if there is not a file tDownloaded then
+      docsBuilderDownloadMergExt pEdition
+   end if
+   
+   local tExtracted
+   put docsBuilderMergExtExtractedDocsFolder(pEdition) into tExtracted
+   if there is not a folder tExtracted then
+      docsBuilderExtractMergExt pEdition
+   end if
+end docsBuilderEnsureMergExt
+
+command docsBuilderDownloadMergExt pEdition
+   local tSource, tArchive, tCommand
+   put docsBuilderMergExtZipPath(pEdition) into tSource
+   put docsBuilderMergExtUnzipPath(pEdition) into tArchive
+   builderLog "message", "downloading mergext from" && tSource && "to" && tArchive
+   
+   -- Shell out to curl because LiveCode server has some issues with
+   -- making HTTPS on Linux (see bug 16940)
+   put merge("curl -o '[[tArchive]]' '[[tSource]]'") into tCommand
+   get shell(tCommand)
+      
+   if the result is not empty or there is not a file tArchive then
+      builderLog "error", "failed to download from" && tSource
+      exit docsBuilderDownloadMergExt
+   end if
+end docsBuilderDownloadMergExt
+
+command docsBuilderExtractMergExt pEdition
+   local tArchive
+   put docsBuilderMergExtUnzipPath(pEdition) into tArchive
+
+   -- open the archive   
+   revZipOpenArchive tArchive, "read"
+   if the result begins with "ziperr" then
+      builderLog "error", "failed to open archive" && tArchive & return & the result
+      exit docsBuilderExtractMergExt
+   end if
+   	
+   -- enumerate all lcdoc files
+   local tItems
+   put revZipEnumerateItems(tArchive) into tItems
+   filter tItems with "*.lcdoc"
+   
+   local tTargetFolder, tBaseFolder
+   put docsBuilderMergExtExtractedDocsFolder(pEdition) into tBaseFolder
+   pathEnsure tBaseFolder
+   set the itemDelimiter to slash
+   
+   -- Extract all lcdoc files to the edition-specific folder
+   repeat for each line tDoc in tItems
+      put item 1 to -2 of (tBaseFolder & slash & tDoc) into tTargetFolder
+      pathEnsure tTargetFolder
+      builderLog "message", "extracting mergext docs to" && tTargetFolder
+      revZipExtractItemToFile tArchive, tDoc, tBaseFolder & slash & tDoc
+      if the result begins with "ziperr" then
+         builderLog "error", "failed to extract docs to" && tTargetFolder & return & the result
+         exit docsBuilderExtractMergExt
+      end if
+   end repeat
+end docsBuilderExtractMergExt
+
 
 --- LEGACY
 

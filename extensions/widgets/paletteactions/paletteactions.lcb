@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2015 Runtime Revolution Ltd.
+Copyright (C) 2015-2016 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -15,7 +15,7 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
-/*
+/**
 Palette header bar widget.
 */
 
@@ -25,10 +25,12 @@ use com.livecode.canvas
 use com.livecode.widget
 use com.livecode.engine
 use com.livecode.library.iconSVG
+use com.livecode.library.widgetutils
 
 metadata title is "Palette Actions"
 metadata author is "LiveCode"
 metadata version is "1.0.0"
+metadata userVisible is "false"
 
 property navNames		get getNavNames			set setNavNames
 property navIcons		get getNavIcons			set setNavIcons
@@ -48,6 +50,7 @@ property actionData		get getActionData		set setActionData
 
 property isHeader		get mIsHeader			set mIsHeader
 property navBarRight	get getNavBarRight
+property formattedWidth get mFormattedWidth
 
 private variable mNavData 			as List
 private variable mSelectedNavItem 	as Integer
@@ -69,6 +72,8 @@ private variable mIsHeader 			as Boolean
 private variable mHoverTab          as Boolean
 private variable mHoverIndex        as Integer
 
+private variable mFormattedWidth as Real
+
 constant kBlack is [0,0,0]
 constant kNavColor is [0,0,0,0.5]
 constant kWhite is [1,1,1]
@@ -85,6 +90,16 @@ constant kDefaultActionMenu is ""
 constant kTabPaddingRatio is 0.1
 constant kPaddingRatio is 0.25
 
+constant kPaints is { \
+	"background": [[[0,0,0], 0.05]], \
+	"line": ["border"], \
+	"title": ["foreground"], \
+	"selected tab": ["background"], \
+	"nav": ["foreground"], \
+	"hover nav": ["highlight"], \
+	"disabled": ["foreground", ["background", 0.25]] \
+}
+
 public handler OnCreate()
 
 	variable tAction as Array
@@ -99,7 +114,7 @@ public handler OnCreate()
 		put tCount formatted as string into tKey
 		put the empty array into tMenuItem[tKey]
 		put "Choice" && tKey into tMenuItem[tKey]["label"]
-		put false into tMenuItem[tKey]["checked"]
+		put "false" into tMenuItem[tKey]["checked"]
 		put "" into tMenuItem[tKey]["name"]
 		put "" into tMenuItem[tKey]["menu"]
 		put tMenuItem[tKey] into tAction["menu"][tKey]
@@ -121,8 +136,6 @@ public handler OnCreate()
 		push tNav onto mNavData
 	end repeat
 
-	put 10 into mSize
-
 	put 1 into mSelectedNavItem
 
 	put false into mShowNavIcons
@@ -139,6 +152,7 @@ public handler OnCreate()
 
     put 0 into mHoverIndex
     put false into mHoverTab
+	 put 0 into mFormattedWidth
 end handler
 
 public handler OnSave(out rProperties as Array)
@@ -159,12 +173,16 @@ end handler
 public handler OnPaint()
 
 	if mRecalculate is true then
-		recalculate()
+		recalculateRects()
+	end if
+
+	-- draw the background
+	if mIsHeader and the number of elements in mNavData > 0 then
+		fillPathWithPaints(getPath("background"), "background")
 	end if
 
 	-- draw the line above / below
-	set the paint of this canvas to getPaint("line")
-	stroke getPath("line") on this canvas
+	strokePathWithPaints(getPath("line"), "line")
 
 	variable tCount as Integer
 	if the number of elements in mNavData > 0 then
@@ -199,7 +217,7 @@ public handler OnClick()
 				
 				popup menu tMenuString at the mouse position
 				put the result into tResult
-				if tResult is defined then
+				if tResult is not nothing then
 					post "menuPick" with [tResult]
 				end if
 			else
@@ -213,8 +231,12 @@ public handler OnMouseMove()
 	updateHover()
 end handler
 
+public handler OnMouseLeave()
+	clearHover()
+end handler
+
 public handler OnGeometryChanged()
-	put true into mRecalculate
+	recalculateRects()
 end handler
 
 private handler updateHover()
@@ -224,10 +246,8 @@ private handler updateHover()
 	variable tTab as Boolean
 	variable tIndex as Integer
 	if positionToRect(tPoint, tTab, tIndex) is false then
-		put 0 into tIndex
-        put false into tTab
-        // AL-2015-04-24: [[ Bug 15286 ]] Empty tooltip of palette actions if nothing is being hovered over.
-        set property "tooltip" of my script object to ""
+		clearHover()
+		return
     end if
 
     if tIndex is not mHoverIndex or tTab is not mHoverTab then
@@ -243,6 +263,13 @@ private handler updateHover()
         put tTab into mHoverTab
         redraw all
     end if
+end handler
+
+private handler clearHover()
+	put 0 into mHoverIndex
+	put false into mHoverTab
+	set property "tooltip" of my script object to ""
+	redraw all
 end handler
 
 private handler positionToRect(in pPoint as Point, out rTab as Boolean, out rIndex as Integer) returns Boolean
@@ -278,6 +305,53 @@ end handler
 --
 --------------------------------------------------------------------------------
 
+private handler applyPaint(in pPaintInfo as List)
+	set the paint of this canvas to pPaintInfo[1]
+	set the opacity of this canvas to pPaintInfo[2]
+end handler
+
+private handler strokePathWithPaints(in pPath as Path, in pClass as String)
+	variable tPaint as List
+	repeat for each element tPaint in getPaints(pClass)
+		applyPaint(tPaint)
+		stroke pPath on this canvas
+	end repeat
+end handler
+
+private handler fillPathWithPaints(in pPath as Path, in pClass as String)
+	variable tPaint as List
+	repeat for each element tPaint in getPaints(pClass)
+		applyPaint(tPaint)
+		fill pPath on this canvas
+	end repeat
+end handler
+
+private handler fillSvgPathWithPaints(in pSvgPath as String, \
+		in pTargetRect as Rectangle, in pClass as String)
+	variable tPath as Path
+	put path pSvgPath into tPath
+
+	variable tRect as Rectangle
+	variable tPadding as Real
+	put my height * kPaddingRatio into tPadding
+	put rectangle [the left of pTargetRect + tPadding, the top of pTargetRect, \
+			the right of pTargetRect - tPadding, the bottom of pTargetRect] \
+			into tRect
+
+	constrainPathToRect(tRect, tPath)
+
+	fillPathWithPaints(tPath, pClass)
+end handler
+
+private handler fillTextWithPaints(in pText as String, \
+		in pTargetRect as Rectangle, in pClass as String)
+	variable tPaint as List
+	repeat for each element tPaint in getPaints(pClass)
+		applyPaint(tPaint)
+		fill text pText at center of pTargetRect on this canvas
+	end repeat
+end handler
+
 private handler drawTab(in pIndex as Integer)
 	variable tTab as Array
 	put element pIndex of mNavData into tTab
@@ -296,27 +370,25 @@ private handler drawTab(in pIndex as Integer)
 		close path on tPathClosed
 
 		// Draw background
-		set the paint of this canvas to getPaint("selected tab")
-		fill tPathClosed on this canvas
+		fillPathWithPaints(tPathClosed, "selected tab")
 
 		// Draw 3 sided tab stroke
-		set the paint of this canvas to getPaint("line")
-		stroke tPath on this canvas
-
-		set the paint of this canvas to getPaint("selected nav")
-	else
-		set the paint of this canvas to getPaint("nav")
+		strokePathWithPaints(tPath, "line")
 	end if
 
-	if mHoverIndex is pIndex and mHoverTab is true then
-		set the paint of this canvas to getPaint("selected nav")
+	variable tMode as String
+
+	if (mHoverIndex is pIndex and mHoverTab is true) then
+		put "hover nav" into tMode
+	else
+		put "nav" into tMode
 	end if
 
 	if mShowNavIcons then
-		paintIcon(iconSVGPathFromName(tTab["icon"]), tRect, false)
+		fillSvgPathWithPaints(iconSVGPathFromName(tTab["icon"]), tRect, tMode)
 	else
-		set the font of this canvas to getFont("label")
-		fill text tTab["label"] at center of tRect on this canvas
+		set the font of this canvas to my font
+		fillTextWithPaints(tTab["label"], tRect, tMode)
 	end if
 end handler
 
@@ -327,32 +399,51 @@ private handler drawAction(in pIndex as Integer)
 	variable tRect as Rectangle
 	put element pIndex of mActionRects into tRect
 
-	//log tAction
+	variable tMode as String
 
 	if tAction["enabled"] parsed as boolean is false then
-		set the paint of this canvas to getPaint("disabled")
+		put "disabled" into tMode
 	else if mHoverIndex is pIndex and mHoverTab is false then
-		set the paint of this canvas to getPaint("selected nav")
+		put "hover nav" into tMode
 	else
-		set the paint of this canvas to getPaint("nav")
+		put "nav" into tMode
 	end if
 
 	if mShowActionIcons then
-		paintIcon(iconSVGPathFromName(tAction["icon"]), tRect, false)
+		fillSvgPathWithPaints(iconSVGPathFromName(tAction["icon"]), tRect, tMode)
 	else
-		set the font of this canvas to getFont("label")
-		fill text tAction["label"] at center of tRect on this canvas
+		set the font of this canvas to my font
+		fillTextWithPaints(tAction["label"], tRect, tMode)
 	end if
 end handler
 
-private handler recalculate()
-	calculateTabRects()
-	calculateActionRects()
+-- The padding to add if there are actions and tabs.
+-- Since layout depends entirely on the height of the widget, so does the padding.
+private handler internalPadding() returns Real
+	return 2 *  kPaddingRatio * my height
+end handler
 
+private handler recalculateRects()
+	variable tTabWidth as Real
+	variable tActionWidth as Real
+	calculateTabRects(tTabWidth)
+	calculateActionRects(tActionWidth)
+
+	variable tFormattedWidth as Real
+	put tTabWidth + tActionWidth into tFormattedWidth
+	-- Add extra padding if there are actions and tabs
+	if tTabWidth is not 0 and tActionWidth is not 0 then
+		add internalPadding() to tFormattedWidth
+	end if 
+	
+	put tFormattedWidth into mFormattedWidth
 	put false into mRecalculate
 end handler
 
-private handler calculateRects(in pTabs as Boolean, in pFromLeft as Boolean, in pIcons as Boolean, in pData as List) as List
+private handler calculateRects(in pTabs as Boolean, in pFromLeft as Boolean, in pIcons as Boolean, in pData as List, out rFormattedWidth as Real) returns List
+	variable tFormattedWidth as Real
+	put 0 into tFormattedWidth
+	
 	variable tPadding as Real
 	if pTabs then
 		put my height * kPaddingRatio * (1 - kTabPaddingRatio) into tPadding
@@ -386,8 +477,7 @@ private handler calculateRects(in pTabs as Boolean, in pFromLeft as Boolean, in 
 	repeat for each element tElement in pData
 		if pIcons is false then
 			variable tTextRect as Rectangle
-			set the font of this canvas to getFont("label")
-			measure tElement["label"] on this canvas into tTextRect
+			put the bounds of text tElement["label"] with my font into tTextRect
 			put the width of tTextRect into tWidth
 		else
 			put tBottom - tPadding into tWidth
@@ -410,64 +500,68 @@ private handler calculateRects(in pTabs as Boolean, in pFromLeft as Boolean, in 
 		end if
 	end repeat
 
+	if the number of elements in pData is not 0 then
+		if pFromLeft then
+			put tRight into tFormattedWidth
+		else
+			put my width - tLeft into tFormattedWidth
+		end if
+		-- Add the padding to the opposite side
+		add tPadding to tFormattedWidth
+	end if 
+	
+	put tFormattedWidth into rFormattedWidth
 	return tRects
 end handler
 
-private handler calculateTabRects()
+private handler calculateTabRects(out rWidth as Real)
 	if mShowNavIcons then
-		put calculateRects(true, true, mShowNavIcons, mNavData) into mTabRects
+		put calculateRects(true, true, mShowNavIcons, mNavData, rWidth) into mTabRects
 	else
-		put calculateRects(true, true, mShowNavIcons, mNavData) into mTabRects
+		put calculateRects(true, true, mShowNavIcons, mNavData, rWidth) into mTabRects
 	end if
 end handler
 
-private handler calculateActionRects()
+private handler calculateActionRects(out rWidth as Real)
 	if mIsHeader then
-		put calculateRects(false, false, mShowActionIcons, mActionData) into mActionRects
+		put calculateRects(false, false, mShowActionIcons, mActionData, rWidth) into mActionRects
 	else
-		put calculateRects(false, true, mShowActionIcons, mActionData) into mActionRects
+		put calculateRects(false, true, mShowActionIcons, mActionData, rWidth) into mActionRects
 	end if
 end handler
 
-private handler getPaint(in pObject as String) returns Paint
-
-	if pObject is "background" then
-		return solid paint with color [246/255, 246/255, 247/255]
-
-	else if pObject is "line" then
-		return solid paint with color [178/255, 178/255, 178/255]
-
-	else if pObject is "title" then
-		 return solid paint with color kBlack
-
-	else if pObject is "selected tab" then
-		return solid paint with color kWhite
-
-	else if pObject is "nav" then
-		return solid paint with color kNavColor
-
-	else if pObject is "selected nav" then
-		return solid paint with stringToColor(mSelectedNavColor)
-
-	else if pObject is "disabled" then
-		return solid paint with color [0/255, 0/255, 0/255, 35/255]
+private handler decodePaint(in pDesc as any) returns Paint
+	if pDesc is a string then
+		if pDesc is "background" then
+			return my background paint
+		else if pDesc is "foreground" then
+			return my foreground paint
+		else if pDesc is "border" then
+			return my border paint
+		else if pDesc is "highlight" then
+			return my highlight paint
+		end if
+	else if pDesc is a list then
+		return solid paint with color pDesc
 	end if
-
 end handler
 
-private handler getFont(in pType as String) returns Font
+private handler getPaints(in pObject as String) returns List
 
-	variable tFont as String
-	put the name of the font of this canvas into tFont
+	variable tPaintInfo as List
+	put kPaints[pObject] into tPaintInfo
 
-	if pType is "title" then
-		return font tFont with bold style at size mSize
-	else if pType is "label" then
-		return font tFont at size mSize
-	else if pType is "icon" then
-		return font "fontawesome" at size mSize
-	end if
+	variable tPaint as any
+	variable tCount as Number
+	repeat with tCount from 1 up to the number of elements in tPaintInfo
+		if tPaintInfo[tCount] is a list then
+			put decodePaint(tPaintInfo[tCount][1]) into tPaintInfo[tCount][1]
+		else
+			put [decodePaint(tPaintInfo[tCount]), 1] into tPaintInfo[tCount]
+		end if
+	end repeat
 
+	return tPaintInfo
 end handler
 
 private handler getPath(in pObject as String) returns Path
@@ -581,6 +675,42 @@ private handler listToArray(in pList as List) returns Array
 	return tArray
 end handler
 
+-- Sorts numerically, converting strings to numbers where possible
+private handler CompareKeysNumeric(in pLeft as any, in pRight as any) returns Integer
+	variable tLeft as optional Number
+	variable tRight as optional Number
+	
+	if pLeft is a number then
+		put pLeft into tLeft
+	else
+		put pLeft parsed as number into tLeft
+	end if
+	
+	if pRight is a number then
+		put pRight into tRight
+	else
+		put pRight parsed as number into tRight
+	end if
+
+	if tRight is tLeft then
+		return 0
+	end if
+		
+	if tRight is nothing then
+		return -1
+	end if
+	
+	if tLeft is nothing then
+		return 1
+	end if
+	
+	if tLeft < tRight then
+        return -1
+	end if
+
+    return 1
+end handler
+
 private handler setData(in pArray as Array, in pDefaultArray as Array, out rList as List)
 	variable tList as List
 	put the empty list into tList
@@ -588,7 +718,7 @@ private handler setData(in pArray as Array, in pDefaultArray as Array, out rList
 	if pArray is not empty then
 		variable tOrder as List
 		put the keys of pArray into tOrder
-		sort tOrder in ascending order
+		sort tOrder using handler CompareKeysNumeric
 
 		variable tKeys as List
 		put the keys of pDefaultArray into tKeys
@@ -611,8 +741,7 @@ private handler setData(in pArray as Array, in pDefaultArray as Array, out rList
 	end if
 
 	put tList into rList
-
-	put true into mRecalculate
+	recalculateRects()
 	redraw all
 end handler
 
@@ -737,7 +866,7 @@ end handler
 
 private handler setShowNavIcons(in pShowIcons as Boolean)
 	put pShowIcons into mShowNavIcons
-	put true into mRecalculate
+	recalculateRects()
 	redraw all
 end handler
 
@@ -817,6 +946,7 @@ end handler
 
 public handler setShowActionIcons(in pShowIcons as Boolean)
 	put pShowIcons into mShowActionIcons
+	recalculateRects()
 	redraw all
 end handler
 
@@ -844,72 +974,10 @@ private handler setActionLabels(in pLabels as String)
 	setDataElement("label", pLabels, defaultActionArray(), mActionData)
 end handler
 
---------------------------------------------------------------------------------
---
---		The following code is essentially duplicated from the svgpath widget.
---		Until we have widget 'components', this code will have to be here
---
---------------------------------------------------------------------------------
-
 private handler measureIcon(in pPath as String) returns Rectangle
 	variable tPath as Path
 	put path pPath into tPath
 	return the bounding box of tPath
-end handler
-
-private handler paintIcon(in pPath as String, in pTargetRect as Rectangle, in pClicked as Boolean)
-	variable tPath as Path
-	put path pPath into tPath
-
-    variable tRect as Rectangle
-    variable tPadding as Real
-    put my height * kPaddingRatio into tPadding
-    put rectangle [the left of pTargetRect + tPadding, the top of pTargetRect, the right of pTargetRect - tPadding, the bottom of pTargetRect] into tRect
-
-	setIconPath(tRect, tPath)
-	fill tPath on this canvas
-end handler
-
-private handler setIconPath(in pTargetRect as Rectangle, inout xPath as Path)
-
-	// Scale the icon
-	variable tBounds
-	put the bounding box of xPath into tBounds
-
-	// Scale appropriately
-	variable tXScale as Real
-	variable tYScale as Real
-
-	put the width of pTargetRect / the width of tBounds into tXScale
-	put the height of pTargetRect / the height of tBounds into tYScale
-
-	if tXScale > tYScale then
-		put tYScale into tXScale
-	else
-		put tXScale into tYScale
-	end if
-
-    scale xPath by [tXScale, tYScale]
-
-	variable tXTranslate as Real
-	variable tYTranslate as Real
-
-    put the bounding box of xPath into tBounds
-
-	put the left of pTargetRect - the left of tBounds into tXTranslate
-	put the top of pTargetRect - the top of tBounds into tYTranslate
-
-    variable tXDiff as Real
-    variable tYDiff as Real
-
-    put the width of pTargetRect - the width of tBounds into tXDiff
-    put the height of pTargetRect - the height of tBounds into tYDiff
-
-	// align center
-	divide tXDiff by 2
-	divide tYDiff by 2
-
-	translate xPath by [tXTranslate + tXDiff, tYTranslate + tYDiff]
 end handler
 
 end widget

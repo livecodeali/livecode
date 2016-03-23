@@ -17,7 +17,7 @@
 		'SDKROOT': '<(target_sdk)',
 		'SUPPORTED_PLATFORMS': 'iphoneos iphonesimulator',
 
-		'SOLUTION_DIR': '<(DEPTH)',
+		'SOLUTION_DIR': '$(SOURCE_ROOT)/<(DEPTH)',
 		'SYMROOT': '$(SOLUTION_DIR)/_build/ios/$(SDK_NAME)',
 		'OBJROOT': '$(SOLUTION_DIR)/_cache/ios/$(SDK_NAME)',
 		'CONFIGURATION_BUILD_DIR': '$(SYMROOT)/$(CONFIGURATION)',
@@ -32,6 +32,7 @@
 		'IPHONEOS_DEPLOYMENT_TARGET[arch=i386]': '5.1.1',
 		'IPHONEOS_DEPLOYMENT_TARGET[arch=arm64]': '7.0.0',
 		'IPHONEOS_DEPLOYMENT_TARGET[arch=x86_64]': '7.0.0',
+		'ENABLE_BITCODE': 'No',
 		'TARGETED_DEVICE_FAMILY': '1,2',
 		'DEBUG_INFORMATION_FORMAT': 'dwarf-with-dsym',
 		'ARCHS_STANDARD': 'armv7 arm64',
@@ -189,6 +190,9 @@
 							'-Wextra', 
 							'-Werror=declaration-after-statement',
 							'-Wno-unused-parameter',
+							'-Werror=uninitialized',
+							'-Werror=return-type',
+							'-Werror=tautological-compare',
 						],
 					},
 				},
@@ -196,6 +200,11 @@
 					'xcode_settings':
 					{
 						'GCC_INHIBIT_ALL_WARNINGS': 'YES',
+
+						'WARNING_CFLAGS':
+						[
+							'-Wno-return-type',
+						],
 					},
 				},
 			],

@@ -15,7 +15,7 @@ command toolsBuilderRun pPlatform, pEdition, pVersion
    -- If on windows or linux, we can't do anything macosxy due to lack of lipo/strip :o(
    local tEngineFolders
 
-   get "windows linux-x86 linux-x86_64 linux-armv6hf macosx ios android"
+   get "windows linux-x86 linux-x86_64 linux-armv6hf macosx ios android emscripten"
       
    repeat for each word tPlatform in it
       builderFetchEngine pVersion, tPlatform
@@ -29,7 +29,6 @@ command toolsBuilderRun pPlatform, pEdition, pVersion
    -- Fetch the documentation
    local tDocsFolder
    put builderBuiltDocsFolder() into tDocsFolder
-   
    -- Now build the package
    local tPackageFile
    toolsBuilderMakePackage pVersion, pEdition, pPlatform, tEngineFolders, tIdeFolder, tDocsFolder
@@ -62,13 +61,41 @@ command toolsBuilderRunDisk pPlatform, pEdition, pVersion
    toolsBuilderMakeDisk pVersion, pEdition, pPlatform, tInputFile
 end toolsBuilderRunDisk
 
+command toolsBuilderRunBundle pPlatform, pEdition, pVersion
+   if pPlatform is not "macosx" then
+      exit toolsBuilderRunBundle
+   end if
+   
+   if the platform is not "macos" then
+      builderLog "error", "Cannot generate MacOSX app bundle on this platform"
+      exit toolsBuilderRunBundle
+   end if
+   
+   toolsBuilderMakeAppBundle pVersion, pEdition, pPlatform
+end toolsBuilderRunBundle
+
 ////////////////////////////////////////////////////////////////////////////////
 
 private command toolsBuilderMakePackage pVersion, pEdition, pPlatform, pEngineFolders, pIdeFolder, pDocsFolder
    local tPackageFile
    
    local tEditionType
+   local tBaseEditionType
    put pEdition into tEditionType
+   
+   switch tEditionType
+      case "Community"
+         put "Community" into tBaseEditionType
+         break
+      case "Indy"
+      case "Business"
+         put "Commercial" into tBaseEditionType
+         break
+   end switch
+
+   -- Escape the version (by replacing all non-alphanumeric characters with "_")
+   local tVersionEscaped
+   put replaceText(pVersion,"\W","_") into tVersionEscaped
    
    -- Compute the package temp folder
    local tTempFolder
@@ -101,14 +128,17 @@ private command toolsBuilderMakePackage pVersion, pEdition, pPlatform, pEngineFo
    packageCompilerConfigureSource tPackager, "windows", pEngineFolders["windows"]
    packageCompilerConfigureSource tPackager, "ios", pEngineFolders["ios"]
    packageCompilerConfigureSource tPackager, "android", pEngineFolders["android"]
+   packageCompilerConfigureSOurce tPackager, "emscripten", pEngineFolders["emscripten"]
    packageCompilerConfigureSource tPackager, "prebuilt", builderRepoFolder() & slash & "prebuilt"
-   if tEditionType is "Commercial" then
+   packageCompilerConfigureSource tPackager, "repo", builderRepoFolder()
+   if tEditionType is among the items of "indy,business" then
       packageCompilerConfigureSource tPackager, "private", builderPrivateRepoFolder()
    end if
    
    -- Now set up variables used by the description: TargetFolder, SupportFolder, ToolsFolder, TargetPlatform, TargetEdition
    packageCompilerConfigureVariable tPackager, "TargetFolder", "[[installFolder]]"
    packageCompilerConfigureVariable tPackager, "TargetEdition", tEditionType
+   packageCompilerConfigureVariable tPackager, "BaseEdition", tBaseEditionType
    if pPlatform is "macosx" then
       packageCompilerConfigureVariable tPackager, "SupportFolder", "[[installFolder]]/Contents/Tools"
       packageCompilerConfigureVariable tPackager, "ToolsFolder", "[[installFolder]]/Contents/Tools"
@@ -123,6 +153,7 @@ private command toolsBuilderMakePackage pVersion, pEdition, pPlatform, pEngineFo
    end if
    packageCompilerConfigureVariable tPackager, "TodaysDate", "[[todaysDate]]"
    packageCompilerConfigureVariable tPackager, "VersionTag", pVersion
+   packageCompilerConfigureVariable tPackager, "EscapedVersionTag", tVersionEscaped
    packageCompilerConfigureVariable tPackager, "ProductBranch", char 1 to 3 of pVersion
    packageCompilerConfigureVariable tPackager, "TargetArchitectures", "i386"
    if pPlatform is "linux-x86" then
@@ -134,33 +165,39 @@ private command toolsBuilderMakePackage pVersion, pEdition, pPlatform, pEngineFo
    end if
    
    -- Now all the names
+   local tProductName
    if pEdition is "Community" then
       packageCompilerConfigureVariable tPackager, "ProductTitle", "LiveCode Community" && getReadableVersion(pVersion)
       packageCompilerConfigureVariable tPackager, "ProductTag", "livecodecommunity_" & getTaggedVersion(pVersion)
-      if pPlatform is "Linux" or pPlatform is "Linux-x86_64" or pPlatform is "Linux-armv6hf" then
-         packageCompilerConfigureVariable tPackager, "ProductName", "livecodecommunity"
-      else
-         packageCompilerConfigureVariable tPackager, "ProductName", "LiveCode Community"
-      end if
-   else
-      packageCompilerConfigureVariable tPackager, "ProductTitle", "LiveCode" && getReadableVersion(pVersion)
-      packageCompilerConfigureVariable tPackager, "ProductTag", "livecode_" & getTaggedVersion(pVersion)
-      if pPlatform is "Linux" or pPlatform is "Linux-x86_64" or pPlatform is "Linux-armv6hf" then
-         packageCompilerConfigureVariable tPackager, "ProductName", "livecode"
-      else
-         packageCompilerConfigureVariable tPackager, "ProductName", "LiveCode"
-      end if
+      put "LiveCode Community" into tProductName
+   else if pEdition is "Indy" then
+      packageCompilerConfigureVariable tPackager, "ProductTitle", "LiveCode Indy" && getReadableVersion(pVersion)
+      packageCompilerConfigureVariable tPackager, "ProductTag", "livecodeindy_" & getTaggedVersion(pVersion)
+      put "LiveCode Indy" into tProductName
+   else if pEdition is "Business" then
+      packageCompilerConfigureVariable tPackager, "ProductTitle", "LiveCode Business" && getReadableVersion(pVersion)
+      packageCompilerConfigureVariable tPackager, "ProductTag", "livecodebusiness_" & getTaggedVersion(pVersion)
+      put "LiveCode Business" into tProductName
    end if
+   -- For Linux only, case-fold the product name to lowercase and
+   -- remove all spaces
+   if pPlatform is "Linux" or pPlatform is "Linux-x86_64" or pPlatform is "Linux-armv6hf" then
+      put toLower(tProductName) into tProductName
+      replace " " with "" in tProductName
+   end if
+   packageCompilerConfigureVariable tPackager, "ProductName", tProductName
    
    -- The edition tags.
    packageCompilerConfigureVariable tPackager, "EditionTagLower", "-" & toLower(char 1 of tEditionType) & char 2 to -1 of tEditionType
    packageCompilerConfigureVariable tPackager, "EditionTagUpper", "-" & toUpper(char 1 of tEditionType) & char 2 to -1 of tEditionType
+   packageCompilerConfigureVariable tPackager, "BaseEditionTagLower", "-" & toLower(char 1 of tBaseEditionType) & char 2 to -1 of tBaseEditionType
+   packageCompilerConfigureVariable tPackager, "BaseEditionTagUpper", "-" & toUpper(char 1 of tBaseEditionType) & char 2 to -1 of tBaseEditionType
    
    local tSuccess
    put true into tSuccess
    
    local tDescFile
-   put pIdeFolder & slash & "Installer/package.txt" into tDescFile
+   put builderRepoFolder() & slash & "Installer/package.txt" into tDescFile
    builderLog "message", "Parsing description file '" & tDescFile & "'"
    packageCompilerParse tPackager, url ("file:" & tDescFile)
    if the result is empty then
@@ -207,6 +244,9 @@ private command toolsBuilderMakeInstaller pVersion, pEdition, pPlatform, pIdeFol
    -- Make sure no stack messages trigger
    lock messages
    
+   -- Ensure the correct capitalisation of the edition name
+   put toUpper(char 1 of pEdition) & toLower(char 2 to -1 of pEdition) into pEdition
+   
    -- Compute the deploy temp folder
    local tTempFolder
    put builderWorkFolder() & slash & "tools-" & pPlatform & "-" & pVersion & ".tmp" into tTempFolder
@@ -226,8 +266,8 @@ private command toolsBuilderMakeInstaller pVersion, pEdition, pPlatform, pIdeFol
    if pEdition is "Community" then
       put the short name of stack (builderSystemFolder() & "/tools_installer_resources.rev") into tResources
    else
-      builderLog "report", "Commercial installer resources:" && builderCommercialResourceFolder() & "/tools_installer_resources.rev"
-      put the short name of stack (builderCommercialResourceFolder() & "/tools_installer_resources.rev") into tResources
+      builderLog "report", "Commercial installer resources:" && builderCommercialResourceFolder() & slash & pEdition & "/tools_installer_resources.rev"
+      put the short name of stack (builderCommercialResourceFolder() & slash & pEdition & "/tools_installer_resources.rev") into tResources
    end if
    set the mainStack of stack tResources to tInstaller
    
@@ -236,13 +276,19 @@ private command toolsBuilderMakeInstaller pVersion, pEdition, pPlatform, pIdeFol
       set the uProduct of stack tInstaller to "LiveCode Community"
       set the uProductTitle of stack tInstaller to "LiveCode Community" && getReadableVersion(pVersion)
       set the uProductTag of stack tInstaller to "livecodecommunity-" & pVersion
-      set the uProductDetails of stack tInstaller to loadTextFile(pIdeFolder & slash & "Installer/description.txt")
+      set the uProductDetails of stack tInstaller to loadTextFile(builderSystemFolder() & "/../Installer/description.txt")
       set the uProductLicense of stack tInstaller to loadTextFile(pIdeFolder & slash & "License Agreement.txt")
-   else
-      set the uProduct of stack tInstaller to "LiveCode"
-      set the uProductTitle of stack tInstaller to "LiveCode" && getReadableVersion(pVersion)
-      set the uProductTag of stack tInstaller to "livecode-" & pVersion
-      set the uProductDetails of stack tInstaller to loadTextFile(pIdeFolder & slash & "Installer/description.txt")
+   else if pEdition is "Indy" then
+      set the uProduct of stack tInstaller to "LiveCode Indy"
+      set the uProductTitle of stack tInstaller to "LiveCode Indy" && getReadableVersion(pVersion)
+      set the uProductTag of stack tInstaller to "livecodeindy-" & pVersion
+      set the uProductDetails of stack tInstaller to loadTextFile(builderSystemFolder() & "/../Installer/description.txt")
+      set the uProductLicense of stack tInstaller to loadTextFile(pPrivateFolder & slash & "License Agreement.txt")
+   else if pEdition is "Business" then
+      set the uProduct of stack tInstaller to "LiveCode Business"
+      set the uProductTitle of stack tInstaller to "LiveCode Business" && getReadableVersion(pVersion)
+      set the uProductTag of stack tInstaller to "livecodebusiness-" & pVersion
+      set the uProductDetails of stack tInstaller to loadTextFile(builderSystemFolder() & "/../Installer/description.txt")
       set the uProductLicense of stack tInstaller to loadTextFile(pPrivateFolder & slash & "License Agreement.txt")
    end if
    
@@ -265,12 +311,12 @@ private command toolsBuilderMakeInstaller pVersion, pEdition, pPlatform, pIdeFol
    
    -- Next build up the deploy info
    local tDietParams, tSignParams, tParams
-   put "RunRev Ltd" into tParams["version"]["CompanyName"]
+   put "LiveCode Ltd" into tParams["version"]["CompanyName"]
    if pEdition is "Community" then
-      put "RunRev LiveCode Community Installer" into tParams["version"]["FileDescription"]
+      put "LiveCode Community Installer" into tParams["version"]["FileDescription"]
       put "LiveCode Community Installer" into tParams["version"]["ProductName"]
    else
-      put "RunRev LiveCode Installer" into tParams["version"]["FileDescription"]
+      put "LiveCode Installer" into tParams["version"]["FileDescription"]
       put "LiveCode Installer" into tParams["version"]["ProductName"]
    end if
    put "©" && word -1 of the long date & ". All rights reserved worldwide." into tParams["version"]["LegalCopyright"]
@@ -295,7 +341,8 @@ private command toolsBuilderMakeInstaller pVersion, pEdition, pPlatform, pIdeFol
    end repeat
    delete the last char of tParams["auxiliary_stackfiles"]
    
-   put "insert script of stack" && quote & "revLibUrl" & quote && "into back" into tParams["startup_script"]
+   // revLibURL needs to initialise its custom props, and revLoadLibrary must therefore be called.
+   put merge("send [[quote]]revLoadLibrary[[quote]] to stack [[quote]]revLibUrl[[quote]]") into tParams["startup_script"]
    put return & "insert script of stack" && quote & "InstallerUtilities" & quote && "into back" after tParams["startup_script"]
    
    switch pPlatform
@@ -315,8 +362,11 @@ private command toolsBuilderMakeInstaller pVersion, pEdition, pPlatform, pIdeFol
          put pPackageFile into tParams["payload"]
          put tOutputFileStub & ".unsigned.exe" into tParams["output"]
          
-         if pEdition is "Commercial" then
-            put builderCommercialResourceFolder() & "/installer.ico" into tParams["appicon"]
+         // libURL is needed in the timestamp processing
+         start using stack (builderRepoFolder() & slash & "ide-support" & slash & "revliburl.livecodescript")
+
+         if pEdition is not "Community" then
+            put builderCommercialResourceFolder() & slash & pEdition & "/installer.ico" into tParams["appicon"]
          end if
          
          builderLog "message", "Deploying unsigned windows installer to '" && tParams["output"] & "'"
@@ -327,18 +377,20 @@ private command toolsBuilderMakeInstaller pVersion, pEdition, pPlatform, pIdeFol
          end if
          
          -- Next we sign the installer using the certificate (if available)
-         if there is a folder (builderSystemFolder() & slash & "certificates") then
+         local tCertificatesFolder
+         put builderPrivateRepoFolder() & slash & "certificates" into tCertificatesFolder
+         if there is a folder (tCertificatesFolder) then
             put tParams["output"] into tSignParams["input"]
             put tOutputFileStub & ".exe" into tSignParams["output"]
-            put builderSystemFolder() & slash & "certificates/runrev_bin.spc" into tSignParams["certificate"]
-            put builderSystemFolder() & slash & "certificates/runrev.pvk" into tSignParams["privatekey"]
-            put word 1 of url ("file:" & builderSystemFolder() & slash & "certificates/runrev_password.txt") into tSignParams["passphrase"]
+            put tCertificatesFolder & "/runrev_bin.spc" into tSignParams["certificate"]
+            put tCertificatesFolder & "/runrev.pvk" into tSignParams["privatekey"]
+            put word 1 of url ("file:" & tCertificatesFolder & "/runrev_password.txt") into tSignParams["passphrase"]
             put "http://timestamp.verisign.com/scripts/timstamp.dll" into tSignParams["timestamper"]
-            put "http://www.runrev.com" into tSignParams["url"]
+            put "http://www.livecode.com" into tSignParams["url"]
             if pEdition is "Community" then
-               put "RunRev LiveCode Community Installer" into tSignParams["description"]
+               put "LiveCode Community Installer" into tSignParams["description"]
             else
-               put "RunRev LiveCode Installer" into tSignParams["description"]
+               put "LiveCode Installer" into tSignParams["description"]
             end if
             
             builderLog "message", "Signing windows installer to '" && tSignParams["output"] & "'"
@@ -382,7 +434,7 @@ private command toolsBuilderMakeInstaller pVersion, pEdition, pPlatform, pIdeFol
          local tPlistFile
          put macPList() into tPlistFile
          replace "[[BundleId]]" with "com.runrev.installer" in tPlistFile
-         replace "[[BundleName]]" with "runrevinstaller" in tPlistFile
+         replace "[[BundleName]]" with "livecodeinstaller" in tPlistFile
          
          create folder tOutputFileStub & ".app"
          create folder tOutputFileStub & ".app" & slash & "Contents"
@@ -390,31 +442,18 @@ private command toolsBuilderMakeInstaller pVersion, pEdition, pPlatform, pIdeFol
          create folder tOutputFileStub & ".app" & slash & "Contents/Resources"
          put tPlistFile into url ("file:" & tOutputFileStub & ".app" & slash & "Contents/Info.plist")
          if pEdition is "Community" then
-            put url ("binfile:" & builderInstallerEngine("macosx") & slash & "Contents/Resources/Installer.icns") into url ("binfile:" & tOutputFileStub & ".app" & slash & "Contents/Resources/Installer.icns")
+            put url ("binfile:" & builderCommunityResourceFolder() & "/Installer.icns")  into url ("binfile:" & tOutputFileStub & ".app" & slash & "Contents/Resources/Installer.icns")
          else
-            put url ("binfile:" & builderCommercialResourceFolder() & "/Installer.icns") into url ("binfile:" & tOutputFileStub & ".app" & slash & "Contents/Resources/Installer.icns")
+            put url ("binfile:" & builderCommercialResourceFolder() & slash & pEdition & "/Installer.icns") into url ("binfile:" & tOutputFileStub & ".app" & slash & "Contents/Resources/Installer.icns")
          end if
          
-         -- Get us an installer by dieting the source installer
-         if false then
-            put abstractPinFile(builderInstallerEngine("macosx") & slash & "Contents/MacOS/Installer") into tDietParams["input"]
-            put tTempFolder & slash & "macosx-installer-x86" into tDietParams["output"]
-            put true into tDietParams["keep_x86"]
-            put false into tDietParams["keep_ppc"]
-            builderLog "message", "Dieting input installer down to x86"
-            --_internal diet macosx tDietParams
-            dietAndStrip "x86", tDietParams["input"], tDietParams["output"]
-            if the result is not empty then
-               builderLog "error", "Dieting input installer to x86 failed -" && the result
-               throw "failure"
-            end if
-            
-            put tTempFolder & slash & "macosx-installer-x86" into tParams["engine_x86"]
-         end if
-         
-         put abstractPinFile(builderInstallerEngine("macosx") & slash & "Contents/MacOS/Installer") into tParams["engine_x86"]
+         -- Deploy the installer
+         put abstractPinFile(builderInstallerEngine("macosx") & slash & "Contents/MacOS/Installer") into tParams["engine"]
          put tInstallerStackFile into tParams["stackfile"]
          put tOutputFileStub & ".app" & slash & "Contents/MacOS/Installer" into tParams["output"]
+         
+         -- We deploy as 32-bit only for now as the 64-bit slice isn't neccessary
+         put "i386" into tParams["architectures"]
          
          put url ("binfile:" & pPackageFile) into url ("binfile:" & tOutputFileStub & ".app" & slash & "Contents/Resources/payload")
          
@@ -430,58 +469,188 @@ private command toolsBuilderMakeInstaller pVersion, pEdition, pPlatform, pIdeFol
    end switch
 end toolsBuilderMakeInstaller
 
-command toolsBuilderMakeDisk pVersion, pEdition, pPlatform, tInputZip
-   -- Compute the output file
+private function escapeArg pArg
+   replace "'" with "\'" in pArg
+   put "'" before pArg
+   put "'" after pArg
+   return pArg
+end escapeArg
+
+private function findSigningIdentity
+   get shell("/usr/bin/security -q find-identity -v")
+   filter it with "*Developer ID Application: Runtime Revolution Ltd*"
+   return it
+end findSigningIdentity
+
+command toolsBuilderMakeAppBundle pVersion, pEdition, pPlatform
+   -- Compute the name of the installer bundle
    local tOutputFileStub, tOutputFileFolder
    put builderOutputFolder() into tOutputFileFolder
    put tOutputFileFolder & slash & getInstallerFilenameStub(pVersion, pPlatform, pEdition) into tOutputFileStub
-   builderEnsureFolderForFile tOutputFileStub
    
-   get shell("/usr/bin/security -q find-identity -v")
-   filter it with "*Developer ID Application: Runtime Revolution Ltd*"
-   if it is not empty then
-      builderLog "message", "Signing macosx installer'" && tOutputFileStub & ".app" & "'"
-      wait 1 second
-      get shell("/usr/bin/codesign -s" && word 2 of it && "'" & tOutputFileStub & ".app'")
-      if it is not empty then
-         builderLog "error", "Could not macosx sign installer:" && it
+   -- Remove any stale app bundles
+   local tAppBundle
+   put tOutputFileFolder & slash & getBundleFilenameStub(pVersion, pPlatform, pEdition) & ".app" into tAppBundle
+   if there is a folder tAppBundle then
+      builderLog "message", "Removing old macosx app bundle" && "'" & tAppBundle & "'"
+      get shell ("rm -r" && escapeArg(tAppBundle))
+      if the result is not zero then
+         builderLog "error", "Failed to remove old macosx app bundle:" && it
          throw "failure"
       end if
-      builderLog "report", "Successfully signed macosx installer'" && tOutputFileStub & ".app" & "'"
-   else
-      builderLog "warning", "No valid identity found for signing OSX installer"
    end if
    
-   local tDmgFile, tDmgName, tDmgAppFolder
-   put tOutputFileStub & ".dmg" into tDmgFile
-   if pEdition is "Community" then
-      put "LiveCode Community" && getReadableVersion(pVersion) && "Installer" into tDmgName
-      put (tOutputFileFolder & slash & "Install LiveCode Community" && getReadableVersion(pVersion) & ".app") into tDmgAppFolder
-   else
-      put "LiveCode" && getReadableVersion(pVersion) && "Installer" into tDmgName
-      put (tOutputFileFolder & slash & "Install LiveCode" && getReadableVersion(pVersion) & ".app") into tDmgAppFolder
+   -- Run the installer to generate the raw app bundle
+   builderLog "message", "Installing macosx IDE to" && "'" & tAppBundle & "'"
+   get shell(tOutputFileStub & ".app/Contents/MacOS/installer install noui -log /dev/stderr -location" && escapeArg(tAppBundle))
+   if the result is not zero then
+      builderLog "error", "Failed to run macosx installer:" && it
+      throw "failure"
    end if
+   
+   -- Remove the list of installed files from the app bundle (it isn't needed)
+   delete file tAppBundle & "/.setup.txt"
+   
+   -- Copy just the executable out of the installer to use as the auto-updater
+   -- (on OSX, the payload is separate and is un-neccessary)
+   builderLog "message", "Adding auto-updater to app bundle"
+   get shell ("cp" && escapeArg(tAppBundle & "/LiveCode Setup.app/Contents/MacOS/Installer") && escapeArg(tAppBundle & "/Contents/MacOS/autoupdater"))
+   if the result is not zero then
+      builderLog "error", "Failed to add auto-updater:" && it
+      throw "failure"
+   end if
+   
+   -- Remove the rest of the installer from the app bundle
+   builderLog "message", "Removing installer from app bundle"
+   get shell("rm -r" && escapeArg(tAppBundle & "/LiveCode Setup.app"))
+   if the result is not zero then
+      builderLog "error", "Failed to clean macosx app bundle:" & it
+      throw "failure"
+   end if
+   
+   -- Copy a shell script and AppleScript into the app bundle to catch attempts 
+   -- from old auto-updaters to launch the installer
+   builderLog "message", "Adding installer shim to app bundle"
+   get shell ("install -m755" && escapeArg(builderCommunityResourceFolder() & "/dmg/fake-installer.sh") && escapeArg(tAppBundle & "/Contents/MacOS/installer"))
+   if the result is not zero then
+      builderLog "error", "Failed to copy installer stub shell script:" && it
+      throw "failure"
+   end if
+   get shell ("osacompile" && "-o" && escapeArg(tAppBundle & "/Contents/MacOS/installer.scpt") && escapeArg(builderCommunityResourceFolder() & "/dmg/open-dmg.applescript"))
+   if the result is not zero then
+      builderLog "error", "Failed to compile installer stub AppleScript:" && it
+      throw "failure"
+   end if
+   
+   -- Find the signing identity and sign the app bundle
+   get findSigningIdentity()
+   if it is not empty then
+      builderLog "message", "Signing macosx app bundle" && "'" & tAppBundle & "'"
+      wait 1 second
+      get shell("/usr/bin/codesign --sign" && word 2 of it && "--deep --verbose=2" && escapeArg(tAppBundle))
+      if the result is not zero then
+         builderLog "error", "Could not sign macosx app bundle:" && it
+         throw "failure"
+      end if
+      builderLog "report", "Successfully signed macosx app bundle" && "'" & tAppBundle & "'"
+   else
+      builderLog "warning", "No valid identity found for signing OSX app bundle"
+   end if
+end toolsBuilderMakeAppBundle
+
+command toolsBuilderMakeDisk pVersion, pEdition, pPlatform
+   -- Get the name of the app bundle that is being built
+   local tOutputFileFolder
+   local tDmgFolder
+   local tAppBundle
+   put builderOutputFolder() into tOutputFileFolder
+   put builderOutputFolder() & slash & "DMG" into tDmgFolder
+   put tOutputFileFolder & slash & getBundleFilenameStub(pVersion, pPlatform, pEdition) & ".app" into tAppBundle
+   
+   -- DMG output filename
+   local tDmgFile
+   local tTempDmg
+   put tOutputFileFolder & slash & getDmgFilenameStub(pVersion, pPlatform, pEdition) & ".dmg" into tDmgFile
+   put tOutputFileFolder & slash & getDmgFilenameStub(pVersion, pPlatform, pEdition) & "-rw.dmg" into tTempDmg
+   
+   -- Remove any stale DMG folder
+   if there is a folder tDmgFolder then
+      builderLog "message", "Removing old DMG directory"
+      get shell ("rm -r" && escapeArg(tDmgFolder))
+      if the result is not zero then
+         builderLog "error","Failed to remove old DMG directory:" && it
+         throw "failure"
+      end if
+   end if
+
+   -- Create a new DMG folder
+   create folder tDmgFolder
+   
+   -- Copy the app bundle into the DMG contents folder
+   builderLog "message", "Copying app bundle into DMG directory"
+   get shell ("cp -R" && escapeArg(tAppBundle) && escapeArg(tDmgFolder & slash))
+   if the result is not zero then
+      builderLog "error", "Failed to copy app bundle into DMG directory:" && it
+      throw "failure"
+   end if
+   
    builderLog "message", "Building Mac DMG to '" & tDmgFile & "'"
    if there is a file tDmgFile then
       delete file tDmgFile
-      if there is a file tDmgFile then
-         builderLog "error", "Could not remove existing dmg - make sure it is not mounted"
-         throw "failure"
-      end if
+   end if
+   if there is a file tTempDmg then
+      delete file tTempDmg
+   end if
+   if there is a file tDmgFile or there is a file tTempDmg then
+      builderLog "error", "Could not remove existing dmg - make sure it is not mounted"
+      throw "failure"
    end if
    
+   -- The following is sometimes needed to work around bugs in hdiutil
    --local tTrashFile
    --put builderWorkspaceFolder() & "/deploy/.Trash" into tTrashFile
    --put empty into URL ("file:" & tTrashFile)
    
-   -- Do the DMG build
-   rename (tOutputFileStub & ".app") to tDmgAppFolder
-   -- SN-2015-03-09: [[ DMG creation failure ]] Ensure that hdiutil will allocate enough
-   --  memory if the installer end up being over a gigabyte large.
-   get shell("hdiutil create -fs HFS+ -size 1G -volname" && quote & tDmgName & quote && "-srcfolder" && quote & tDmgAppFolder & quote && quote & tDmgFile & quote)
-   rename tDmgAppFolder to (tOutputFileStub & ".app")
+   -- Attempt to detach any DMGs with the name we're about to create
+   -- We ignore failures here as it may not be mounted and an already-mounted
+   -- disk will cause a very visible error during the next step.
+   local tVolumeName
+   put getBundleFilenameStub(pVersion, pPlatform, pEdition) into tVolumeName
+   get shell ("hdiutil detach" && escapeArg(tVolumeName))
+   
+   -- Generate an initial read-write DMG and mount it
+   builderLog "message", "Generating initial DMG"
+   get shell ("hdiutil create -fs HFS+ -format UDRW -attach -volname" && escapeArg(tVolumeName) && "-srcfolder" && escapeArg(tDmgFolder) && escapeArg(tTempDmg))
    if "created:" is not in it then
-      builderLog "error", "Dmg creation failed -" && the last line of it
+      builderLog "error", "Failed to create initial DMG:" && it
+      throw "failure"
+   end if
+   
+   -- Generate the multi-resolution TIFF for the DMG background image
+   local tBackgroundImage
+   put tOutputFileFolder & slash & "bg-" & pEdition & ".tiff" into tBackgroundImage
+   builderLog "message", "Generating DMG background image"
+   get shell ("tiffutil -cathidpicheck" && escapeArg(builderCommunityResourceFolder() & "/dmg/bg-" & pEdition & ".png") \
+         && escapeArg(builderCommunityResourceFolder() & "/dmg/bg-" & pEdition & "@2x.png") \
+         && "-out" && escapeArg(tBackgroundImage))
+   if the result is not zero then
+      builderLog "error","Failed to generate DMG background image:" && it
+      throw "failure"
+   end if
+   
+   -- Run the DMG prettifier script (this unmounts the DMG at the end)
+   builderLog "message", "Setting DMG background and styling"
+   get shell (builderRepoFolder() & "/tools/make-dmg-pretty.sh" && escapeArg(tVolumeName) && escapeArg(tBackgroundImage))
+   if it is not empty or the result is not zero then
+      builderLog "error", "Failed to apply DMG styling:" && it
+      throw "failure"
+   end if 
+   
+   -- Convert the DMG into a read-only, compressed DMG
+   builderLog "message", "Compressing DMG"
+   get shell ("hdiutil convert" && escapeArg(tTempDmg) && "-format UDBZ -o" && escapeArg(tDmgFile))
+   if the result is not zero or not line -1 of it begins with "created:" then
+      builderLog "error", "Failed to compress DMG:" && it
       throw "failure"
    end if
    
@@ -500,13 +669,10 @@ function getTaggedVersion pVersion
    return pVersion
 end getTaggedVersion
 
-function getReadableVersion pVersion
+function getFullReadableVersion pVersion
    local tNumber
    set the itemDelimiter to "-"
    put item 1 of pVersion into tNumber
-   if tNumber ends with ".0" then
-      delete char -2 to -1 of tNumber
-   end if
    
    if item 2 of pVersion is "gm" then
       delete item -2 to -1 of pVersion
@@ -520,7 +686,26 @@ function getReadableVersion pVersion
    end if
    
    return tNumber & tTag
+end getFullReadableVersion
+
+function getReadableVersion pVersion
+   put getFullReadableVersion(pVersion) into pVersion
+   set the itemDelimiter to space
+
+   local tNumber, tTag
+   put item 1 of pVersion into tNumber
+
+   if tNumber ends with ".0" then
+      delete char -2 to -1 of tNumber
+      put tNumber into item 1 of pVersion
+   end if
+
+   return pVersion
 end getReadableVersion
+
+function getBundleFilenameStub pVersion, pPlatform, pEdition
+   return "LiveCode" && the upper of char 1 of pEdition & the lower of char 2 to -1 of pEdition && getFullReadableVersion(pVersion)
+end getBundleFilenameStub
 
 function getInstallerFilenameStub pVersion, pPlatform, pEdition
    set the itemDelimiter to "-"
@@ -536,12 +721,26 @@ function getInstallerFilenameStub pVersion, pPlatform, pEdition
    else if pPlatform begins with "linux" then
       put "Linux" into pPlatform
    end if
-   if pEdition is "Community" then
-      return "LiveCodeCommunityInstaller-" & pVersion & "-" & pPlatform
-   else
-      return "LiveCodeInstaller-" & pVersion & "-" & pPlatform
-   end if
+
+   return "LiveCode" & the upper of char 1 of pEdition & the lower of char 2 to -1 of pEdition & "Installer-" & pVersion & "-" & pPlatform
 end getInstallerFilenameStub
+
+function getDmgFilenameStub pVersion, pPlatform, pEdition
+      set the itemDelimiter to "-"
+   if item 2 of pVersion is "gm" then
+      delete item -2 to -1 of pVersion
+   end if
+   replace "-" with "_" in pVersion
+   replace "." with "_" in pVersion
+   if pPlatform is "macosx" then
+      put "Mac" into pPlatform
+   else if pPlatform is "windows" then
+      put "Windows" into pPlatform
+   else if pPlatform is "linux" or pPlatform is "linux-x64" or pPlatform is "linux-armv6hf" then
+      put "Linux" into pPlatform
+   end if
+   return "LiveCode" & the upper of char 1 of pEdition & the lower of char 2 to -1 of pEdition & "-" & pVersion & "-" & pPlatform
+end getDmgFilenameStub
 
 function loadTextFile pFile
    get url ("binfile:" & pFile)

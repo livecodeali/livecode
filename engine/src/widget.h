@@ -1,4 +1,4 @@
-/* Copyright (C) 2014 Runtime Revolution Ltd.
+/* Copyright (C) 2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -17,8 +17,7 @@
 #ifndef __MC_WIDGET__
 #define __MC_WIDGET__
 
-#include "control.h"
-#include "native-layer.h"
+#include "mccontrol.h"
 
 #include "libscript/script.h"
 #include "module-engine.h"
@@ -46,6 +45,9 @@ bool MCWidgetIsRoot(MCWidgetRef widget);
 MCWidget *MCWidgetGetHost(MCWidgetRef widget);
 MCWidgetRef MCWidgetGetOwner(MCWidgetRef widget);
 
+// Returns true if p_widget is p_child, or an ancestor of it.
+bool MCWidgetIsAncestorOf(MCWidgetRef p_widget, MCWidgetRef p_child);
+
 MCGRectangle MCWidgetGetFrame(MCWidgetRef widget);
 bool MCWidgetGetDisabled(MCWidgetRef widget);
 bool MCWidgetCopyFont(MCWidgetRef widget, MCFontRef& r_font);
@@ -57,6 +59,12 @@ bool MCWidgetQueryProperty(MCWidgetRef widget, MCNameRef property, MCTypeInfoRef
 
 bool MCWidgetSetProperty(MCWidgetRef widget, MCNameRef property, MCValueRef value);
 bool MCWidgetGetProperty(MCWidgetRef widget, MCNameRef property, MCValueRef& r_value);
+
+bool MCWidgetHasPropertyOfChunk(MCWidgetRef widget, MCNameRef p_property, MCNameRef p_chunk_name, bool p_getter);
+bool MCWidgetQueryPropertyOfChunk(MCWidgetRef widget, MCNameRef p_property, MCNameRef p_chunk_name, bool p_getter, MCTypeInfoRef& r_type_info);
+
+bool MCWidgetSetPropertyOfChunk(MCWidgetRef widget, MCNameRef p_property, MCNameRef p_chunk_name, MCProperListRef p_path, MCValueRef p_value);
+bool MCWidgetGetPropertyOfChunk(MCWidgetRef widget, MCNameRef p_property, MCNameRef p_chunk_name, MCProperListRef p_path, MCValueRef& r_value);
 
 bool MCWidgetOnLoad(MCWidgetRef widget, MCValueRef rep);
 bool MCWidgetOnSave(MCWidgetRef widget, MCValueRef& r_rep);
@@ -77,8 +85,10 @@ bool MCWidgetOnClick(MCWidgetRef widget, bool& r_bubble);
 bool MCWidgetOnMouseScroll(MCWidgetRef widget, real32_t delta_x, real32_t delta_y, bool& r_bubble);
 
 bool MCWidgetOnGeometryChanged(MCWidgetRef widget);
+bool MCWidgetOnLayerChanged(MCWidgetRef widget);
 bool MCWidgetOnParentPropertyChanged(MCWidgetRef widget);
 bool MCWidgetOnToolChanged(MCWidgetRef widget, Tool p_tool);
+bool MCWidgetOnVisibilityChanged(MCWidgetRef widget, bool p_visible);
 
 bool MCWidgetCopyAnnotation(MCWidgetRef widget, MCNameRef annotation, MCValueRef& r_value);
 bool MCWidgetSetAnnotation(MCWidgetRef widget, MCNameRef annotation, MCValueRef value);
@@ -110,6 +120,8 @@ bool MCChildWidgetSetDisabled(MCWidgetRef widget, bool disabled);
 // through MCWidgetEventManager which modulates them to appropriate calls on
 // the appropriate (nested) MCWidgetRef.
 
+class MCNativeLayer;
+
 class MCWidget: public MCControl
 {
 public:
@@ -124,9 +136,6 @@ public:
     
 	virtual bool visit_self(MCObjectVisitor *p_visitor);
 	
-	virtual void open(void);
-	virtual void close(void);
-
 	virtual void kfocus(void);
 	virtual void kunfocus(void);
 	virtual Boolean kdown(MCStringRef p_key_string, KeySym p_key);
@@ -146,12 +155,11 @@ public:
     
 	virtual void timer(MCNameRef p_message, MCParameter *p_parameters);
 
-	virtual void setrect(const MCRectangle& p_rectangle);
 	virtual void recompute(void);
     
 	virtual Exec_stat handle(Handler_type, MCNameRef, MCParameter *, MCObject *pass_from);
 
-	virtual IO_stat save(IO_handle stream, uint4 p_part, bool p_force_ext);
+	virtual IO_stat save(IO_handle stream, uint4 p_part, bool p_force_ext, uint32_t p_version);
 	virtual IO_stat load(IO_handle stream, uint32_t p_version);
 
 	virtual MCControl *clone(Boolean p_attach, Object_pos p_position, bool invisible);
@@ -161,16 +169,20 @@ public:
 	
     virtual bool getprop(MCExecContext& ctxt, uint32_t p_part_id, Properties p_which, MCNameRef p_index, Boolean p_effective, MCExecValue& r_value);
 	virtual bool setprop(MCExecContext& ctxt, uint32_t p_part_id, Properties p_which, MCNameRef p_index, Boolean p_effective, MCExecValue p_value);
-    virtual bool getcustomprop(MCExecContext& ctxt, MCNameRef set_name, MCNameRef prop_name, MCExecValue& r_value);
-	virtual bool setcustomprop(MCExecContext& ctxt, MCNameRef set_name, MCNameRef prop_name, MCExecValue p_value);
+    virtual bool getcustomprop(MCExecContext& ctxt, MCNameRef set_name, MCNameRef prop_name, MCProperListRef p_path, MCExecValue& r_value);
+	virtual bool setcustomprop(MCExecContext& ctxt, MCNameRef set_name, MCNameRef prop_name, MCProperListRef p_path, MCExecValue p_value);
     
     virtual void toolchanged(Tool p_new_tool);
-    
+    virtual void visibilitychanged(bool p_visible);
     virtual void layerchanged();
-    
+	virtual void geometrychanged(const MCRectangle &p_rect);
+	virtual void OnOpen();
+	virtual void OnClose();
+	
     virtual void SetDisabled(MCExecContext& ctxt, uint32_t part, bool flag);
     
     void GetKind(MCExecContext& ctxt, MCNameRef& r_kind);
+    void GetState(MCExecContext& ctxt, MCArrayRef& r_state);
     
     // Bind a widget to a kind and rep.
     void bind(MCNameRef p_kind, MCValueRef p_rep);
@@ -179,6 +191,8 @@ public:
     
     void CatchError(MCExecContext& ctxt);
     void SendError(void);
+    
+    bool isInRunMode();
     
 protected:
 	static MCPropertyInfo kProperties[];

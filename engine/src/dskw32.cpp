@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -3387,7 +3387,7 @@ struct MCWindowsDesktop: public MCSystemInterface, public MCWindowsSystemService
 		return uint32_t(u64);
 	}
 
-	virtual bool ListFolderEntries(MCSystemListFolderEntriesCallback p_callback, void *x_context)
+	virtual bool ListFolderEntries(MCStringRef p_folder, MCSystemListFolderEntriesCallback p_callback, void *x_context)
     {
 #ifdef /* MCS_getentries_dsk_w32 */ LEGACY_SYSTEM
         p_context . clear();
@@ -3452,20 +3452,23 @@ struct MCWindowsDesktop: public MCSystemInterface, public MCWindowsSystemService
         WIN32_FIND_DATAW data;
         HANDLE ffh;            //find file handle
 
-        MCAutoStringRef t_curdir_native;
+        MCAutoStringRef t_dir_native;
         MCAutoStringRef t_search_path;
         
 		// The search is done in the current directory
-		MCS_getcurdir_native(&t_curdir_native);
+		if (p_folder == nil)
+			MCS_getcurdir_native(&t_dir_native);
+		else
+			&t_dir_native = MCValueRetain (p_folder);
 
 		// Search strings need to have a wild-card added
-		if (MCStringGetCharAtIndex(*t_curdir_native, MCStringGetLength(*t_curdir_native) - 1) == '\\')
+		if (MCStringGetCharAtIndex(*t_dir_native, MCStringGetLength(*t_dir_native) - 1) == '\\')
 		{
-			/* UNCHECKED */ MCStringFormat(&t_search_path, "%@*", *t_curdir_native);
+			/* UNCHECKED */ MCStringFormat(&t_search_path, "%@*", *t_dir_native);
 		}
 		else
 		{
-			/* UNCHECKED */ MCStringFormat(&t_search_path, "%@\\*", *t_curdir_native);
+			/* UNCHECKED */ MCStringFormat(&t_search_path, "%@\\*", *t_dir_native);
 		}
 
 		// Iterate through the contents of the directory
@@ -3650,13 +3653,67 @@ struct MCWindowsDesktop: public MCSystemInterface, public MCWindowsSystemService
 		if (MCStringGetLength(p_path) == 0)
 			return MCS_getcurdir_native(r_resolved_path);
 
-        MCAutoStringRef t_native;
-        MCAutoStringRef t_native_resolved;
-        
-        MCS_pathtonative(p_path, &t_native);
-		MCU_fix_path(*t_native, &t_native_resolved);
-        MCS_pathfromnative(*t_native_resolved, r_resolved_path);
-		return true;
+		MCAutoStringRef t_canonised_path;
+		bool t_success;
+		t_success = true;
+		
+		// Taken from LiveCode 6.7's w32spec.cpp MCS_get_canonical_path
+		// The following rules are used to process paths on Windows:
+		// - an absolute UNIX path is mapped to an absolute windows path using the drive of the CWD:
+		// /foo/bar -> CWD-DRIVE:/foo/bar
+		// - an absolute windows path is left as is:
+		// //foo/bar -> //foo/bar
+		// C:/foo/bar -> C:/foo/bar
+		// - a relative path is prefixed by the CWD:
+		// foo/bar -> CWD/foo/bar
+		// Note: / and \ are treated the same, but not changed. 
+		// Note: When adding a path separator \ is used in LiveCode 7.0
+		// since we are suppose to have a native path as input for MCSystem functions
+
+		// We store the first chars in this static to make the if
+		// statements more readable
+		char_t t_first_chars[2];
+        t_first_chars[0] = MCStringGetNativeCharAtIndex(p_path, 0);
+		t_first_chars[1] = MCStringGetNativeCharAtIndex(p_path, 1);
+
+		if ((t_first_chars[0] == '/' && t_first_chars[1] != '/')
+				|| (t_first_chars[0] == '\\' && t_first_chars[1] != '\\'))
+		{
+			// path in root of current drive
+			MCAutoStringRef t_curdir;
+			if (t_success)
+				t_success = MCS_getcurdir_native(&t_curdir);
+		
+			if (t_success)
+			t_success = MCStringFormat(&t_canonised_path, 
+							"%c:%@", 
+							MCStringGetNativeCharAtIndex(*t_curdir, 0),
+							p_path);
+		}
+		else if ((is_legal_drive(t_first_chars[0]) && t_first_chars[1] == ':')
+				|| (t_first_chars[0] == '/' && t_first_chars[1] == '/')
+				|| (t_first_chars[0] == '\\' && t_first_chars[1] == '\\'))
+		{
+			// absolute path
+			t_canonised_path = p_path;
+		}
+		else
+		{
+			// relative to current folder
+			MCAutoStringRef t_curdir;
+			t_success = MCS_getcurdir_native(&t_curdir);
+
+			if (t_success)
+				t_success = MCStringFormat(&t_canonised_path,
+						   "%@\\%@",
+						   *t_curdir,
+						   p_path);
+		}
+
+		if (t_success)
+			r_resolved_path = MCValueRetain(*t_canonised_path);
+
+		return t_success;
 	}
 	
 	virtual bool LongFilePath(MCStringRef p_path, MCStringRef& r_long_path)
@@ -4911,7 +4968,7 @@ struct MCWindowsDesktop: public MCSystemInterface, public MCWindowsSystemService
 		FD_ZERO(&rmaskfd);
 		FD_ZERO(&wmaskfd);
 		FD_ZERO(&emaskfd);
-		uint4 maxfd = 0;
+		int4 maxfd = 0;
 		if (!MCnoui)
 		{
 			FD_SET(p_fd, &rmaskfd);
@@ -4925,47 +4982,16 @@ struct MCWindowsDesktop: public MCSystemInterface, public MCWindowsSystemService
 				i = 0;
 			}
 		}
-		for (i = 0 ; i < MCnsockets ; i++)
-		{
-			if (MCsockets[i]->connected && !MCsockets[i]->closing
-					&& !MCsockets[i]->shared || MCsockets[i]->accepting)
-				FD_SET(MCsockets[i]->fd, &rmaskfd);
-			if (!MCsockets[i]->connected || MCsockets[i]->wevents != NULL)
-				FD_SET(MCsockets[i]->fd, &wmaskfd);
-			FD_SET(MCsockets[i]->fd, &emaskfd);
-			if (MCsockets[i]->fd > maxfd)
-				maxfd = MCsockets[i]->fd;
-			if (MCsockets[i]->added)
-			{
-				p_delay = 0.0;
-				MCsockets[i]->added = False;
-				handled = True;
-			}
-		}
+        handled = MCSocketsAddToFileDescriptorSets(maxfd, rmaskfd, wmaskfd, emaskfd);
+        if (handled)
+            p_delay = 0.0;
 		struct timeval timeoutval;
 		timeoutval.tv_sec = (long)p_delay;
 		timeoutval.tv_usec = (long)((p_delay - floor(p_delay)) * 1000000.0);
 		n = select(maxfd + 1, &rmaskfd, &wmaskfd, &emaskfd, &timeoutval);
 		if (n <= 0)
 			return handled;
-		for (i = 0 ; i < MCnsockets ; i++)
-		{
-			if (FD_ISSET(MCsockets[i]->fd, &emaskfd))
-			{
-				if (!MCsockets[i]->waiting)
-				{
-					MCsockets[i]->error = strclone("select error");
-					MCsockets[i]->doclose();
-				}
-			}
-			else
-			{
-				if (FD_ISSET(MCsockets[i]->fd, &wmaskfd))
-					MCsockets[i]->writesome();
-				if (FD_ISSET(MCsockets[i]->fd, &rmaskfd) && !MCsockets[i]->shared)
-					MCsockets[i]->readsome();
-			}
-		}
+        MCSocketsHandleFileDescriptorSets(rmaskfd, wmaskfd, emaskfd);
 		return n != 0;
 	}
     
@@ -5218,6 +5244,20 @@ struct MCWindowsDesktop: public MCSystemInterface, public MCWindowsSystemService
             return MCListCopy(*t_list, r_list);
         
         return dns_servers_from_registry(r_list);
+    }
+    
+    virtual void ShowMessageDialog(MCStringRef p_title,
+                                   MCStringRef p_message)
+    {
+        MCAutoStringRefAsWString t_title_w;
+        if (!t_title_w . Lock(p_title))
+            return;
+        
+        MCAutoStringRefAsWString t_message_w;
+        if (!t_message_w . Lock(p_message))
+            return;
+        
+        MessageBoxW(HWND_DESKTOP, *t_message_w, *t_title_w, MB_APPLMODAL | MB_OK);
     }
 };
 

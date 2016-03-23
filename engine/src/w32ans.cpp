@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -40,6 +40,13 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "malloc.h"
 
 #include <strsafe.h>
+
+// We need the Vista versions of the shell headers
+#undef NTDDI_VERSION
+#define NTDDI_VERSION NTDDI_VISTA
+#include <shobjidl.h>
+#include <shlobj.h>
+#include <shlwapi.h>
 
 extern void MCRemoteFileDialog(MCStringRef p_title, MCStringRef p_prompt, MCStringRef *p_types, uint32_t p_type_count, MCStringRef p_initial_folder, MCStringRef p_initial_file, bool p_save, bool p_files, MCStringRef &r_value);
 extern void MCRemoteFolderDialog(MCStringRef p_title, MCStringRef p_prompt, MCStringRef p_initial, MCStringRef &r_value);

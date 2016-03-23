@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -643,7 +643,7 @@ MCParagraph *MCField::verifyindices(MCParagraph *p_top, findex_t& si, findex_t& 
 	return t_start_pg;
 }
 
-Exec_stat MCField::settextindex(uint4 parid, findex_t si, findex_t ei, MCStringRef p_text, Boolean undoing)
+Exec_stat MCField::settextindex(uint4 parid, findex_t si, findex_t ei, MCStringRef p_text, Boolean undoing, MCFieldStylingMode p_styling_mode)
 {
 	state &= ~CS_CHANGED;
 	if (!undoing)
@@ -718,8 +718,10 @@ Exec_stat MCField::settextindex(uint4 parid, findex_t si, findex_t ei, MCStringR
         // First delete the portion of the first paragraph in the range.
         int4 tei;
         tei = MCMin(ei, pgptr -> gettextlength());
-        
-		pgptr->deletestring(si, tei);
+		
+		// Pass through the first style preservation flag. This will leave us with
+		// a zero length block at si (which finsertnew will extend).
+		pgptr->deletestring(si, tei, p_styling_mode);
         ei -= (tei - si);
         
 		if (ei > pgptr -> gettextlength())
@@ -2752,13 +2754,20 @@ void MCField::cuttext()
 
 void MCField::copytext()
 {
-	if (!focusedparagraph->isselection() && firstparagraph == lastparagraph)
+    // Do nothing if there is nothing to copy
+    if (!focusedparagraph->isselection() && firstparagraph == lastparagraph)
 		return;
 
+    // Serialise the text. Failures are ignored here as there isn't really a
+    // good way to alert the user that a copy-to-clipboard operation failed.
 	MCAutoDataRef t_data;
-	/* UNCHECKED */ pickleselection(&t_data);
+	pickleselection(&t_data);
 	if (*t_data != nil)
-		MCclipboarddata -> Store(TRANSFER_TYPE_STYLED_TEXT, *t_data);
+    {
+        // Clear the clipboard and copy the selection to it
+        MCclipboard->Clear();
+        MCclipboard->AddLiveCodeStyledText(*t_data);
+    }
 }
 
 void MCField::cuttextindex(uint4 parid, findex_t si, findex_t ei)

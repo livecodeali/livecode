@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -66,6 +66,8 @@ MCServerScript::~MCServerScript(void)
         else
             delete t_file -> script;
 
+        // SN-2015-07-09: [[ Merge 6.7.7 RC 1 ]] Avoid memory leak
+        MCValueRelease(t_file -> filename);
 		delete t_file;
 	}
 	
@@ -386,6 +388,7 @@ bool MCServerScript::Include(MCExecContext& ctxt, MCStringRef p_filename, bool p
 								 &t_file_contents))
 		{
 			MCeerror -> add(EE_INCLUDE_FILENOTFOUND, 0, 0, t_file -> filename);
+			delete t_file;
 			return false;
 		}
 

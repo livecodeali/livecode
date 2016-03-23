@@ -64,18 +64,24 @@ LiveCode uses the [gyp (Generate Your Projects)](https://chromium.googlesource.c
 
 ### Quick start
 
+**Note**: You can only compile LiveCode from a clone of the
+[LiveCode git repository](https://github.com/livecode/livecode) on
+GitHub.  See also the GitHub documentation on
+[cloning a repository](https://help.github.com/articles/cloning-a-repository/).
+
 On Linux or Mac, you can quickly build LiveCode by installing basic development tools, and then running `make all`.
 
 ### Detailed instructions
 
 Please see the following table, which shows which target platforms are supported by which host platforms.  The documentation for compiling for each target platform is linked.
 
-| Target platform               | Host platforms    |
-| ----------------------------- | ----------------- |
-| [mac, ios](INSTALL-mac.md)    | mac               |
-| [win](INSTALL-win.md)         | win, linux (Wine) |
-| [linux](INSTALL-linux.md)     | linux             |
-| [android](INSTALL-android.md) | mac, linux        |
+| Target platform                             | Host platforms    |
+| ------------------------------------------- | ----------------- |
+| [mac, ios](INSTALL-mac.md)                  | mac               |
+| [win](INSTALL-win.md)                       | win, linux (Wine) |
+| [linux](INSTALL-linux.md)                   | linux             |
+| [android](INSTALL-android.md)               | mac, linux        |
+| [emscripten (html5)](INSTALL-emscripten.md) | linux             |
 
 ## Getting help
 
@@ -87,11 +93,11 @@ There are several ways to get help with installing and using LiveCode:
 
 * Visit the [LiveCode open source forums](http://forums.livecode.com/viewforum.php?f=65).  In particular, you may wish to post your question in the [Engine Contributors](http://forums.livecode.com/viewforum.php?f=66) forum.
 
-* If you have discovered a bug, have a feature request, or have written a patch to improve LiveCode, please create an ticket in the [LiveCode issue tracking system](http://quality.runrev.com/).
+* If you have discovered a bug, have a feature request, or have written a patch to improve LiveCode, please create an ticket in the [LiveCode issue tracking system](http://quality.livecode.com/).
 
 ## Contributing to LiveCode
 
-For information on modifying LiveCode and submitting contributions to the LiveCode Community project, please see the [HACKING](HACKING.md) file.
+For information on modifying LiveCode and submitting contributions to the LiveCode Community project, please see the [CONTRIBUTING](CONTRIBUTING.md) file.
 
 ## License
 

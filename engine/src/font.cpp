@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -162,10 +162,10 @@ bool MCFontCreateWithFontStruct(MCNameRef p_name, MCFontStyle p_style, int32_t p
 	return true;
 }
 
-bool MCFontCreateWithHandle(MCSysFontHandle p_handle, MCFontRef& r_font)
+bool MCFontCreateWithHandle(MCSysFontHandle p_handle, MCNameRef p_name, MCFontRef& r_font)
 {
     MCFontStruct* t_font_struct;
-    t_font_struct = MCdispatcher->loadfontwithhandle(p_handle);
+    t_font_struct = MCdispatcher->loadfontwithhandle(p_handle, p_name);
     if (t_font_struct == nil)
         return false;
     
@@ -400,7 +400,7 @@ void MCFontBreakText(MCFontRef p_font, MCStringRef p_text, MCRange p_range, MCFo
         else
             t_range = MCRangeMake(t_offset, t_break_point);
 
-#if !defined(_WIN32) && !defined(_ANDROID_MOBILE)
+#if !defined(_WIN32) && !defined(_ANDROID_MOBILE) && !defined(__EMSCRIPTEN__)
         // This is a really ugly hack to get LTR/RTL overrides working correctly -
         // ATSUI and Pango think they know better than us and won't let us suppress
         // the BiDi algorithm they uses for text layout. So instead, we need to add

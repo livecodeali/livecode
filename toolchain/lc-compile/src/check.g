@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -46,6 +46,10 @@
         
         -- Check that repeat-specific commands are appropriate
         CheckRepeats(Module, 0)
+
+        -- Check that all composite value expressions are built from
+        -- compatible value expressions
+        CheckLiterals(Module)
 
 --------------------------------------------------------------------------------
 
@@ -306,7 +310,7 @@
             Info'Type -> Type
             FullyResolveType(Type -> BaseType)
             (|
-                where(BaseType -> handler(_, Signature))
+                where(BaseType -> handler(_, _, Signature))
             ||
                 Id'Position -> Position
                 Error_NonHandlerTypeVariablesCannotBeCalled(Position)
@@ -318,7 +322,7 @@
     'rule' CheckBindingIsVariableOrGetHandlerId(Id):
         QuerySymbolId(Id -> Info)
         Info'Kind -> handler
-        Info'Type -> handler(_, Signature)
+        Info'Type -> handler(_, _, Signature)
         (|
             where(Signature -> signature(nil, ReturnType))
             (|
@@ -343,7 +347,7 @@
     'rule' CheckBindingIsVariableOrSetHandlerId(Id):
         QuerySymbolId(Id -> Info)
         Info'Kind -> handler
-        Info'Type -> handler(_, Signature)
+        Info'Type -> handler(_, _, Signature)
         (|
             where(Signature -> signature(parameterlist(parameter(_, in, _, _), nil), _))
         ||
@@ -452,6 +456,13 @@
 
     'rule' IsExpressionSimpleConstant(list(_, List)):
         IsExpressionListSimpleConstant(List)
+
+    'rule' IsExpressionSimpleConstant(array(_, Pairs)):
+        IsExpressionListSimpleConstant(Pairs)
+
+    'rule' IsExpressionSimpleConstant(pair(_, Key, Value)):
+        IsExpressionSimpleConstant(Key)
+        IsExpressionSimpleConstant(Value)
 
     'rule' IsExpressionSimpleConstant(invoke(Position, invokelist(Info, nil), expressionlist(Operand, nil))):
         Info'Name -> SyntaxName
@@ -863,7 +874,7 @@
 
     'rule' CheckSyntaxMethod(Class, method(Position, Name, Arguments)):
         QuerySymbolId(Name -> Info)
-        Info'Type -> handler(_, signature(Parameters, ReturnType))
+        Info'Type -> handler(_, _, signature(Parameters, ReturnType))
         Info'Access -> Access
         [|
             ne(Access, public)
@@ -1586,6 +1597,7 @@
     'rule' GetExpressionPosition(list(Position, _) -> Position):
     'rule' GetExpressionPosition(call(Position, _, _) -> Position):
     'rule' GetExpressionPosition(invoke(Position, _, _) -> Position):
+    'rule' GetExpressionPosition(result(Position) -> Position):
     'rule' GetExpressionPosition(nil -> Position)
         GetUndefinedPosition(-> Position)
 
@@ -1610,9 +1622,13 @@
             --Error_VariableMustHaveHighLevelType(Position)
         |)
 
-    'rule' CheckDeclaredTypes(DEFINITION'foreignhandler(_, _, _, Signature, _)):
-        -- Foreign handler signatures can contain any type so no need to
-        -- check anything here.
+    'rule' CheckDeclaredTypes(DEFINITION'foreignhandler(Position, _, _, signature(Parameters, ReturnType), _)):
+        -- Foreign handlers must be fully typed.
+        [|
+            where(ReturnType -> unspecified)
+            Error_NoReturnTypeSpecifiedForForeignHandler(Position)
+        |]
+        CheckForeignHandlerParameterTypes(Parameters)
         
     'rule' CheckDeclaredTypes(PARAMETER'parameter(Position, _, _, Type)):
         (|
@@ -1628,6 +1644,19 @@
         ||
             --Error_VariableMustHaveHighLevelType(Position)
         |)
+        
+'action' CheckForeignHandlerParameterTypes(PARAMETERLIST)
+
+    'rule' CheckForeignHandlerParameterTypes(parameterlist(parameter(Position, _, _, Type), Rest)):
+        [|
+            where(Type -> unspecified)
+            Error_NoTypeSpecifiedForForeignHandlerParameter(Position)
+        |]
+        CheckForeignHandlerParameterTypes(Rest)
+        
+    'rule' CheckForeignHandlerParameterTypes(nil):
+        -- do nothing
+
 
 'condition' IsHighLevelType(TYPE)
 
@@ -1644,7 +1673,7 @@
         |)
     'rule' IsHighLevelType(optional(_, Type)):
         IsHighLevelType(Type)
-    'rule' IsHighLevelType(handler(_, _)):
+    'rule' IsHighLevelType(handler(_, _, _)):
     'rule' IsHighLevelType(record(_, _, _)):
     'rule' IsHighLevelType(boolean(_)):
     'rule' IsHighLevelType(integer(_)):
@@ -1654,6 +1683,7 @@
     'rule' IsHighLevelType(data(_)):
     'rule' IsHighLevelType(array(_)):
     'rule' IsHighLevelType(list(_, _)):
+    'rule' IsHighLevelType(unspecified):
 
 --------------------------------------------------------------------------------
 
@@ -1701,7 +1731,8 @@
         CheckIdentifiers(Signature)
 
     'rule' CheckIdentifiers(DEFINITION'property(_, _, Id, _, _)):
-        CheckIdIsSuitableForDefinition(Id)
+        -- Do nothing; properties don't create a lexical binding in the module
+        -- environment so they can be called anything
 
     'rule' CheckIdentifiers(DEFINITION'event(_, _, Id, Signature)):
         CheckIdIsSuitableForDefinition(Id)
@@ -1772,18 +1803,59 @@
 
 --------------------------------------------------------------------------------
 
+'sweep' CheckLiterals(ANY)
+
+    'rule' CheckLiterals(EXPRESSION'list(Position, Elements)):
+        (|
+            IsExpressionSimpleConstant(list(Position, Elements))
+        ||
+            QueryExpressionListLength(Elements -> ElementCount)
+            [|
+                gt(ElementCount, 254)
+                Error_ListExpressionTooLong(Position)
+            |]
+        |)
+        CheckLiterals(Elements)
+
+    'rule' CheckLiterals(EXPRESSION'array(Position, Pairs)):
+        (|
+            IsExpressionSimpleConstant(array(Position, Pairs))
+        ||
+            QueryExpressionListLength(Pairs -> PairCount)
+            [|
+                gt(PairCount, 127)
+                Error_ArrayExpressionTooLong(Position)
+            |]
+        |)
+        CheckLiterals(Pairs)
+
+    'rule' CheckLiterals(EXPRESSION'pair(Position, Key, Value)):
+        (|
+            IsExpressionSimpleConstant(Key)
+            (|
+                where(Key -> string(_, _))
+            ||
+                Error_ConstantArrayKeyIsNotStringLiteral(Position)
+            |)
+        ||
+            CheckLiterals(Key)
+        |)
+        CheckLiterals(Value)
+
+--------------------------------------------------------------------------------
+
 'condition' QueryHandlerIdSignature(ID -> SIGNATURE)
 
     'rule' QueryHandlerIdSignature(Id -> Signature)
         QueryId(Id -> symbol(Info))
         Info'Kind -> handler
-        Info'Type -> handler(_, Signature)
+        Info'Type -> handler(_, _, Signature)
         
     'rule' QueryHandlerIdSignature(Id -> Signature)
         QueryId(Id -> symbol(Info))
         Info'Kind -> variable
         Info'Type -> Type
-        FullyResolveType(Type -> handler(_, Signature))
+        FullyResolveType(Type -> handler(_, _, Signature))
 
 'condition' QueryKindOfSymbolId(ID -> SYMBOLKIND)
 
@@ -1836,5 +1908,15 @@
         Id'Meaning -> Meaning
         
 'condition' QuerySymbolId(ID -> SYMBOLINFO)
+
+--------------------------------------------------------------------------------
+
+'action' QueryExpressionListLength(EXPRESSIONLIST -> INT)
+
+    'rule' QueryExpressionListLength(expressionlist(_, Tail) -> TailCount + 1)
+        QueryExpressionListLength(Tail -> TailCount)
+
+    'rule' QueryExpressionListLength(nil -> 0)
+        -- nothing
 
 --------------------------------------------------------------------------------

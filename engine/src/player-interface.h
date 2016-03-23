@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -126,8 +126,8 @@ public:
 		scale = s;
 	}
     
-    void setdontuseqt(bool p_dont_use_qt) { dontuseqt = p_dont_use_qt; }
-    void getdontuseqt(bool &r_dont_use_qt) { r_dont_use_qt = dontuseqt; }
+    virtual void setdontuseqt(bool p_dont_use_qt) { dontuseqt = p_dont_use_qt; }
+    virtual void getdontuseqt(bool &r_dont_use_qt) { r_dont_use_qt = dontuseqt; }
     
 	virtual Boolean prepare(MCStringRef options) = 0;
 	virtual Boolean playstart(MCStringRef options) = 0;
@@ -194,7 +194,6 @@ public:
 	////////// PROPERTY SUPPORT METHODS
     
 	virtual void Redraw(void) = 0;
-    virtual void SetVisibility(MCExecContext& ctxt, uinteger_t part, bool setting, bool visible) = 0;
     
 	////////// PROPERTY ACCESSORS
     
@@ -256,7 +255,6 @@ public:
     virtual void SetShowBorder(MCExecContext& ctxt, bool setting) = 0;
     virtual void SetBorderWidth(MCExecContext& ctxt, uinteger_t width) = 0;
     virtual void SetVisible(MCExecContext& ctxt, uinteger_t part, bool setting) = 0;
-    virtual void SetInvisible(MCExecContext& ctxt, uinteger_t part, bool setting) = 0;
     virtual void SetTraversalOn(MCExecContext& ctxt, bool setting) = 0;
     
     virtual void GetEnabledTracks(MCExecContext& ctxt, uindex_t& r_count, uinteger_t*& r_tracks) = 0;

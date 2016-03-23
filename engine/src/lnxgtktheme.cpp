@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -988,7 +988,7 @@ int4 MCNativeTheme::getmetric(Widget_Metric wmetric)
 		return 0; //offset from x to tab pane to x of first tab
 		break;
 	case WTHEME_METRIC_TABNONSELECTEDOFFSET:
-		ret = 2;
+		ret = 1;
 		break;
 	case WTHEME_METRIC_TABOVERLAP:
 		ret = -1; // hardcoded

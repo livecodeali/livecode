@@ -58,7 +58,7 @@ local sUserScriptLibraries
 -- MW-2013-11-06: [[ LinuxX64 ]] Add Linux x64 to the list of supported platforms.
 -- MM-2014-03-21: [[ PPC Support Dropped ]] Remove Mac PPC and Mac Universal from supported platforms.
 -- FG-2014-08-19: [[ RPi ]] Add Linux ARMv6-HF to the list of supported platforms
-constant kPlatforms = "Windows,MacOSX x86-32,Linux,Linux x64,Linux armv6-hf"
+constant kPlatforms = "Windows,MacOSX x86-32,MacOSX x86-64,Linux,Linux x64,Linux armv6-hf,Emscripten"
 
 -- list of info fields for the windows engine
 constant kVersionFlds = "Comments,CompanyName,FileDescription,FileVersion,InternalName,LegalCopyright,LegalTrademarks,OriginalFilename,PrivateBuild,ProductName,ProductVersion,SpecialBuild"
@@ -227,6 +227,7 @@ on revSaveAsStandalone pStack, pFolder, pPreview
    end repeat
    put tCanBuild or sStandaloneSettingsA["ios"] into tCanBuild
    put tCanBuild or sStandaloneSettingsA["android"] into tCanBuild
+   put tCanBuild or sStandaloneSettingsA["emscripten"] into tCanBuild
    if not tCanBuild then
       if revTestEnvironment() then
          return tError
@@ -291,7 +292,7 @@ on revSaveAsStandalone pStack, pFolder, pPreview
       put the mainStack of stack pStack into pStack
       set the defaultStack to pStack
       try
-         if sStandaloneSettingsA["ios"] or sStandaloneSettingsA["android"] then
+         if sStandaloneSettingsA["ios"] or sStandaloneSettingsA["android"] or sStandaloneSettingsA["emscripten"] then
             local tOutputMobileFolder
             revOutputDirectories tFolder & slash
             put the result into tOutputMobileFolder
@@ -320,6 +321,11 @@ on revSaveAsStandalone pStack, pFolder, pPreview
                --revIDEDeployBuild "android", pStack, tOutputMobileFolder
                dispatch "revSaveAsMobileStandalone" to stack "revSaveAsAndroidStandalone" with \
                      pStack, tOutputMobileFolder & slash & sStandaloneSettingsA["name"] & ".apk", "Build"
+            end if
+            
+            if sStandaloneSettingsA["emscripten"] then
+               dispatch "revSaveAsEmscriptenStandalone" to stack "revSaveAsEmscriptenStandalone" with \
+                     pStack, tOutputMobileFolder, "Build"
             end if
          else
             revCreateStandalone pStack,pFolder
@@ -575,7 +581,17 @@ private command revCreateStandalone pStack, pFolder
             case "MacOSX"
             case "MacOSX PowerPC-32"
             case "MacOSX x86-32"
-               put it & "/Mac OS X/x86-32/Standalone.app/Contents/MacOS/Standalone" into line 1 of tEngineSourceFile[tPlatform]
+            case "MacOSX x86-64"
+               // SN-2015-07-09: [[ StandaloneDeployment ]] Gypified Standalone-<edition>.app building does not
+               //  allow to create broken applications, so that the executable file in it bears the edition.
+               local tEdition
+               put the editionType into tEdition
+               if tEdition is "professional" then
+                  put "Commercial" into tEdition
+               else
+                  put the upper of char 1 of tEdition into char 1 of tEdition
+               end if
+               put it & "/Mac OS X/x86-32/Standalone.app/Contents/MacOS/Standalone-" & tEdition into line 1 of tEngineSourceFile[tPlatform]
                break
             case "Windows"
                put it & "/Windows/x86-32/Standalone" into tEngineSourceFile[tPlatform]
@@ -604,7 +620,7 @@ private command revCreateStandalone pStack, pFolder
          if tPlatform contains "MacOSX" and the platform is not "macos" or \
                tPlatform contains "Linux" and the platform is not "linux" or \
                tPlatform is "Windows" and the platform is not "win32" then
-            put revEnvironmentNonNativeBinariesPath(tPlatform) into tBinariesPath
+         put revEnvironmentNonNativeBinariesPath(tPlatform) into tBinariesPath
          else
             put revEnvironmentBinariesPath() into tBinariesPath
          end if
@@ -640,7 +656,7 @@ private command revCreateStandalone pStack, pFolder
       -- Necessary as some "users" might rename the actual executable file, arghhhh!
       if (line 1 of tEngineSourceFile[tPlatform] is not empty and there is not a file line 1 of tEngineSourceFile[tPlatform]) and \
             (line 2 of tEngineSourceFile[tPlatform] is not empty and there is not a file line 2 of tEngineSourceFile[tPlatform]) then
-         throw "Standalone: Ensure that you have not renamed the main Revolution executable file: " &cr& tEngineSourceFile[tPlatform]
+         throw "Standalone: Ensure that you have not renamed the main LiveCode executable file: " &cr& tEngineSourceFile[tPlatform]
       end if
       put tDirectory & sStandaloneSettingsA["name"] into tStandalonePath[tPlatform]
       if tPlatform is "Windows" then
@@ -656,6 +672,14 @@ private command revCreateStandalone pStack, pFolder
    -- loop over the platforms to build
    put 1 into tCount
    repeat for each line tPlatform in sPlatformList
+      -- Architectures
+      local tArchitectures
+      if tPlatform contains "MacOSX" then
+         if sStandaloneSettingsA["MacOSX x86-32"] then put "i386," after tArchitectures
+         if sStandaloneSettingsA["MacOSX x86-64"] then put "x86-64," after tArchitectures
+         delete char -1 of tArchitectures
+      end if
+      
       # OK-2007-08-09: Copy the script libraries to the stack on a per-platform basis, overwriting the old group each time.
       revCopyScriptLibraries tStackSourceFile[tPlatform], tPlatform
       
@@ -666,14 +690,14 @@ private command revCreateStandalone pStack, pFolder
       -- copy externals
       revCopyExternals tPlatform, tStackSourceFile[tPlatform], tEngineSourceFile[tPlatform], tStandalonePath[tPlatform]
       
-      // AL-2015-02-27: Include fontawesome in every standalone
-      if there is a file (revIDESpecialFolderPath("fonts") & slash & "fontawesome.ttf") then
-         local tCurrentLocation
-         set the itemDel to "/"
-         put item 1 to -2 of tStandalonePath[tPlatform] into tCurrentLocation
-         revCopyFile (revIDESpecialFolderPath("fonts") & slash & "fontawesome.ttf"), tCurrentLocation & slash & "fontawesome.ttf", "revStandaloneProgressCallback", the long id of me
-      end if
-      revBuildStandaloneDeploy tPlatform, tStackSourceFile[tPlatform], tEngineSourceFile[tPlatform], tStandalonePath[tPlatform]
+      // IM-2015-10-14: [[ BrowserWidget ]] Copy CEF files needed for the browser widget.
+      // IM-2014-03-20: [[ revBrowserCEF ]] Ensure CEF support files are copied if requested
+      local tRevBrowser, tLibBrowser
+      put "Browser (CEF)" is among the lines of sStandaloneSettingsA["scriptLibraries"] into tRevBrowser
+      put "com.livecode.widget.browser" is among the lines of sStandaloneSettingsA["extensions"] into tLibBrowser
+      revCopyCEFResources tPlatform, tStandalonePath[tPlatform], tRevBrowser, tLibBrowser
+      
+      revBuildStandaloneDeploy tPlatform, tArchitectures, tStackSourceFile[tPlatform], tEngineSourceFile[tPlatform], tStandalonePath[tPlatform]
       
       add 1 to tCount
    end repeat
@@ -812,7 +836,7 @@ end restoreStackToMessagePath
 
 
 private command revOutputDirectories pFolder
-   local tPlatform,tDirectory,tPlatforms,tCount
+   local tPlatform,tDirectory,tPlatforms,tCount,tOSXCount
    revStandaloneProgress "Checking directories..."
    if there is a folder (pFolder & sStandaloneSettingsA["name"]) then
       put 1 into tCount
@@ -823,14 +847,25 @@ private command revOutputDirectories pFolder
    put 0 into tPlatforms
    repeat for each item tPlatform in kPlatforms
       if sStandaloneSettingsA[tPlatform] = true then
-         add 1 to tPlatforms
+         if tPlatform contains "MacOSX" then
+            add 1 to tOSXCount
+         else
+            add 1 to tPlatforms
+         end if
       end if
    end repeat
+   if tOSXCount > 0 then add 1 to tPlatforms
    repeat for each item tPlatform in kPlatforms
       if sStandaloneSettingsA[tPlatform] = true then
          if not revDownloadEngine(tPlatform) then
             revStandaloneAddWarning "Could not build for " & tPlatform & " because required files are missing."
             next repeat
+         end if
+         
+         # Skip this platform if we've already done OSX building
+         if tPlatform contains "MacOSX" then
+            if tOSXCount is 0 then next repeat
+            put 0 into tOSXCount -- Reset the count to zero to force other OSX platforms to be ignored
          end if
          
          # OK-2010-02-17: Bug 8608 - Deploying stack with trailing whitespace in name fails on Windows
@@ -866,7 +901,10 @@ private command revCopyScriptLibraries pStack, pPlatform
    revAddLibrary "Common"
    
    -- data grid
-   if "data grid templates" is in the subStacks of stack pStack and there is a stack "revDataGridLibrary" then
+   // SN-2015-10-19: [[ Bug 16238 ]] DataGrid can be included on the wish of the user - in case the standalone stack
+   //  will load stacks using DataGrid, for instance.
+   if ("data grid templates" is in the subStacks of stack pStack or "DataGrid" is among the lines of sStandaloneSettingsA["scriptLibraries"]) \
+         and there is a stack "revDataGridLibrary" then
       set the mainStack of stack "revDataGridLibrary" to pStack
    end if
    
@@ -921,6 +959,11 @@ private command revCopyResources pStack, pStackFileList
    
    if sStandaloneSettingsA["brushes"] then
       put "revCompatibilityBrushes1" & return after tCopyFiles
+   end if
+   
+   -- PM-2015-06-24: [[ Bug 15535 ]] Make possible to use magnify palette in standalones
+   if sStandaloneSettingsA["Magnify"] then
+      put "Magnify" & return after tCopyFiles
    end if
    
    if sStandaloneSettingsA["revolutionPrintDialogs"] then
@@ -1715,7 +1758,11 @@ private function revSaveToFolder pFolder, pStack, pGeneric
       put ".rev" after tFileName
    end if
    lock screen
+   // SN-2015-07-01: [[ Bug 15259 ]] We don't want the saving to be trapped by
+   //  a saveStackRequest handler in the standalone stack
+   lock messages
    save stack pStack as pFolder&tFileName
+   unlock messages
    return tFileName
 end revSaveToFolder
 
@@ -1931,6 +1978,105 @@ private command revCopyModule pPlatform, pModuleName, pSourceFile, pSourceFolder
    revAddMapping pPlatform, pModuleName, tTargetModule
 end revCopyModule
 
+private command revCopyCEFResources pPlatform, pStandalonePath, pCopyRevBrowserResources, pCopyLibBrowserResources
+   if not (pCopyRevBrowserResources or pCopyLibBrowserResources) then
+      // No CEF resources required
+      exit revCopyCEFResources
+   end if
+   
+   // IM-2014-08-14: [[ LibCef2062 ]] Reorganisation of libcef framework files
+   local tDetails
+   put revStandalonePlatformDetails(pPlatform) into tDetails
+   local tExternalPath
+   put revExternalPath("Browser", tDetails["platform"], tDetails["architecture"]) into tExternalPath
+   // AL-2015-03-13: [[ Bug 14936 ]] Switch where case takes an expression should not switch on a value
+   local tCurrentLocation, tCEFResources, tCEFDest
+   set the itemdel to slash
+   put (item 1 to -2 of tExternalPath) & "/CEF" into tCEFResources
+   put item 1 to -2 of pStandalonePath into tCurrentLocation
+   switch
+      case pPlatform = "Windows"
+         put tCurrentLocation & slash & "Externals/CEF" into tCEFDest
+         
+         revSBEnsureFolder tCEFDest
+         if the result is not empty then
+            revStandaloneAddWarning "Windows, external failed to create folder:" && quote & tCEFDest & quote
+         end if
+         
+         local tCEFFiles
+         // make sure we only copy the required helper process executable
+         put revListFiles(tCEFResources) into tCEFFiles
+         filter lines of tCEFFIles not matching "*.exe"
+         if the last char of tCEFFiles is not return then
+            put return after tCEFFiles
+         end if
+         if pCopyRevBrowserResources then
+            put "revbrowser-cefprocess.exe" & return after tCEFFiles
+         end if
+         if pCopyLibBrowserResources then
+            put "libbrowser-cefprocess.exe" & return after tCEFFiles
+         end if
+         repeat for each line tCEFFile in tCEFFiles
+            revSBCopyFileToFolder tCefResources & slash & tCEFFile, tCEFDest, "revStandaloneProgressCallback", the long id of me
+            if the result is not empty then
+               revStandaloneAddWarning "Windows, external failed to copy:" && quote & tCefResources & slash & tCEFFile & quote
+            end if
+         end repeat
+         
+         revSBCopyFolderToDestination tCefResources & slash & "locales", tCEFDest, "revStandaloneProgressCallback", the long id of me
+         if the result is not empty then
+            revStandaloneAddWarning "Windows, external failed to copy:" && quote & tCefResources & slash & "locales" & quote
+         end if
+         break
+      case pPlatform contains "Linux"
+         put tCurrentLocation & slash & "Externals/CEF" into tCEFDest
+         
+         revSBEnsureFolder tCEFDest
+         if the result is not empty then
+            revStandaloneAddWarning "Linux, external failed to create folder:" && quote & tCEFDest & quote
+         end if
+         
+         // make sure we only copy the required helper process executable
+         put revListFiles(tCEFResources) into tCEFFiles
+         filter lines of tCEFFiles not matching "*-cefprocess"
+         // icudtl.dat needs to be placed alongside the executable
+         filter lines of tCEFFiles not matching "icudtl.dat"
+
+         // Copy files to CEF resource folder.
+         repeat for each line tCEFFile in tCEFFiles
+            revSBCopyFileToFolder tCefResources & slash & tCEFFile, tCEFDest, "revStandaloneProgressCallback", the long id of me
+            if the result is not empty then
+               revStandaloneAddWarning "Linux, external failed to copy:" && quote & tCefResources & slash & tCEFFile & quote
+            end if
+         end repeat
+         
+         revSBCopyFolderToDestination tCefResources & slash & "locales", tCEFDest, "revStandaloneProgressCallback", the long id of me
+         if the result is not empty then
+            revStandaloneAddWarning "Linux, external failed to copy:" && quote & tCefResources & slash & "locales" & quote
+         end if
+
+         // Copy files to standalone folder
+         put "icudtl.dat" & return into tCEFFiles
+         if pCopyRevBrowserResources then
+            put "revbrowser-cefprocess" & return after tCEFFiles
+         end if
+         if pCopyLibBrowserResources then
+            put "libbrowser-cefprocess" & return after tCEFFiles
+         end if
+         
+         repeat for each line tCEFFile in tCEFFiles
+            revSBCopyFileToFolder tCefResources & slash & tCEFFile, tCurrentLocation, "revStandaloneProgressCallback", the long id of me
+            if the result is not empty then
+               revStandaloneAddWarning "Linux, external failed to copy:" && quote & tCefResources & slash & tCEFFile & quote
+            end if
+         end repeat
+         
+         break
+      default
+         break
+   end switch
+end revCopyCEFResources
+
 private command revCopyExternals pPlatform, pStackFilePath, pEnginePath, pStandalonePath
    local tExternalRes, tColors, tCursorName, tCurrentLocation, tExternalPath, tExternals, tExternalLibrary
    local tCopyFiles, tOrigVisible, tPath, tExternalFile, x, tColor, tPattern, tExternalName
@@ -2093,67 +2239,11 @@ private command revCopyExternals pPlatform, pStackFilePath, pEnginePath, pStanda
       revAddExternal tExternal
    end repeat
    
-   
-   // IM-2014-03-20: [[ revBrowserCEF ]] Ensure CEF support files are copied if requested
-   // IM-2014-08-14: [[ LibCef2062 ]] Reorganisation of libcef framework files
-   if "Browser (CEF)" is among the lines of tScriptLibraries then
-      put revExternalPath("Browser", tPlatform, tArch) into tExternalPath
-      // AL-2015-03-13: [[ Bug 14936 ]] Switch where case takes an expression should not switch on a value
-      switch
-         case pPlatform contains "MacOSX"
-            put (item 1 to -3 of pStandalonePath) & "/Frameworks" into tCEFFramework
-            put (item 1 to -2 of tExternalPath) & "/CEF" into tCEFResources
-            
-            revSBEnsureFolder tCEFFramework
-            if the result is not empty then
-               revStandaloneAddWarning "MacOS, external failed to create folder:" && quote & tCEFFramework & quote
-            end if
-            revSBCopyFolderToDestination tCefResources & "/Chromium Embedded Framework.framework", tCEFFramework, "revStandaloneProgressCallback", the long id of me
-            if the result is not empty then
-               revStandaloneAddWarning "MacOS, external failed to copy:" && quote & tCefResources & "/Resources" & quote
-            end if
-            revSBCopyFolderToDestination tCefResources & "/revbrowser-cefprocess.app", tCEFFramework, "revStandaloneProgressCallback", the long id of me
-            if the result is not empty then
-               revStandaloneAddWarning "MacOS, external failed to copy:" && quote & tCefResources & "/revbrowser-cefprocess.app" & quote
-            end if
-            revSBCopyFolderToDestination tCefResources & "/revbrowser-cefprocess EH.app", tCEFFramework, "revStandaloneProgressCallback", the long id of me
-            if the result is not empty then
-               revStandaloneAddWarning "MacOS, external failed to copy:" && quote & tCefResources & "/revbrowser-cefprocess EH.app" & quote
-            end if
-            revSBCopyFolderToDestination tCefResources & "/revbrowser-cefprocess NP.app", tCEFFramework, "revStandaloneProgressCallback", the long id of me
-            if the result is not empty then
-               revStandaloneAddWarning "MacOS, external failed to copy:" && quote & tCefResources & "/revbrowser-cefprocess NP.app" & quote
-            end if
-            break
-         case pPlatform = "Windows"
-            put (item 1 to -2 of tExternalPath) & "/CEF" into tCEFResources
-            put tCurrentLocation & slash & "Externals/CEF" into tCEFDest
-            
-            revSBEnsureFolder tCEFDest
-            if the result is not empty then
-               revStandaloneAddWarning "Windows, external failed to create folder:" && quote & tCEFDest & quote
-            end if
-            repeat for each line tCEFFile in revListFiles(tCEFResources)
-               revSBCopyFileToFolder tCefResources & slash & tCEFFile, tCEFDest, "revStandaloneProgressCallback", the long id of me
-               if the result is not empty then
-                  revStandaloneAddWarning "Windows, external failed to copy:" && quote & tCefResources & slash & tCEFFile & quote
-               end if
-            end repeat
-            
-            repeat for each line tCEFFolder in revListFolders(tCEFResources)
-               revSBCopyFolderToDestination tCefResources & slash & tCEFFolder, tCEFDest, "revStandaloneProgressCallback", the long id of me
-               if the result is not empty then
-                  revStandaloneAddWarning "Windows, external failed to copy:" && quote & tCefResources & slash & tCEFFolder & quote
-               end if
-            end repeat
-            break
-            # We don't support CEF on Linux yet
-         case pPlatform contains "Linux"
-         default
-            break
-      end switch
-   end if
+   // SN-2015-07-01: [[ Bug 15259 ]] We don't want the saving to be trapped by
+   //  a saveStackRequest handler in the standalone stack
+   lock messages
    save stack pStackFilePath
+   unlock messages
    
    -- MM-2013-04-05: [[ Bug 10756 ]] Make sure we're allowed to delete the stack before deleteing.
    set the cantDelete of stack pStackFilePath to false
@@ -2176,7 +2266,7 @@ end log
 # the cRevStandaloneSettings into sStandaloneSettings
 #####################################################################
 
-private command revBuildStandaloneDeploy pPlatform, pStackFilePath, pEnginePath, pStandalonePath
+private command revBuildStandaloneDeploy pPlatform, pArchitectures, pStackFilePath, pEnginePath, pStandalonePath
    -- Make sure things like 'platform' are standard
    local tPlatformDetailsA
    put revStandalonePlatformDetails(pPlatform) into tPlatformDetailsA
@@ -2222,8 +2312,10 @@ private command revBuildStandaloneDeploy pPlatform, pStackFilePath, pEnginePath,
    end if
    
    # AL-2015-01-29: [[ Scriptify IDE ]] Add user script libraries to deploy parameters
+   -- PM-2015-12-07: [[ Bug 15706 ]] Put double quotes around the stack name to avoid confusing the 
+   -- parser when the stack name is 'copy of ...'
    repeat for each line tLine in sUserScriptLibraries
-      put return & "if there is a stack" && tLine && "then library" && tLine after sStandaloneSettingsA["startup_script"]
+      put return & "if there is a stack" && quote & tLine & quote && "then library" && quote & tLine & quote after sStandaloneSettingsA["startup_script"]
    end repeat
    
    # AL-2015-01-29: [[ Scriptify IDE ]] Add OSX App icons to deploy parameters
@@ -2235,22 +2327,6 @@ private command revBuildStandaloneDeploy pPlatform, pStackFilePath, pEnginePath,
          put return & "revInternal__SetSmallAppIcon" && sStandaloneSettingsA["OSX,smallappicon"] after sStandaloneSettingsA["startup_script"]
       end if
    end if   
-   
-   // AL-2015-02-27: Include fontawesome in every standalone
-   local  tTargetFontPath
-   if tPlatformDetailsA["platform"] begins with "MacOS" then
-      put "specialfolderpath(" & quote & "engine" & quote & ") & slash & " & quote & ".." & quote & " & slash & Resources & slash & _MacOS & slash & fontawesome.ttf" into tTargetFontPath
-   else
-      put "specialfolderpath(" & quote & "engine" & quote & ") & slash & fontawesome.ttf" into tTargetFontPath
-   end if
-   
-   if there is a file (revIDESpecialFolderPath("fonts") & slash & "fontawesome.ttf") then
-      if sStandaloneSettingsA["startup_script"] is not empty then
-         put "start using font file " & tTargetFontPath into sStandaloneSettingsA["startup_script"]
-      else
-         put return & "start using font file " & tTargetFontPath after sStandaloneSettingsA["startup_script"]
-      end if
-   end if
    
    # AL-2015-01-29: [[ Scriptify IDE ]] Add the startup script to the deploy parameters
    if sStandaloneSettingsA["startup_script"] is not empty then
@@ -2266,7 +2342,8 @@ private command revBuildStandaloneDeploy pPlatform, pStackFilePath, pEnginePath,
    end if
    
    # AL-2015-04-12: [[ Standalone Extensions ]] Add chosen extensions to the standalone inclusions
-   repeat for each line tExtension in sStandaloneSettingsA["extensions"]
+   # AL-2015-07-21: [[ Standalone Extensions ]] Automatically include dependecies, and load in order
+   repeat for each line tExtension in revIDEExtensionsOrderByDependency(sStandaloneSettingsA["extensions"])
       local tExtensionFile
       put revIDEExtensionModuleFile(tExtension) into tExtensionFile
       if tDeployInfo["modules"] is empty then
@@ -2277,20 +2354,17 @@ private command revBuildStandaloneDeploy pPlatform, pStackFilePath, pEnginePath,
    end repeat
    
    if tPlatformDetailsA["platform"] is "MacOSX" then
-      -- MW-2013-06-13: [[ CloneAndRun ]] If installed do things in the usual way, otherwise pass
-      --    through in 'engine' (so it builds using archs present there).
-      if revEnvironmentIsInstalled() then
-         -- MM-2014-03-21: [[ PPC Support Dropped ]] We now only pass a single Intel engine path.
-         put pEnginePath into tDeployInfo["engine_x86"]
-      else
-         put pEnginePath into tDeployInfo["engine"]
-      end if
+      put pEnginePath into tDeployInfo["engine"]
       -- Disabled for now - will enable when its been properly tested
       //if line 1 of pEnginePath is not empty and line 2 of pEnginePath is not empty then
       //put pStandalonePath & ".dat" into tDeployInfo["spill"]
       //end if
    else
       put pEnginePath into tDeployInfo["engine"]
+   end if
+   
+   if pArchitectures is not empty then
+      put pArchitectures into tDeployInfo["architectures"]
    end if
    
    -- Set windows-specific info
@@ -2480,7 +2554,8 @@ function revRedirectMacOSResourcesIsExecutable pFile
    read from file pFile for 1 int4
    if the result is not "eof" then
       if it is 0xCAFEBABE or it is 0xBEBAFECA or \
-            it is 0xFEEDFACE or it is 0xCEFAEDFE then
+            it is 0xFEEDFACE or it is 0xCEFAEDFE or \
+            it is 0xFEEDFACF or it is 0xCFFAEDFE then
          put true into tIsExecutable
       end if
    end if
@@ -2504,9 +2579,10 @@ private command revSmartChecking pStackFilesList, pSearchForInclusions
       put false into sStandaloneSettingsA["answerDialog"]
       put false into sStandaloneSettingsA["askDialog"]
       put false into sStandaloneSettingsA["brushes"]   --LG-2007-12-13: Bug 4370
+      put false into sStandaloneSettingsA["Magnify"]  -- PM-2015-06-24: [[ Bug 15535 ]] Make possible to include magnify palette in standalones
       put false into sStandaloneSettingsA["pdfPrinter"]
       
-      # OK-2007-11-13 : Support for revolution print dialogs
+      # OK-2007-11-13 : Support for LiveCode print dialogs
       put false into sStandaloneSettingsA["revolutionPrintDialogs"]
    end if
    
@@ -2637,7 +2713,7 @@ private command revCheckObject pObject,pUserLibraries, pSearchForInclusions
          put true into sStandaloneSettingsA["pdfPrinter"]
       end if
       
-      # OK-2007-11-13 : Support for revolution print dialogs. The dialogs are included if there is any reference to systemPrintSelector in the script,
+      # OK-2007-11-13 : Support for LiveCode print dialogs. The dialogs are included if there is any reference to systemPrintSelector in the script,
       # or if we are building for linux. (This might include the files more often than they are required).
       if offset("systemPrintSelector", tScript) is not 0 or "Linux" is among the lines of sPlatformList then
          put true into sStandaloneSettingsA["revolutionPrintDialogs"]

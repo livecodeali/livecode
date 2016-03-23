@@ -8,9 +8,7 @@
 		'exe_suffix': '',
 		'debug_info_suffix': '.dbg',
 		
-		'c++_std': '<!(echo ${CXX_STD:-gnu++03})',
-		
-		'silence_warnings': 0,
+		'c++_std': '<!(echo ${CXX_STD:-c++03})',
 	},
 	
 	'defines':
@@ -70,6 +68,7 @@
 					'-Wall',
 					'-Wextra',
 					'-Wno-unused-parameter',	# Just contributes build noise
+					'-Werror=return-type',
 				],
 			},
 			{
@@ -77,6 +76,7 @@
 				[
 					'-w',						# Disable warnings
 					'-fpermissive',				# Be more lax with old code
+					'-Wno-return-type',
 				],
 				
 				'cflags_c':
@@ -89,8 +89,6 @@
 	
 	'cflags':
 	[
-		'-Wall',
-		'-Wextra',
 		'-fstrict-aliasing',
 		'-fvisibility=hidden',
 	],
@@ -106,6 +104,7 @@
 		'-std=<(c++_std)',
 		'-fno-exceptions',
 		'-fno-rtti',
+		'-fcheck-new',
 	],
 	
 	'configurations':
@@ -116,6 +115,7 @@
 			[
 				'-O0',
 				'-g3',
+				'-Werror=uninitialized',
 			],
 			
 			'defines':
@@ -145,6 +145,7 @@
 			[
 				'-O0',
 				'-g0',
+				'-Werror=uninitialized',
 			],
 			
 			'defines':

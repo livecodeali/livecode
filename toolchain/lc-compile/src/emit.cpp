@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -108,6 +108,7 @@ extern "C" void EmitBeginRecordType(long base_type_index);
 extern "C" void EmitRecordTypeField(NameRef name, long type_index);
 extern "C" void EmitEndRecordType(long& r_type_index);
 extern "C" void EmitBeginHandlerType(long return_type_index);
+extern "C" void EmitBeginForeignHandlerType(long return_type_index);
 extern "C" void EmitHandlerTypeInParameter(NameRef name, long type_index);
 extern "C" void EmitHandlerTypeOutParameter(NameRef name, long type_index);
 extern "C" void EmitHandlerTypeInOutParameter(NameRef name, long type_index);
@@ -144,9 +145,15 @@ extern "C" void EmitStringConstant(long value, long *idx);
 extern "C" void EmitBeginListConstant(void);
 extern "C" void EmitContinueListConstant(long idx);
 extern "C" void EmitEndListConstant(long *idx);
+extern "C" void EmitBeginArrayConstant(void);
+extern "C" void EmitContinueArrayConstant(long key_idx, long value_idx);
+extern "C" void EmitEndArrayConstant(long *idx);
 extern "C" void EmitBeginAssignList(long reg);
 extern "C" void EmitContinueAssignList(long reg);
 extern "C" void EmitEndAssignList(void);
+extern "C" void EmitBeginAssignArray(long reg);
+extern "C" void EmitContinueAssignArray(long reg);
+extern "C" void EmitEndAssignArray(void);
 extern "C" void EmitFetch(long reg, long var, long level);
 extern "C" void EmitStore(long reg, long var, long level);
 extern "C" void EmitReturn(long reg);
@@ -168,6 +175,17 @@ extern "C" void DependStart(void);
 extern "C" void DependFinish(void);
 extern "C" void DependDefineMapping(NameRef module_name, const char *source_file);
 extern "C" void DependDefineDependency(NameRef module_name, NameRef dependency_name);
+
+//////////
+
+struct AttachedReg
+{
+    AttachedReg *next;
+    long expr;
+    long reg;
+};
+
+static AttachedReg *s_attached_regs = nil;
 
 //////////
 
@@ -353,7 +371,7 @@ void EmitFinish(void)
             if (__FindEmittedModule(s_ordered_modules[i], t_module))
             {
                 if (fprintf(s_output_code_file,
-                            "extern int %s_Finalize(void);\n",
+                            "extern void %s_Finalize(void);\n",
                             t_module -> modified_name) < 0)
                     goto error_cleanup;
             }
@@ -852,6 +870,13 @@ void EmitBeginContextHandlerDefinition(long p_index, PositionRef p_position, Nam
 
 void EmitEndHandlerDefinition(void)
 {
+    if (s_attached_regs != nil)
+    {
+        for(AttachedReg *t_reg = s_attached_regs; t_reg != NULL; t_reg = t_reg -> next)
+            Debug_Emit("Dangling register %d attached to %p", t_reg -> reg, t_reg -> expr);
+        Fatal_InternalInconsistency("Handler code generated with dangling register attachments");
+    }
+    
     MCScriptEndHandlerInModule(s_builder);
 
     Debug_Emit("EndHandlerDefinition()");
@@ -1253,6 +1278,13 @@ void EmitBeginHandlerType(long return_type_index)
     Debug_Emit("BeginHandlerType(%ld)", return_type_index);
 }
 
+void EmitBeginForeignHandlerType(long return_type_index)
+{
+    MCScriptBeginForeignHandlerTypeInModule(s_builder, return_type_index);
+    
+    Debug_Emit("BeginForeignHandlerType(%ld)", return_type_index);
+}
+
 static void EmitHandlerTypeParameter(MCHandlerTypeFieldMode mode, NameRef name, long type_index)
 {
     MCScriptContinueHandlerTypeInModule(s_builder, (MCScriptHandlerTypeParameterMode)mode, to_mcnameref(name), type_index);
@@ -1527,6 +1559,27 @@ void EmitEndListConstant(long *idx)
     Debug_Emit("EndListConstant(-> %ld)", *idx);
 }
 
+void EmitBeginArrayConstant(void)
+{
+    MCScriptBeginArrayValueInModule(s_builder);
+
+    Debug_Emit("BeginArrayConstant()", 0);
+}
+
+void EmitContinueArrayConstant(long key_idx, long value_idx)
+{
+	MCScriptContinueArrayValueInModule(s_builder, key_idx, value_idx);
+
+	Debug_Emit("ContinueArrayConstant(%ld, %ld)", key_idx, value_idx);
+}
+
+void EmitEndArrayConstant(long *idx)
+{
+    MCScriptEndArrayValueInModule(s_builder, (uindex_t&)*idx);
+
+    Debug_Emit("EndArrayConstant(-> %ld)", *idx);
+}
+
 void EmitBeginAssignList(long reg)
 {
     MCScriptEmitBeginAssignListInModule(s_builder, reg);
@@ -1546,6 +1599,27 @@ void EmitEndAssignList(void)
     MCScriptEmitEndAssignListInModule(s_builder);
 
     Debug_Emit("EndAssignList()", 0);
+}
+
+void EmitBeginAssignArray(long reg)
+{
+    MCScriptEmitBeginAssignArrayInModule(s_builder, reg);
+
+    Debug_Emit("BeginAssignArray(%ld)", reg);
+}
+
+void EmitContinueAssignArray(long reg)
+{
+    MCScriptEmitContinueAssignArrayInModule(s_builder, reg);
+
+    Debug_Emit("ContinueAssignArray(%ld)", reg);
+}
+
+void EmitEndAssignArray(void)
+{
+    MCScriptEmitEndAssignArrayInModule(s_builder);
+
+    Debug_Emit("EndAssignArray()", 0);
 }
 
 void EmitAssign(long dst, long src)
@@ -1594,15 +1668,6 @@ void EmitReturnNothing(void)
 
 ////////
 
-struct AttachedReg
-{
-    AttachedReg *next;
-    long expr;
-    long reg;
-};
-
-static AttachedReg *s_attached_regs = nil;
-
 static bool FindAttachedReg(long expr, AttachedReg*& r_attach)
 {
     for(AttachedReg *t_reg = s_attached_regs; t_reg != nil; t_reg = t_reg -> next)
@@ -1626,6 +1691,8 @@ void EmitAttachRegisterToExpression(long reg, long expr)
     t_attach -> expr = expr;
     t_attach -> reg = reg;
     s_attached_regs = t_attach;
+    
+    Debug_Emit("AttachRegister(%d, %p)", reg, expr);
 }
 
 void EmitDetachRegisterFromExpression(long expr)
@@ -1651,6 +1718,9 @@ void EmitDetachRegisterFromExpression(long expr)
                 break;
             }
     }
+    
+    if (t_remove != nil)
+        Debug_Emit("DetachRegister(%d, %p)", t_remove -> reg, t_remove -> expr);
     
     MCMemoryDelete(t_remove);
 }

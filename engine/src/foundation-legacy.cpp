@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -83,7 +83,7 @@ bool MCCStringFormat(char*& r_string, const char *p_format, ...)
 	va_start(t_args, p_format);
 	t_count = _vscprintf(p_format, t_args);
 	va_end(t_args);
-#elif defined(_MACOSX) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_IPHONE) || defined(TARGET_SUBPLATFORM_ANDROID) || defined(_MAC_SERVER) || defined(_LINUX_SERVER)
+#elif defined(_MACOSX) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_IPHONE) || defined(TARGET_SUBPLATFORM_ANDROID) || defined(_MAC_SERVER) || defined(_LINUX_SERVER) || defined(__EMSCRIPTEN__)
 	va_start(t_args, p_format);
 	t_count = vsnprintf(nil, 0, p_format, t_args);
 	va_end(t_args);
@@ -109,7 +109,7 @@ bool MCCStringFormatV(char*& r_string, const char *p_format, va_list p_args)
 	int t_count;
 #if defined(_WINDOWS) || defined(_WINDOWS_SERVER)
 	t_count = _vscprintf(p_format, p_args);
-#elif defined(_MACOSX) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_IPHONE) || defined(TARGET_SUBPLATFORM_ANDROID) || defined(_MAC_SERVER) || defined(_LINUX_SERVER)
+#elif defined(_MACOSX) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_IPHONE) || defined(TARGET_SUBPLATFORM_ANDROID) || defined(_MAC_SERVER) || defined(_LINUX_SERVER) || defined(__EMSCRIPTEN__)
 	t_count = vsnprintf(nil, 0, p_format, p_args);
 #else
 #error "Implement MCCStringFormat"
@@ -134,7 +134,7 @@ bool MCCStringAppendFormat(char*& x_string, const char *p_format, ...)
 	va_start(t_args, p_format);
 	t_count = _vscprintf(p_format, t_args);
 	va_end(t_args);
-#elif defined(_MACOSX) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_IPHONE) || defined(TARGET_SUBPLATFORM_ANDROID) || defined(_MAC_SERVER) || defined(_LINUX_SERVER)
+#elif defined(_MACOSX) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_IPHONE) || defined(TARGET_SUBPLATFORM_ANDROID) || defined(_MAC_SERVER) || defined(_LINUX_SERVER) || defined(__EMSCRIPTEN__)
 	va_start(t_args, p_format);
 	t_count = vsnprintf(nil, 0, p_format, t_args);
 	va_end(t_args);
@@ -1785,12 +1785,19 @@ static bool save_array_to_stream(void *p_context, MCArrayRef p_array, MCNameRef 
 		t_str_value = nil;
 		break;
 	case kMCValueTypeCodeArray:
-		t_type = VF_ARRAY;
-		t_str_value = nil;
+        if (MCArrayGetCount((MCArrayRef)p_value) != 0)
+        {
+            t_type = VF_ARRAY;
+            t_str_value = nil;
+        }
+        else
+        {
+            t_type = VF_STRING;
+            t_str_value = kMCEmptyString;
+        }
 		break;
-	default:
-		MCAssert(false);
-		break;
+    default:
+        MCUnreachableReturn(false);
 	}
 
 	IO_stat t_stat;

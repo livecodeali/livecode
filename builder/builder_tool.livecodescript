@@ -1,4 +1,4 @@
-﻿script "Command Line Builder"
+script "Command Line Builder"
 local sWarnAsError
 
 on startup
@@ -8,6 +8,7 @@ on startup
    
    __loadExternal "revzip"
    __loadExternal "revxml"
+   __loadExternal "revdb"
    
    put false into sWarnAsError
    
@@ -22,7 +23,7 @@ on startup
    put "community" into tEdition
    put "stable" into tBuild
    
-   local tEngineDir, tPrivateDir, tOutputDir, tWorkDir
+   local tEngineDir, tPrivateDir, tOutputDir, tWorkDir, tDocsDir, tBuiltDocsDir
    
    put 1 into tArgIndex
    repeat while tArgIndex is among the keys of tArgs
@@ -41,13 +42,13 @@ on startup
          end if
          add 1 to tArgIndex
       else if tArgs[tArgIndex] is "--stage" then
-         if tArgs[tArgIndex + 1] is not among the items of "environment,tools,server,notes,docs,disk" then
+         if tArgs[tArgIndex + 1] is not among the items of "environment,tools,bundle,server,notes,docs,disk,guide" then
             __builderLog "error", "Unknown stage '" & tArgs[tArgIndex + 1] & "'"
          end if
          put tArgs[tArgIndex + 1] into tStage
          add 1 to tArgIndex
       else if tArgs[tArgIndex] is "--edition" then
-         if tArgs[tArgIndex + 1] is not among the items of "community,commercial" then
+         if tArgs[tArgIndex + 1] is not among the items of "community,indy,business,commercial" then
             __builderLog "error", "Unknown edition '" & tArgs[tArgIndex + 1] & "'"
          end if
          put tArgs[tArgIndex + 1] into tEdition
@@ -82,6 +83,18 @@ on startup
          end if
          put tArgs[tArgIndex + 1] into tWorkDir
          add 1 to tArgIndex
+      else if tArgs[tArgIndex] is "--docs-dir" then
+         if tArgs[tArgIndex + 1] is empty then
+            __builderLog "error", "No path specified for --docs-dir argument"
+         end if
+         put tArgs[tArgIndex + 1] into tDocsDir
+         add 1 to tArgIndex
+      else if tArgs[tArgIndex] is "--built-docs-dir" then
+         if tArgs[tArgIndex + 1] is empty then
+            __builderLog "error", "No path specified for --built-docs-dir argument"
+         end if
+         put tArgs[tArgIndex + 1] into tBuiltDocsDir
+         add 1 to tArgIndex
       else if tArgs[tArgIndex] is "--warn-as-error" then
          put true into sWarnAsError
       end if
@@ -90,6 +103,10 @@ on startup
    
    if the keys of tPlatforms is empty and tStage is "tools" then
       __builderLog "error", "No platforms specified"
+   end if
+   
+   if tEdition is "commercial" and tStage is not "server" then
+      __builderLog "error", "Commercial is only a valid edition for server packages"
    end if
    
    if tStage is "environment" then
@@ -116,6 +133,14 @@ on startup
       builderSetWorkDir tWorkDir
    end if
    
+   if tDocsDir is not empty then
+      builderSetDocsDir tDocsDir
+   end if
+   
+   if tBuiltDocsDir is not empty then
+      builderSetBuiltDocsDir tBuiltDocsDir
+   end if
+   
    builderBuild tStage, the keys of tPlatforms, tEdition, tBuild
    
    quit 0
@@ -139,14 +164,18 @@ end __loadExternal
 
 command __builderLog pType, pMessage
    local tLine
+
+   -- Promote builder warnings to errors, if requested
+   if pType is "warning" and sWarnAsError then
+      put "error" into pType
+   end if
    
    put toUpper(char 1 of pType) into char 1 of pType
    
    repeat for each line tLine in pMessage
       write ("[" && the internet date && "]" && ":" && pType && ":" && tLine & return) to stderr
    end repeat
-   if pType is "warning" and sWarnAsError or \
-         pType is "error" then
+   if pType is "error" then
       quit 1
    end if
 end __builderLog

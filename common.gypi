@@ -6,11 +6,10 @@
 		'config/configurations.gypi',
 		'config/crosscompile.gypi',
 		'config/exclusions.gypi',
-		'config/paths.gypi',
 		'config/perl.gypi',
 		'config/target_os.gypi',
 		'config/thirdparty.gypi',
-		'config/warnings.gypi',
+		'config/version.gypi',
 		'config/yacc.gypi',
 	],
 }

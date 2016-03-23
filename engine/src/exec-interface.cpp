@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -206,6 +206,7 @@ MC_EXEC_DEFINE_EXEC_METHOD(Interface, ShowObject, 2)
 MC_EXEC_DEFINE_EXEC_METHOD(Interface, ShowObjectWithEffect, 3)
 MC_EXEC_DEFINE_EXEC_METHOD(Interface, ShowMenuBar, 0)
 MC_EXEC_DEFINE_EXEC_METHOD(Interface, ShowTaskBar, 0)
+MC_EXEC_DEFINE_EXEC_METHOD(Interface, PopupWidget, 3);
 MC_EXEC_DEFINE_EXEC_METHOD(Interface, PopupButton, 2)
 MC_EXEC_DEFINE_EXEC_METHOD(Interface, DrawerStack, 5)
 MC_EXEC_DEFINE_EXEC_METHOD(Interface, DrawerStackByName, 5)
@@ -1946,11 +1947,10 @@ void MCInterfaceExecRevert(MCExecContext& ctxt)
 	Boolean oldlock = MClockmessages;
 	MClockmessages = True;
 	MCerrorlock++;
-	t_sptr->del();
+    if (t_sptr->del())
+        t_sptr -> scheduledelete();
 	MCerrorlock--;
 	MClockmessages = oldlock;
-	MCtodestroy->add
-	(t_sptr);
 	MCNewAutoNameRef t_name;
 	/* UNCHECKED */ MCNameCreate(*t_filename, &t_name);
 	t_sptr = MCdispatcher->findstackname(*t_name);
@@ -1962,57 +1962,67 @@ void MCInterfaceExecRevert(MCExecContext& ctxt)
 
 void MCInterfaceExecGroupControls(MCExecContext& ctxt, MCObjectPtr *p_controls, uindex_t p_control_count)
 {
+    if (p_control_count == 0)
+        return;
+    
     // MW-2013-06-20: [[ Bug 10863 ]] Make sure all objects have this parent, after
     //   the first object has been resolved.
     MCObject *t_required_parent;
     t_required_parent = nil;
+
+    MCCard *t_card = nil;
+    MCControl *controls = nil;
+    MCObject *t_this_parent = nil;
+    MCControl *cptr = nil;
     
-	if (p_control_count != 0)
-	{
-		MCCard *t_card = nil;
-		MCControl *controls = nil;
-        MCObject *t_this_parent = nil;
-		for (uindex_t i = 0; i < p_control_count; ++i)
-		{
-            t_this_parent = (p_controls[i] . object) -> getparent();
-			if (t_this_parent == nil || t_this_parent -> gettype() != CT_CARD)
-			{
-				ctxt . LegacyThrow(EE_GROUP_NOTGROUPABLE);
-				return;
-			}
-			MCControl *cptr = (MCControl *)p_controls[i] . object;
-			// MW-2011-01-21: Make sure we don't try and group shared groups
-			if (cptr -> gettype() == CT_GROUP && static_cast<MCGroup *>(cptr) -> isshared())
-			{
-				ctxt . LegacyThrow(EE_GROUP_NOBG);
-				return;
-			}
-            
-            // MW-2013-06-20: [[ Bug 10863 ]] Take the parent of the first object for
-			//   future comparisons.
-			if (t_required_parent == nil)
-				t_required_parent = t_this_parent;
-            
-            // MERG-2013-05-07: [[ Bug 10863 ]] Make sure all objects have the same
-			//   parent.
-            if (t_this_parent != t_required_parent)
-            {
-                ctxt . LegacyThrow(EE_GROUP_DIFFERENTPARENT);
-				return;
-            }
-            
-			t_card = cptr->getcard(p_controls[i] . part_id);
-			t_card -> removecontrol(cptr, False, True);
-			cptr -> getstack() -> removecontrol(cptr);
-			cptr -> appendto(controls);
-		}
-		MCGroup *gptr;
-		if (MCsavegroupptr == NULL)
-			gptr = (MCGroup *)MCtemplategroup->clone(False, OP_NONE, false);
-		else
-			gptr = (MCGroup *)MCsavegroupptr->remove(MCsavegroupptr);
-		gptr->makegroup(controls, t_card); 
-	}
+    uindex_t i;
+    for (i = 0; i < p_control_count; ++i)
+    {
+        t_this_parent = (p_controls[i] . object) -> getparent();
+        if (t_this_parent == nil || t_this_parent -> gettype() != CT_CARD)
+        {
+            ctxt . LegacyThrow(EE_GROUP_NOTGROUPABLE);
+            return;
+        }
+        
+        cptr = (MCControl *)p_controls[i] . object;
+        // MW-2011-01-21: Make sure we don't try and group shared groups
+        if (cptr -> gettype() == CT_GROUP && static_cast<MCGroup *>(cptr) -> isshared())
+        {
+            ctxt . LegacyThrow(EE_GROUP_NOBG);
+            return;
+        }
+        
+        // MW-2013-06-20: [[ Bug 10863 ]] Take the parent of the first object for
+        //   future comparisons.
+        if (t_required_parent == nil)
+            t_required_parent = t_this_parent;
+        
+        // MERG-2013-05-07: [[ Bug 10863 ]] Make sure all objects have the same
+        //   parent.
+        if (t_this_parent != t_required_parent)
+        {
+            ctxt . LegacyThrow(EE_GROUP_DIFFERENTPARENT);
+            return;
+        }
+    }
+    
+    // If we made it this far, the controls are ok to group.
+    for (i = 0; i < p_control_count; ++i)
+    {
+        cptr = (MCControl *)p_controls[i] . object;
+        t_card = cptr->getcard(p_controls[i] . part_id);
+        t_card -> removecontrol(cptr, False, True);
+        cptr -> getstack() -> removecontrol(cptr);
+        cptr -> appendto(controls);
+    }
+    
+    MCGroup *gptr;
+    if (MCsavegroupptr == NULL)
+        gptr = (MCGroup *)MCtemplategroup->clone(False, OP_NONE, false);
+    else
+        gptr = (MCGroup *)MCsavegroupptr->remove(MCsavegroupptr);
+    gptr->makegroup(controls, t_card);
 }
 
 void MCInterfaceExecGroupSelection(MCExecContext& ctxt)
@@ -2197,9 +2207,8 @@ void MCInterfaceExecDeleteObjects(MCExecContext& ctxt, MCObjectPtr *p_objects, u
 			ctxt . LegacyThrow(EE_CHUNK_CANTDELETEOBJECT);
 			return;
 		}
-
-		if (p_objects[i] . object -> gettype() == CT_STACK)
-			MCtodestroy -> remove((MCStack *)p_objects[i] . object);
+        if (p_objects[i] . object -> gettype() == CT_STACK)
+            MCtodestroy -> remove((MCStack *)p_objects[i] . object);
 		p_objects[i] . object -> scheduledelete();
 	}
 }
@@ -2502,13 +2511,58 @@ void MCInterfaceExecSaveStack(MCExecContext& ctxt, MCStack *p_target)
 	MCInterfaceExecSaveStackAs(ctxt, p_target, kMCEmptyString);
 }
 
+void
+MCInterfaceExecSaveStackWithVersion(MCExecContext & ctxt,
+                                    MCStack *p_target,
+                                    MCStringRef p_version)
+{
+	MCInterfaceExecSaveStackAsWithVersion(ctxt, p_target, kMCEmptyString, p_version);
+}
+
+void
+MCInterfaceExecSaveStackWithNewestVersion(MCExecContext & ctxt,
+                                          MCStack *p_target)
+{
+	MCInterfaceExecSaveStackAsWithNewestVersion(ctxt, p_target, kMCEmptyString);
+}
+
 void MCInterfaceExecSaveStackAs(MCExecContext& ctxt, MCStack *p_target, MCStringRef p_new_filename)
 {
 	ctxt . SetTheResultToEmpty();
 	if (!ctxt . EnsureDiskAccessIsAllowed())
 		return;
 	
-	p_target -> saveas(p_new_filename);
+	p_target -> saveas(p_new_filename, MCstackfileversion);
+}
+
+void
+MCInterfaceExecSaveStackAsWithVersion(MCExecContext & ctxt,
+                                      MCStack *p_target,
+                                      MCStringRef p_new_filename,
+                                      MCStringRef p_version)
+{
+	ctxt.SetTheResultToEmpty();
+	if (!ctxt.EnsureDiskAccessIsAllowed())
+		return;
+
+	MCInterfaceStackFileVersion t_version;
+	MCInterfaceStackFileVersionParse(ctxt, p_version, t_version);
+	if (ctxt.HasError())
+		return;
+
+	p_target->saveas(p_new_filename, t_version.version);
+}
+
+void
+MCInterfaceExecSaveStackAsWithNewestVersion(MCExecContext & ctxt,
+                                            MCStack * p_target,
+                                            MCStringRef p_new_filename)
+{
+	ctxt.SetTheResultToEmpty();
+	if (!ctxt.EnsureDiskAccessIsAllowed())
+		return;
+
+	p_target->saveas(p_new_filename);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2753,6 +2807,32 @@ void MCInterfaceExecShowTaskBar(MCExecContext& ctxt)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void MCInterfaceExecPopupWidget(MCExecContext &ctxt, MCNameRef p_kind, MCPoint *p_at, MCArrayRef p_properties)
+{
+	extern bool MCWidgetPopupAtLocationWithProperties(MCNameRef p_kind, const MCPoint &p_at, MCArrayRef p_properties, MCValueRef &r_result);
+	
+	MCPoint t_at;
+	if (p_at != nil)
+		t_at = *p_at;
+	else
+		t_at = MCPointMake(MCmousex, MCmousey);
+	
+	MCAutoValueRef t_result;
+	if (!MCWidgetPopupAtLocationWithProperties(p_kind, t_at, p_properties, &t_result) || MCValueIsEmpty(*t_result))
+	{
+		if (MCErrorIsPending())
+			MCExtensionCatchError(ctxt);
+		
+		ctxt.SetTheResultToCString(MCcancelstring);
+		ctxt.SetItToEmpty();
+	}
+	else
+	{
+		ctxt.SetTheResultToEmpty();
+		ctxt.SetItToValue(*t_result);
+	}
+}
+
 void MCInterfaceExecPopupButton(MCExecContext& ctxt, MCButton *p_target, MCPoint *p_at)
 {
 	if (MCmousestackptr == NULL)
@@ -2779,7 +2859,7 @@ void MCInterfaceExecPopupButton(MCExecContext& ctxt, MCButton *p_target, MCPoint
 		while (t_state)
 		{
 			if (t_state & 0x1)
-				MCtargetptr -> mup(t_which, true);
+				MCtargetptr . object -> mup(t_which, true);
 			t_state >>= 1;
 			t_which += 1;
 		}
@@ -2935,13 +3015,13 @@ void MCInterfaceExecOpenStackByName(MCExecContext& ctxt, MCNameRef p_name, int p
 void MCInterfaceExecPopupStack(MCExecContext& ctxt, MCStack *p_target, MCPoint *p_at, int p_mode)
 {
 	// MW-2007-04-10: [[ Bug 4260 ]] We shouldn't attempt to attach a menu to a control that is descendent of itself
-	if (MCtargetptr -> getstack() == p_target)
+	if (MCtargetptr . object -> getstack() == p_target)
 	{
 		ctxt . LegacyThrow(EE_SUBWINDOW_BADEXP);
 		return;
 	}
 
-	if (MCtargetptr->attachmenu(p_target))
+	if (MCtargetptr . object -> attachmenu(p_target))
 	{
 		if (p_mode == WM_POPUP && p_at != nil)
 		{
@@ -2949,7 +3029,7 @@ void MCInterfaceExecPopupStack(MCExecContext& ctxt, MCStack *p_target, MCPoint *
 			MCmousey = p_at -> y;
 		}
 		MCRectangle t_rect;
-		t_rect = MCU_recttoroot(MCtargetptr->getstack(), MCtargetptr->getrect());
+		t_rect = MCU_recttoroot(MCtargetptr . object -> getstack(), MCtargetptr . object -> getrect());
 		MCInterfaceExecSubwindow(ctxt, p_target, nil, t_rect, WP_DEFAULT, OP_NONE, p_mode);
 		if (!MCabortscript)
 			return;
@@ -2980,6 +3060,18 @@ void MCInterfaceExecCreateStack(MCExecContext& ctxt, MCObject *p_object, MCStrin
 	MCStack *odefaultstackptr = MCdefaultstackptr;
 	Boolean wasvisible = MCtemplatestack->isvisible();
 
+	/* Check that a specified parent stack has a usable name before
+	 * doing anything with side-effects. */
+	MCAutoValueRef t_object_name;
+	if (!p_with_group && p_object != nil)
+	{
+		if (!p_object->names(P_NAME, &t_object_name))
+		{
+			ctxt.Throw();
+			return;
+		}
+	}
+
 	if (p_force_invisible)
 		MCtemplatestack->setflag(!p_force_invisible, F_VISIBLE);
 
@@ -2997,9 +3089,7 @@ void MCInterfaceExecCreateStack(MCExecContext& ctxt, MCObject *p_object, MCStrin
 	}
 	else if (p_object != nil)
 	{
-		MCAutoValueRef t_name;
-		p_object->names(P_NAME, &t_name);
-		MCdefaultstackptr->setvariantprop(ctxt, 0, P_MAIN_STACK, False, *t_name);
+		MCdefaultstackptr->setvariantprop(ctxt, 0, P_MAIN_STACK, False, *t_object_name);
 		if (ctxt . HasError())
 		{
 			delete MCdefaultstackptr;
@@ -3028,6 +3118,8 @@ void MCInterfaceExecCreateScriptOnlyStack(MCExecContext& ctxt, MCStringRef p_new
     t_new_stack -> setparent(MCdispatcher -> gethome());
     t_new_stack -> message(MCM_new_stack);
     t_new_stack -> setflag(False, F_VISIBLE);
+    // PM-2015-10-26: [[ Bug 16283 ]] Automatically update project browser to show newly created script only stacks
+    t_new_stack -> open();
     t_new_stack -> setasscriptonly(kMCEmptyString);
     
 	if (p_new_name != nil)
@@ -3127,6 +3219,9 @@ void MCInterfaceExecCreateControl(MCExecContext& ctxt, MCStringRef p_new_name, i
 	if (p_new_name != nil)
 		t_object->setstringprop(ctxt, 0, P_NAME, False, p_new_name);
 
+    // AL-2015-06-30: [[ Bug 15556 ]] Ensure mouse focus is synced after creating object
+    t_object -> sync_mfocus();
+    
 	MCAutoValueRef t_id;
 	t_object->names(P_LONG_ID, &t_id);
 	ctxt . SetItToValue(*t_id);
@@ -3158,6 +3253,9 @@ void MCInterfaceExecCreateWidget(MCExecContext& ctxt, MCStringRef p_new_name, MC
     
     if (p_new_name != nil)
         t_widget->setstringprop(ctxt, 0, P_NAME, False, p_new_name);
+    
+    // AL-2015-06-30: [[ Bug 15556 ]] Ensure mouse focus is synced after creating object
+    t_widget -> sync_mfocus();
     
     MCAutoValueRef t_id;
     t_widget->names(P_LONG_ID, &t_id);
@@ -3687,6 +3785,46 @@ void MCInterfaceExecImportImage(MCExecContext& ctxt, MCStringRef p_filename, MCS
 	MCU_unwatchcursor(ctxt . GetObject()->getstack(), True);
 }
 
+void MCInterfaceExecImportObjectFromArray(MCExecContext& ctxt, MCArrayRef p_array, MCObject *p_container)
+{
+    if ((p_container == nil && MCdefaultstackptr->islocked()) ||
+        (p_container != nil && p_container -> getstack() -> islocked()))
+    {
+        ctxt . LegacyThrow(EE_CREATE_LOCKED);
+        return;
+    }
+    
+    MCNewAutoNameRef t_kind;
+    MCAutoArrayRef t_state;
+    MCValueRef t_value;
+    if (!MCArrayFetchValue(p_array, false, MCNAME("$kind"), t_value) ||
+        !ctxt . ConvertToName(t_value, &t_kind) ||
+        !MCArrayFetchValue(p_array, false, MCNAME("$state"), t_value) ||
+        !ctxt . ConvertToArray(t_value, &t_state))
+    {
+        ctxt . LegacyThrow(EE_IMPORT_NOTANOBJECTARRAY);
+        return;
+    }
+    
+    MCWidget *t_widget;
+    t_widget = new MCWidget;
+    if (t_widget == NULL)
+        return;
+    
+    t_widget -> bind(*t_kind, *t_state);
+    
+    if (p_container == nil)
+        t_widget -> setparent(MCdefaultstackptr -> getcard());
+    else
+        t_widget -> setparent(p_container);
+    
+    t_widget -> attach(OP_CENTER, false);
+    
+    MCAutoValueRef t_id;
+    t_widget -> names(P_LONG_ID, &t_id);
+    ctxt . SetItToValue(*t_id);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void MCInterfaceExportBitmap(MCExecContext &ctxt, MCImageBitmap *p_bitmap, int p_format, MCInterfaceImagePaletteSettings *p_palette, bool p_dither, MCImageMetadata* p_metadata, MCDataRef &r_data)
@@ -3991,6 +4129,37 @@ void MCInterfaceExecExportImageToFile(MCExecContext& ctxt, MCImage *p_target, in
 	}
 }
 
+void MCInterfaceExecExportObjectToArray(MCExecContext& ctxt, MCObject *p_object, MCArrayRef& r_array)
+{
+    if (p_object -> gettype() != CT_WIDGET)
+    {
+        r_array = MCValueRetain(kMCEmptyArray);
+        return;
+    }
+    
+    MCWidget *t_widget;
+    t_widget = static_cast<MCWidget *>(p_object);
+    
+    MCNewAutoNameRef t_kind;
+    t_widget -> GetKind(ctxt, &t_kind);
+    if (ctxt . HasError())
+        return;
+    
+    MCAutoArrayRef t_state;
+    t_widget -> GetState(ctxt, &t_state);
+    if (ctxt . HasError())
+        return;
+    
+    MCAutoArrayRef t_array;
+    if (!MCArrayCreateMutable(&t_array) ||
+        !MCArrayStoreValue(*t_array, false, MCNAME("$kind"), *t_kind) ||
+        !MCArrayStoreValue(*t_array, false, MCNAME("$state"), *t_state) ||
+        !t_array . MakeImmutable())
+        return;
+    
+    r_array = t_array . Take();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 bool MCInterfaceExecSortContainer(MCExecContext &ctxt, MCStringRef p_data, int p_type, Sort_type p_direction, int p_form, MCExpression *p_by, MCStringRef &r_output)
@@ -4011,7 +4180,8 @@ bool MCInterfaceExecSortContainer(MCExecContext &ctxt, MCStringRef p_data, int p
 	else
 		t_delimiter = ctxt . GetLineDelimiter();
 
-	if (t_delimiter == '\0')
+	if (MCStringIsEqualToCString(t_delimiter, "\0",
+	                             kMCStringOptionCompareExact))
 		return false;
 
     MCAutoStringRefArray t_chunks;
@@ -4053,7 +4223,7 @@ bool MCInterfaceExecSortContainer(MCExecContext &ctxt, MCStringRef p_data, int p
     
     if (t_trailing_delim)
     {
-        return MCStringFormat(r_output, "%@%@", *t_list_string, t_delimiter);
+        return MCStringCreateWithStrings(r_output, *t_list_string, t_delimiter);
     }
     
     r_output = MCValueRetain(*t_list_string);
@@ -4088,6 +4258,79 @@ void MCInterfaceExecSortContainer(MCExecContext &ctxt, MCStringRef& x_target, in
 	}
 	
 	ctxt . LegacyThrow(EE_SORT_CANTSORT);
+}
+
+void MCInterfaceExecReplaceInField(MCExecContext& ctxt,
+								   MCStringRef p_pattern,
+								   MCStringRef p_replacement,
+								   MCObjectChunkPtr& p_container,
+								   bool p_preserve_styles)
+{
+	// Both these conditions are guaranteed by the caller.
+	MCAssert(p_container . object -> gettype() == CT_FIELD);
+	MCAssert(p_container . mark . text == nil ||
+			 MCValueGetTypeCode(p_container . mark . text) == kMCValueTypeCodeString);
+	
+	MCField *t_field;
+	t_field = static_cast<MCField *>(p_container . object);
+	
+	// If this was a whole field ref (e.g. field 1) then the text field will
+	// be nil. Thus we must fetch it here.
+	// Note: If present, the text will the entire text of the container, and
+	// the range to act on should be taken as [start,finish).
+	MCAutoStringRef t_text;
+	if (p_container . mark . text != nil)
+		t_text = (MCStringRef)p_container . mark . text;
+	else
+	{
+		t_field -> getstringprop(ctxt,
+								 p_container . part_id,
+								 P_TEXT,
+								 false,
+								 &t_text);
+		if (ctxt . HasError())
+			return;
+	}
+	
+	MCStringOptions t_options;
+	t_options = ctxt.GetStringComparisonType();
+	
+	// The indicies in the field will drift away from the original mark as
+	// we replace text - this is the delta we need to apply.
+	findex_t t_delta;
+	t_delta = 0;
+	
+	// Start with the specified range in the marked text.
+	MCRange t_range;
+	t_range = MCRangeMake(p_container . mark . start,
+						  p_container . mark . finish);
+	for(;;)
+	{
+		// Find the next occurrance of pattern in text - we are done if not
+		// found.
+		MCRange t_found_range;
+		if (!MCStringFind(*t_text,
+						  t_range,
+						  p_pattern,
+						  t_options,
+						  &t_found_range))
+			break;
+		
+		// The range in the field we must replace is t_found_range + start.
+		t_field -> settextindex(p_container . part_id,
+								(findex_t)t_found_range . offset + t_delta,
+								(findex_t)(t_found_range . offset + t_found_range . length) + t_delta,
+								p_replacement,
+								False,
+								p_preserve_styles ? kMCFieldStylingFromAfter : kMCFieldStylingNone);
+		
+		// Update the field index delta.
+		t_delta += MCStringGetLength(p_replacement) - t_found_range . length;
+		
+		// Update the range we want to consider in the source text.
+		t_range = MCRangeMakeMinMax(t_found_range . offset + t_found_range . length,
+									p_container . mark . finish);
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////

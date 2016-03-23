@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -18,6 +18,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #define __MC_DEPLOY__
 
 #include "mcio.h"
+#include "license.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -104,6 +105,19 @@ struct MCDeployParameters
     
     // The list of modules to include.
     MCArrayRef modules;
+    
+    // List of architectures to retain when building universal binaries
+    MCAutoArray<MCDeployArchitecture> architectures;
+	
+	// This can be set to commercial or professional trial. In that
+	// case, the standalone will be built in that mode.
+	uint32_t banner_class;
+	
+	// The timeout for the banner that's displayed before startup.
+	uint32_t banner_timeout;
+	
+	// The data for the banner stackfile.
+	MCDataRef banner_stackfile;
 	
 	
 	MCDeployParameters()
@@ -133,6 +147,10 @@ struct MCDeployParameters
         // SN-2015-02-04: [[ Merge-6.7.2 ]] Init the versions pointer / count
         min_os_versions = nil;
         min_os_version_count = 0;
+		
+		banner_timeout = 0;
+		banner_stackfile = MCValueRetain(kMCEmptyData);
+        banner_class = kMCLicenseClassNone;
 	}
 	
 	~MCDeployParameters()
@@ -155,6 +173,7 @@ struct MCDeployParameters
         MCValueRelease(modules);
         MCValueRelease(library);
         MCMemoryDeleteArray(min_os_versions);
+		MCValueRelease(banner_stackfile);
 	}
 	
 	// Creates using an array of parameters
@@ -166,6 +185,7 @@ Exec_stat MCDeployToLinux(const MCDeployParameters& p_params);
 Exec_stat MCDeployToMacOSX(const MCDeployParameters& p_params);
 Exec_stat MCDeployToIOS(const MCDeployParameters& p_params, bool embedded);
 Exec_stat MCDeployToAndroid(const MCDeployParameters& p_params);
+Exec_stat MCDeployToEmscripten(const MCDeployParameters& p_params);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -429,6 +449,12 @@ enum MCDeployError
 	kMCDeployErrorMacOSXUnknownLoadCommand,
 	kMCDeployErrorMacOSXBadCpuType,
 	kMCDeployErrorMacOSXBadTarget,
+
+	/* An error occurred while creating the startup stack */
+	kMCDeployErrorEmscriptenBadStack,
+	
+	/* An error occured with the pre-deploy step */
+	kMCDeployErrorTrialBannerError,
 
 	// SIGN ERRORS
 

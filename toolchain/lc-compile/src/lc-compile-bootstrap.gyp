@@ -13,9 +13,8 @@
 
 		'dependencies':
 		[
-			'../../../libfoundation/libfoundation.gyp:libFoundation',
-			'../../../libscript/libscript.gyp:libScript',
 			'../../gentle/gentle/grts.gyp:grts',
+			'lc-compile-lib.gyp:lc-compile-lib',
 		],
 		
 		'include_dirs':
@@ -50,6 +49,11 @@
 						'VCLinkerTool':
 						{
 							'SubSystem': '1',	# /SUBSYSTEM:CONSOLE
+							
+							# On Windows, lc-compile can run out of stack space in certain
+							# builds (it needs more than the 1MB default provided).
+							# Increase the number to 64MB to be on the safe side
+							'StackReserveSize': '0x04000000',
 						},
 					},
 				},
@@ -169,13 +173,12 @@
 			
 			'toolsets': ['host','target'],
 
-			'suppress_warnings': 1,
-
 			'product_name': 'lc-bootstrap-compile-<(_toolset)',
-			
+		
 			'variables':
 			{
 				'stage': 'stage1',
+				'silence_warnings': 1,
 			},
 			
 			'direct_dependent_settings':
@@ -193,7 +196,8 @@
 			
 			'sources':
 			[
-				'>@(lc-compile_source_files)',
+				# Some build systems require at least one input file
+				'dummy.cpp',
 			],
 			
 			'actions':

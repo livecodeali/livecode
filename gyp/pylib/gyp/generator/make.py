@@ -136,14 +136,16 @@ quiet_cmd_alink = AR($(TOOLSET)) $@
 cmd_alink = rm -f $@ && $(AR.$(TOOLSET)) crs $@ $(filter %.o,$^)
 
 quiet_cmd_alink_thin = AR($(TOOLSET)) $@
-cmd_alink_thin = rm -f $@ && $(AR.$(TOOLSET)) crsT $@ $(filter %.o,$^)
+cmd_alink_thin = rm -f $@ && $(AR.$(TOOLSET)) crs $@ $(filter %.o,$^)
+
+# Commas need to be escaped in some circumstances
+COMMA := ,
 
 # Figure out the correct --start-group and --end-group commands (not needed for
 # the MacOS linker)
-ifeq ($(shell uname),Linux)
-  opt_start_group := -Wl,--start-group
-  opt_end_group   := -Wl,--end-group
-endif
+opt_start_group = $(if $(or $(filter $(shell uname),Linux),$(filter $(TOOLSET),target)),-Wl$(COMMA)--start-group)
+opt_end_group   = $(if $(or $(filter $(shell uname),Linux),$(filter $(TOOLSET),target)),-Wl$(COMMA)--end-group)
+
 
 # Due to circular dependencies between libraries :(, we wrap the
 # special "figure out circular dependencies" flags around the entire
@@ -285,7 +287,7 @@ CXX.target ?= %(CXX.target)s
 CXXFLAGS.target ?= $(CXXFLAGS)
 LINK.target ?= %(LINK.target)s
 LDFLAGS.target ?= $(LDFLAGS)
-AR.target ?= $(AR)
+AR.target ?= %(AR.target)s
 
 # C++ apps need to be linked with g++.
 LINK ?= $(CXX.target)
@@ -1481,6 +1483,7 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
             ldflags.append(r'-Wl,-rpath-link=\$(builddir)/lib.%s/' %
                            self.toolset)
         library_dirs = config.get('library_dirs', [])
+        library_dirs = map(Sourceify, map(self.Absolutify, library_dirs))
         ldflags += [('-L%s' % library_dir) for library_dir in library_dirs]
         self.WriteList(ldflags, 'LDFLAGS_%s' % configname)
         if self.flavor == 'mac':

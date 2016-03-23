@@ -29,7 +29,12 @@ case "${PLATFORM}" in
 	linux)
 		export ARCHS="i386 x86_64"
 		export CC_BASE="clang"
-		export CXX_BASE="clang"
+		export CXX_BASE="clang++"
+		;;
+	emscripten)
+		export ARCHS="js"
+		export EMMAKE="emmake"
+		export EMCONFIGURE="emconfigure"
 		;;
 esac
 
@@ -64,6 +69,10 @@ function setCCForArch {
 	fi
 	
 	case "${PLATFORM}" in
+		win32)
+			export CFLAGS="/MT"
+			export CXXFLAGS="/MT"
+			;;
 		mac)
 			export CC="${CC_BASE} -arch $1"
 			export CXX="${CXX_BASE} -arch $1"

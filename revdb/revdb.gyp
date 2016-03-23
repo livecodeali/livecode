@@ -9,6 +9,7 @@
 		'revdb_sources':
 		[
 			'src/revdb.cpp',
+			'src/iossupport.cpp',
 			'src/osxsupport.cpp',
 			'src/unxsupport.cpp',
 			'src/w32support.cpp',
@@ -23,6 +24,7 @@
 			'src/dbmysqlapi.cpp',
 			'src/mysql_connection.cpp',
 			'src/mysql_cursor.cpp',
+			'src/ssl.cpp',
 		],
 		
 		'dbodbc_sources':
@@ -41,6 +43,7 @@
 			'src/dbpostgresqlapi.cpp',
 			'src/postgresql_connection.cpp',
 			'src/postgresql_cursor.cpp',
+			'src/ssl.cpp',
 		],
 		
 		'dbsqlite_sources':
@@ -81,7 +84,7 @@
 			[
 				'../libexternal/libexternal.gyp:libExternal',
 				'../thirdparty/libmysql/libmysql.gyp:libmysql',
-				'../thirdparty/libopenssl/libopenssl.gyp:libopenssl',
+				'../thirdparty/libopenssl/libopenssl.gyp:libopenssl_stubs',
 				'../thirdparty/libz/libz.gyp:libz',
 			],
 			
@@ -139,7 +142,7 @@
 			[
 				'../libexternal/libexternal.gyp:libExternal',
 				'../thirdparty/libmysql/libmysql.gyp:libmysql',
-				'../thirdparty/libopenssl/libopenssl.gyp:libopenssl',
+				'../thirdparty/libopenssl/libopenssl.gyp:libopenssl_stubs',
 				'../thirdparty/libz/libz.gyp:libz',
 			],
 			
@@ -318,6 +321,7 @@
 			[
 				'../libexternal/libexternal.gyp:libExternal',
 				'../thirdparty/libpq/libpq.gyp:libpq',
+				'../thirdparty/libopenssl/libopenssl.gyp:libopenssl_stubs',
 			],
 			
 			'include_dirs':
@@ -363,6 +367,7 @@
 			[
 				'../libexternal/libexternal.gyp:libExternal',
 				'../thirdparty/libpq/libpq.gyp:libpq',
+				'../thirdparty/libopenssl/libopenssl.gyp:libopenssl_stubs',
 			],
 			
 			'include_dirs':
@@ -462,6 +467,24 @@
 					{
 						'product_name': 'DbSqlite',
 						'product_extension': '',
+						'cflags!':
+						[
+							# Error in ../../thirdparty/libsqlite/include/qry_dat.h
+							'-Werror=return-type',
+						],
+					},
+				],
+				[
+					'OS == "mac" or OS == "ios"',
+					{
+						'xcode_settings':
+						{
+							'WARNING_CFLAGS!':
+							[
+								# Error in ../../thirdparty/libsqlite/include/qry_dat.h
+								'-Werror=return-type',
+							],
+						},
 					},
 				],
 			],
@@ -532,6 +555,19 @@
 						],
 					},
 				],
+				[
+					'OS == "mac"',
+					{
+						'xcode_settings':
+						{
+							'WARNING_CFLAGS!':
+							[
+								# Error in ../../thirdparty/libsqlite/include/qry_dat.h
+								'-Werror=return-type',
+							],
+						},
+					},
+				],
 			],
 			
 			'all_dependent_settings':
@@ -553,6 +589,7 @@
 			[
 				'../libcore/libcore.gyp:libCore',
 				'../libexternal/libexternal.gyp:libExternal',
+				'../libexternal/libexternal.gyp:libExternal-symbol-exports',
 			],
 			
 			'include_dirs':
@@ -570,11 +607,6 @@
 				'INFOPLIST_FILE': 'rsrc/revdb-Info.plist',
 			},
 			
-			'variables':
-			{
-				'ios_external_symbols': [ '_getXtable' ],
-			},
-			
 			'all_dependent_settings':
 			{
 				'variables':
@@ -590,6 +622,24 @@
 					{
 						'product_name': 'RevDb',
 						'product_extension': '',
+					},
+				],
+				[
+					'OS == "mac" or OS == "ios"',
+					{
+						'sources!': 
+						[
+							'src/unxsupport.cpp',
+						],
+					},
+				],
+				[
+					'OS != "ios"',
+					{
+						'sources!':
+						[
+							'src/iossupport.cpp',
+						],
 					},
 				],
 			],
@@ -620,6 +670,11 @@
 			'sources':
 			[
 				'<@(revdb_sources)',
+			],
+			
+			'sources!':
+			[
+				'src/iossupport.cpp',
 			],
 			
 			'all_dependent_settings':

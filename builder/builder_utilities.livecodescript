@@ -3,6 +3,8 @@ local sEngineDir
 local sWorkDir
 local sOutputDir
 local sPrivateDir
+local sDocsDir
+local sBuiltDocsDir
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -34,6 +36,14 @@ command builderSetWorkDir pDir
    put pDir into sWorkDir
 end builderSetWorkDir
 
+command builderSetDocsDir pDir
+   put pDir into sDocsDir
+end builderSetDocsDir
+
+command builderSetBuiltDocsDir pDir
+   put pDir into sBuiltDocsDir
+end builderSetBuiltDocsDir
+
 command builderSetOutputDir pDir
    put pDir into sOutputDir
 end builderSetOutputDir
@@ -52,6 +62,11 @@ on builderBuild pWhich, pPlatforms, pEdition, pType
             dispatch "toolsBuilderRun" to stack builderToolsBuilderStack() with tPlatform, pEdition, tVersion
          end repeat
          break
+      case "Bundle"
+         repeat for each line tPlatform in pPlatforms
+            dispatch "toolsBuilderRunBundle" to stack builderToolsBuilderStack() with tPlatform, pEdition, tVersion
+         end repeat
+         break
       case "Engine"
          dispatch "engineBuilderRun" to stack builderEngineBuilderStack() with "environment", pEdition, tVersion
          repeat for each line tPlatform in pPlatforms
@@ -64,10 +79,13 @@ on builderBuild pWhich, pPlatforms, pEdition, pType
          end repeat
          break
       case "Notes"
-         dispatch "releaseNotesBuilderRun" to stack builderNotesBuilderStack() with pEdition, tVersion
+         dispatch "releaseNotesBuilderRun" to stack builderNotesBuilderStack() with pEdition, tVersion, pType, builderOutputFolder()
          break
       case "Docs"
          dispatch "docsBuilderRun" to stack builderDocsBuilderStack() with pEdition, tVersion
+         break
+      case "Guide"
+         dispatch "guideBuilderRun" to stack builderGuideBuilderStack() with pEdition, tVersion, pType, builderRepoFolder()
          break
       case "Disk"
          repeat for each line tPlatform in pPlatforms
@@ -77,14 +95,44 @@ on builderBuild pWhich, pPlatforms, pEdition, pType
       case "Archive"
          local tBuildNumber
          put builderGetBuildNumber() into tBuildNumber
-         dispatch "archiveBuilderRun" to stack builderArchiveBuilderStack() with pEdition, tVersion, tBuildNumber, pType
+         dispatch "archiveBuilderRun" to stack builderArchiveBuilderStack() with tVersion, tBuildNumber, pType
          break
    end switch
    	
    builderFinalize	
 end builderBuild
 
+-- Fetch the platform string for the platform on which the builder is
+-- currently running
+function builderPlatform
+   switch the platform
+      case "linux"
+         if the processor ends with "86" then
+            return "linux-x86"
+         end if
+         if the processor ends with "64" then
+            return "linux-x86_64"
+         end if
+         throw "Unknown Linux architecture:" && the processor
+      case "win32"
+         return "windows"
+      case "macos"
+         return "macosx"
+      case "iphone"
+         return "ios"
+      case "html5"
+         return "emscripten"
+      case "android"
+         return "android"
+      default
+         return the platform
+   end switch
+end builderPlatform
+
 command builderFetchEngine pVersion, pPlatform
+   if pPlatform is empty then
+      put builderPlatform() into pPlatform
+   end if
    if sEngineDir is not empty then
       switch pPlatform
          case "windows"
@@ -101,6 +149,8 @@ command builderFetchEngine pVersion, pPlatform
             return sEngineDir & slash & "ios-bin"
          case "android"
             return sEngineDir & slash & "android-armv6-bin"
+         case "emscripten"
+            return sEngineDir & slash & "emscripten-bin"
          default
             write the executionContexts to stderr
             builderLog "error", "Unknown platform '" & pPlatform & "'"
@@ -198,6 +248,11 @@ function builderSystemFolder
    return item 1 to -2 of the filename of me
 end builderSystemFolder
 
+-- Return the folder of the private builder system
+function builderSystemPrivateFolder
+   return builderPrivateRepoFolder() & slash & "builder" 
+end builderSystemPrivateFolder
+
 -- Returns the folder where intermediate products should be placed
 function builderWorkFolder
    if sWorkDir is not empty then
@@ -233,25 +288,31 @@ function builderIDEDocsFolder
 end builderIDEDocsFolder
 
 # Location for api js file in > LC8
-function builderAPIFolder
-   return builderIDEDocsFolder() & slash & "html_viewer/resources/data/api"
+function builderAPIFolder pEdition
+   return builderIDEDocsFolder() & slash & "html_viewer/resources/data/" & pEdition & "/api"
 end builderAPIFolder
 
 # Location for guide js file in > LC8
-function builderGuideFolder
-   return builderIDEDocsFolder() & slash & "html_viewer/resources/data/guide"
+function builderGuideFolder pEdition
+   return builderIDEDocsFolder() & slash & "html_viewer/resources/data/" & pEdition & "/guide"
 end builderGuideFolder
 
 function builderDocsFolder
+   if sDocsDir is not empty then
+      return sDocsDir
+   end if
    return builderRepoFolder() & slash & "docs"
 end builderDocsFolder
 
 function builderBuiltDocsFolder
+   if sBuiltDocsDir is not empty then
+      return sBuiltDocsDir
+   end if
    return builderRepoFolder() & slash & "_build/docs"
 end builderBuiltDocsFolder
 
 function builderBuiltNotesFolder
-   return builderRepoFolder() & slash & "_build/notes"
+   return builderRepoFolder()
 end builderBuiltNotesFolder
 
 function builderCommercialFolder
@@ -262,6 +323,15 @@ end builderCommercialFolder
 function builderCommercialResourceFolder
    return builderCommercialFolder() & "/engine/rsrc"
 end builderCommercialResourceFolder
+
+function builderCommunityFolder
+   set the itemDel to slash
+   return item 1 to -3 of the filename of me
+end builderCommunityFolder
+
+function builderCommunityResourceFolder
+   return builderCommunityFolder() & "/engine/rsrc"
+end builderCommunityResourceFolder
 
 function builderBuildsFolder
    set the itemDelimiter to slash
@@ -288,18 +358,27 @@ function builderDocsBuilderStack
    return builderSystemFolder() & slash & "docs_builder.livecodescript"
 end builderDocsBuilderStack
 
+function builderGuideBuilderStack
+   return builderSystemFolder() & slash & "user_guide_builder.livecodescript"
+end builderGuideBuilderStack
+
 function builderNotesBuilderStack
    return builderSystemFolder() & slash & "release_notes_builder.livecodescript"
 end builderNotesBuilderStack
 
 function builderArchiveBuilderStack
-   return builderSystemFolder() & slash & "archive_builder.livecodescript"
+   return builderSystemPrivateFolder() & slash & "archive_builder.livecodescript"
 end builderArchiveBuilderStack
 
 function builderModuleInterfaceFolder
    builderFetchEngine "", "macosx"
-   return the result & slash & "modules"
+   return the result & slash & "modules" & slash & "lci"
 end builderModuleInterfaceFolder
+
+function builderPackagedExtensionsFolder
+   builderFetchEngine "", "macosx"
+   return the result & slash & "packaged_extensions"
+end builderPackagedExtensionsFolder
 
 -- Returns the engine that should be used to build the installer
 function builderInstallerEngine pPlatform

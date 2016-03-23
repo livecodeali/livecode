@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -739,10 +739,10 @@ void MCImage::SetInk(MCExecContext& ctxt, intenum_t ink)
     notifyneeds(false);
 }
 
-void MCImage::SetVisibility(MCExecContext& ctxt, uinteger_t part, bool setting, bool visible)
+void MCImage::SetVisible(MCExecContext& ctxt, uinteger_t part, bool setting)
 {
-    Boolean wasvisible = isvisible();
-    MCObject::SetVisibility(ctxt, part, setting, visible);
+	bool wasvisible = isvisible();
+	MCObject::SetVisible(ctxt, part, setting);
     if (!(MCbufferimages || flags & F_I_ALWAYS_BUFFER)
         && !isvisible() && m_rep != nil)
         closeimage();
@@ -762,27 +762,21 @@ void MCImage::SetVisibility(MCExecContext& ctxt, uinteger_t part, bool setting, 
     }
 }
 
-void MCImage::SetVisible(MCExecContext& ctxt, uinteger_t part, bool setting)
-{
-    SetVisibility(ctxt, part, setting, true);
-}
-
-void MCImage::SetInvisible(MCExecContext& ctxt, uinteger_t part, bool setting)
-{
-    SetVisibility(ctxt, part, setting, false);
-}
-
 // MERG-2015-02-11: [[ ImageMetadata ]] Refactored image metadata property
 void MCImage::GetMetadataProperty(MCExecContext& ctxt, MCNameRef p_prop, MCExecValue& r_value)
 {
-    MCImageMetadata t_metadata;
-    m_rep->GetMetadata(t_metadata);
-    
+    // AL-2015-07-22: [[ Bug 15620 ]] If image rep is nil, don't try to fetch metadata
     bool t_stat;
-    t_stat = t_metadata.has_density;
+    t_stat = m_rep != nil;
+    
+    MCImageMetadata t_metadata;
+    if (t_stat)
+    {
+        m_rep->GetMetadata(t_metadata);
+        t_stat = t_metadata.has_density;
+    }
     
     MCExecValue t_density;
-    
     if (t_stat)
     {
         t_density . double_value = t_metadata . density;

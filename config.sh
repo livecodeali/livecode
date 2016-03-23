@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (C) 2015 Runtime Revolution Ltd.
+# Copyright (C) 2015 LiveCode Ltd.
 #
 # This file is part of LiveCode.
 #
@@ -57,6 +57,7 @@ The currently-supported PLATFORMs are:
   linux-x86_64
   android-armv6
   win-x86
+  emscripten
 
 EOF
   exit $1
@@ -176,6 +177,7 @@ case ${PLATFORM} in
   mac) ;;
   ios) ;;
   win-x86) ;;
+  emscripten) ;;
   *)
     echo "ERROR: Unrecognised platform: '${PLATFORM}'" >&2
     exit 1;;
@@ -198,6 +200,7 @@ if test -z "$OS"; then
     mac*) OS="mac" ;;
     ios*) OS="ios" ;;
     win*) OS="win" ;;
+    emscripten*) OS="emscripten" ;;
   esac
 fi
 
@@ -206,7 +209,7 @@ if test -z "$FORMATS"; then
   case ${OS} in
     # Always use Linux-style makefiles for Android as the Android toolchain
     # is more Linux-y than Darwin-y
-    linux|android) FORMATS="make-linux" ;;
+    linux|android|emscripten) FORMATS="make-linux" ;;
     mac|ios)       FORMATS="xcode" ;;
     win)           FORMATS="msvs" ;;
   esac
@@ -226,7 +229,7 @@ fi
 if test -z "$XCODE_TARGET_SDK"; then
  case ${OS} in
    mac) XCODE_TARGET_SDK="macosx10.8" ;;
-   ios) XCODE_TARGET_SDK="iphoneos8.3" ;;
+   ios) XCODE_TARGET_SDK="iphoneos" ;;
  esac
 fi
 
@@ -239,19 +242,25 @@ if test -z "$XCODE_HOST_SDK"; then
 fi
 
 # Default target architectures
+# iOS architectures are restricted to 32-bit only for iOS 5.1, 6.1 and 7.1
 if test -z "$TARGET_ARCH"; then
   case ${PLATFORM} in
     *-x86)     TARGET_ARCH="x86" ;;
     *-x86_64)  TARGET_ARCH="x86_64" ;;
     *-armv6)   TARGET_ARCH="armv6" ;;
+    emscripten) TARGET_ARCH="js" ;;
 
     mac*|ios*)
       case ${XCODE_TARGET_SDK} in
-        macosx*)           TARGET_ARCH="i386" ;;
-        iphoneos8*)        TARGET_ARCH="armv7 arm64" ;;
-        iphoneos*)         TARGET_ARCH="armv7" ;;
-        iphonesimulator8*) TARGET_ARCH="i386 x86_64" ;;
-        iphonesimulator*)  TARGET_ARCH="i386" ;;
+        macosx*)         		TARGET_ARCH="i386" ;;
+        iphoneos5* | \
+        iphoneos6* | \
+        iphoneos7*)		 		TARGET_ARCH="armv7" ;;
+        iphoneos*)       		TARGET_ARCH="armv7 arm64" ;;
+        iphonesimulator5* | \
+        iphonesimulator6* | \
+        iphonesimulator7*) 		TARGET_ARCH="i386" ;;
+        iphonesimulator*)  	TARGET_ARCH="i386 x86_64" ;;
       esac
       ;;
 
@@ -264,85 +273,84 @@ fi
 WIN_PERL=${WIN_PERL:-"C:/perl/bin/perl.exe"}
 
 # Android default settings and tools
-ANDROID_NDK_VERSION=${ANDROID_NDK_VERSION:-r10d}
-ANDROID_PLATFORM=${ANDROID_PLATFORM:-android-8}
+if test "${OS}" = "android" ; then
+    ANDROID_NDK_VERSION=${ANDROID_NDK_VERSION:-r10d}
+    ANDROID_PLATFORM=${ANDROID_PLATFORM:-android-10}
 
-# Attempt to locate an Android NDK
-if [ -z "${ANDROID_NDK}" ] ; then
-	# Try the symlink we suggest in INSTALL-android.md
-	if [ -d "${HOME}/android/toolchain/android-ndk" ] ; then
-		ANDROID_NDK="${HOME}/android/toolchain/android-ndk"
-	else
-		if [ "${OS}" = "android" ] ; then
-			echo >&2 "Error: Android NDK not found (set \$ANDROID_NDK)"
-			exit 1
-		fi
-	fi
-fi
+    # Attempt to locate an Android NDK
+    if [ -z "${ANDROID_NDK}" -a "${OS}" = "android" ] ; then
+        # Try the symlink we suggest in INSTALL-android.md
+        if [ -d "${HOME}/android/toolchain/android-ndk" ] ; then
+            ANDROID_NDK="${HOME}/android/toolchain/android-ndk"
+        else
+            echo >&2 "Error: Android NDK not found (set \$ANDROID_NDK)"
+            exit 1
+        fi
+    fi
 
-# Attempt to locate an Android SDK
-if [ -z "${ANDROID_SDK}" ] ; then
-	# Try the symlink we suggest in INSTALL-android.md
-	if [ -d "${HOME}/android/toolchain/android-sdk" ] ; then
-		ANDROID_SDK="${HOME}/android/toolchain/android-sdk"
-	else
-		if [ "${OS}" = "android" ] ; then
-			echo >&2 "Error: Android SDK not found (set \$ANDROID_SDK)"
-			exit 1
-		fi
-	fi
-fi
+    # Attempt to locate an Android SDK
+    if [ -z "${ANDROID_SDK}" ] ; then
+        # Try the symlink we suggest in INSTALL-android.md
+        if [ -d "${HOME}/android/toolchain/android-sdk" ] ; then
+            ANDROID_SDK="${HOME}/android/toolchain/android-sdk"
+        else
+            echo >&2 "Error: Android SDK not found (set \$ANDROID_SDK)"
+            exit 1
+        fi
+    fi
 
-# Attempt to guess the Android build tools version
-if [ -z "${ANDROID_BUILD_TOOLS}" ] ; then
-	# Check for a sub-folder in the appropriate place
-	# Possibly fragile - are there ever multiple sub-folders?
-	if [ ! "$(echo \"${ANDROID_SDK}/build-tools/\"*)" = "${ANDROID_SDK}/build-tools/*" ] ; then
-		ANDROID_BUILD_TOOLS=$(basename $(echo "${ANDROID_SDK}/build-tools/"*))
-	else
-		if [ "${OS}" = "android" ] ; then
-			echo >&2 "Error: Android build tools not found (set \$ANDROID_BUILD_TOOLS)"
-			exit 1
-		fi
-	fi
-fi
+    # Attempt to guess the Android build tools version
+    if [ -z "${ANDROID_BUILD_TOOLS}" ] ; then
+        # Check for a sub-folder in the appropriate place
+        # Possibly fragile - are there ever multiple sub-folders?
+        if [ ! "$(echo \"${ANDROID_SDK}/build-tools/\"*)" = "${ANDROID_SDK}/build-tools/*" ] ; then
+            ANDROID_BUILD_TOOLS=$(basename $(echo "${ANDROID_SDK}/build-tools/"*))
+        else
+            echo >&2 "Error: Android build tools not found (set \$ANDROID_BUILD_TOOLS)"
+            exit 1
+        fi
+    fi
 
-if [ -z "${ANDROID_TOOLCHAIN}" ] ; then
-	# Try the folder we suggest in INSTALL-android.md
-	if [ -d "${HOME}/android/toolchain/standalone" ] ; then
-		ANDROID_TOOLCHAIN="${HOME}/android/toolchain/standalone/bin/arm-linux-androideabi-"
-	else
-		if [ "${OS}" = "android" ] ; then
-			echo >&2 "Error: Android toolchain not found (set \$ANDROID_TOOLCHAIN)"
-			exit 1
-		fi
-	fi
-fi
+    if [ -z "${ANDROID_TOOLCHAIN}" ] ; then
+        # Try the folder we suggest in INSTALL-android.md
+        if [ -d "${HOME}/android/toolchain/standalone" ] ; then
+            ANDROID_TOOLCHAIN="${HOME}/android/toolchain/standalone/bin/arm-linux-androideabi-"
+        else
+            echo >&2 "Error: Android toolchain not found (set \$ANDROID_TOOLCHAIN)"
+            exit 1
+        fi
+    fi
 
-ANDROID_AR=${AR:-${ANDROID_TOOLCHAIN}ar}
-ANDROID_CC=${CC:-${ANDROID_TOOLCHAIN}clang -target arm-linux-androideabi -march=armv6 -integrated-as}
-ANDROID_CXX=${CXX:-${ANDROID_TOOLCHAIN}clang -target arm-linux-androideabi -march=armv6 -integrated-as}
-ANDROID_LINK=${LINK:-${ANDROID_TOOLCHAIN}clang -target arm-linux-androideabi -march=armv6 -integrated-as}
-ANDROID_OBJCOPY=${OBJCOPY:-${ANDROID_TOOLCHAIN}objcopy}
-ANDROID_OBJDUMP=${OBJDUMP:-${ANDROID_TOOLCHAIN}objdump}
-ANDROID_STRIP=${STRIP:-${ANDROID_TOOLCHAIN}strip}
+    ANDROID_AR=${AR:-${ANDROID_TOOLCHAIN}ar}
+    ANDROID_CC=${CC:-${ANDROID_TOOLCHAIN}clang -target arm-linux-androideabi -march=armv6 -integrated-as}
+    ANDROID_CXX=${CXX:-${ANDROID_TOOLCHAIN}clang++ -target arm-linux-androideabi -march=armv6 -integrated-as}
+    ANDROID_LINK=${LINK:-${ANDROID_TOOLCHAIN}clang++ -target arm-linux-androideabi -march=armv6 -integrated-as -fuse-ld=bfd}
+    ANDROID_OBJCOPY=${OBJCOPY:-${ANDROID_TOOLCHAIN}objcopy}
+    ANDROID_OBJDUMP=${OBJDUMP:-${ANDROID_TOOLCHAIN}objdump}
+    ANDROID_STRIP=${STRIP:-${ANDROID_TOOLCHAIN}strip}
 
-if [ -z "${JAVA_SDK}" ] ; then
-	# Utility used to locate Java on OSX systems
-	if [ -x /usr/libexec/java_home ] ; then
-		ANDROID_JAVA_SDK="$(/usr/libexec/java_home)"
-	elif [ -d /usr/lib/jvm/default ] ; then
-		ANDROID_JAVA_SDK=/usr/lib/jvm/default
-	elif [ -d /usr/lib/jvm/default-jvm ] ; then
-		ANDROID_JAVA_SDK=/usr/lib/jvm/default-jvm
-	else
-		if [ "${OS}" = "android" ] ; then
-			echo >&2 "Error: no Java SDK found - set \$JAVA_SDK"
-			exit 1
-		fi
-	fi
-else
-	ANDROID_JAVA_SDK="${JAVA_SDK}"
+    if [ -z "${JAVA_SDK}" ] ; then
+        # Utility used to locate Java on OSX systems
+        if [ -x /usr/libexec/java_home ] ; then
+            ANDROID_JAVA_SDK="$(/usr/libexec/java_home)"
+        elif [ -d /usr/lib/jvm/default ] ; then
+            ANDROID_JAVA_SDK=/usr/lib/jvm/default
+        elif [ -d /usr/lib/jvm/default-java ] ; then
+            ANDROID_JAVA_SDK=/usr/lib/jvm/default-java
+        else
+            echo >&2 "Error: no Java SDK found - set \$JAVA_SDK"
+            exit 1
+        fi
+    else
+        ANDROID_JAVA_SDK="${JAVA_SDK}"
+    fi
+
+fi # End of Android defaults & tools
+
+
+# Emscripten default settings and tools
+if test "${OS}" = "emscripten" ; then
+    NODE_JS=${NODE_JS:-node}
 fi
 
 
@@ -351,7 +359,12 @@ fi
 ################################################################
 
 format_args="$(for f in ${FORMATS}; do echo --format ${f} ; done)"
-basic_args="${format_args} --depth ${DEPTH} --generator-output ${GENERATOR_OUTPUT}"
+
+if test "${OS}" = "win" ; then
+	basic_args="${format_args} --depth ${DEPTH} --generator-output ${GENERATOR_OUTPUT}"
+else
+	basic_args="${format_args} --depth ${DEPTH} --generator-output ${GENERATOR_OUTPUT} -G default_target=default"
+fi
 
 if [ "${BUILD_EDITION}" == "commercial" ] ; then
   basic_args="${basic_args} ../livecode-commercial.gyp"
@@ -361,12 +374,16 @@ case ${OS} in
   linux)
     invoke_gyp $basic_args "-DOS=${OS}" "-Dtarget_arch=${TARGET_ARCH}" "$@"
     ;;
+  emscripten)
+    export NODE_JS
+    invoke_gyp $basic_args "-DOS=${OS}" "-Dtarget_arch=${TARGET_ARCH}" "$@"
+    ;;
   android)
     export ANDROID_BUILD_TOOLS
     export ANDROID_NDK
     export ANDROID_PLATFORM
     export ANDROID_SDK
-    
+
     export JAVA_SDK="${ANDROID_JAVA_SDK}"
 
     export AR="${ANDROID_AR}"

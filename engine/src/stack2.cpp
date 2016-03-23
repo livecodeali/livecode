@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -30,7 +30,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "vclip.h"
 #include "card.h"
 #include "objptr.h"
-#include "control.h"
+#include "mccontrol.h"
 #include "image.h"
 #include "player.h"
 #include "field.h"
@@ -112,8 +112,8 @@ void MCStack::checkdestroy()
 					}
 					while (sptr != substacks);
 				}
-				MCtodestroy->remove(this); // prevent duplicates
-				MCtodestroy->add(this);
+                MCtodestroy -> remove(this);
+                MCtodestroy -> add(this);
 			}
 	}
 	else if (!MCdispatcher -> is_transient_stack(this))
@@ -210,13 +210,26 @@ void MCStack::configure(Boolean user)
 		foreachchildstack(_MCStackConfigureCallback, nil);
 }
 
+void MCStack::seticonic(Boolean on)
+{
+	if (on && !(state & CS_ICONIC))
+	{
+		MCiconicstacks++;
+		state |= CS_ICONIC;
+	}
+	else if (!on && (state & CS_ICONIC))
+		{
+			MCiconicstacks--;
+			state &= ~CS_ICONIC;
+		}
+}
+
 void MCStack::iconify()
 {
 	if (!(state & CS_ICONIC))
-	{
-		MCtooltip->cleartip();
-		MCiconicstacks++;
-		state |= CS_ICONIC;
+    {
+        MCtooltip->cleartip();
+        seticonic(true);
 		MCstacks->top(NULL);
 		redrawicon();
 		curcard->message(MCM_iconify_stack);
@@ -227,8 +240,7 @@ void MCStack::uniconify()
 {
 	if (state & CS_ICONIC)
 	{
-		MCiconicstacks--;
-		state &= ~CS_ICONIC;
+		seticonic(false);
 		MCstacks->top(this);
 		curcard->message(MCM_uniconify_stack);
 		// MW-2011-08-17: [[ Redraw ]] Tell the stack to dirty all of itself.
@@ -694,7 +706,7 @@ Boolean MCStack::checkid(uint4 cardid, uint4 controlid)
 	return False;
 }
 
-IO_stat MCStack::saveas(const MCStringRef p_fname)
+IO_stat MCStack::saveas(const MCStringRef p_fname, uint32_t p_version)
 {
 	Exec_stat stat = curcard->message(MCM_save_stack_request);
 	if (stat == ES_NOT_HANDLED || stat == ES_PASS)
@@ -702,7 +714,7 @@ IO_stat MCStack::saveas(const MCStringRef p_fname)
 		MCStack *sptr = this;
 		if (!MCdispatcher->ismainstack(sptr))
 			sptr = (MCStack *)sptr->parent;
-		MCdispatcher->savestack(sptr, p_fname);
+		return MCdispatcher->savestack(sptr, p_fname, p_version);
 	}
 	return IO_NORMAL;
 }
@@ -2069,7 +2081,8 @@ void MCStack::setwindowname()
 
 void MCStack::reopenwindow()
 {
-	if (state & CS_FOREIGN_WINDOW)
+	// PM-2016-02-09: [[ Bug 16889 ]] Exit if window is NULL
+	if (state & CS_FOREIGN_WINDOW || window == NULL)
 		return;
 
 	stop_externals();
@@ -2115,8 +2128,8 @@ Exec_stat MCStack::openrect(const MCRectangle &rel, Window_mode wm, MCStack *par
 	MCRectangle myoldrect = rect;
 	if (state & (CS_IGNORE_CLOSE | CS_NO_FOCUS | CS_DELETE_STACK))
 		return ES_NORMAL;
-
-	MCtodestroy->remove(this); // prevent delete
+    
+    MCtodestroy -> remove(this);
 	if (wm == WM_LAST)
 		if (opened)
 			wm = mode;
@@ -2399,7 +2412,7 @@ Exec_stat MCStack::openrect(const MCRectangle &rel, Window_mode wm, MCStack *par
 	// "bind" the stack's rect... Or in other words, make sure its within the 
 	// screens (well viewports) working area.
 	if (!(flags & F_FORMAT_FOR_PRINTING) && !(state & CS_BEEN_MOVED))
-		MCscreen->boundrect(rect, (!(flags & F_DECORATIONS) || decorations & WD_TITLE), mode);
+		MCscreen->boundrect(rect, (!(flags & F_DECORATIONS) || decorations & WD_TITLE), mode, getflag(F_RESIZABLE));
 	
 	state |= CS_NO_FOCUS;
 	if (flags & F_DYNAMIC_PATHS)
@@ -3326,6 +3339,12 @@ MCRectangle MCStack::getvisiblerect(void)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool
+MCStack::haswidgets()
+{
+	return MCObject::haswidgets() || substackhaswidgets();
+}
+
 bool MCStack::substackhaswidgets(void)
 {
 	if (substacks != NULL)
@@ -3333,16 +3352,37 @@ bool MCStack::substackhaswidgets(void)
 		MCStack *t_stack = substacks;
 		do
 		{
-            if (t_stack -> haswidgets())
-                return true;
-			t_stack = (MCStack *)t_stack->next();
+			if (t_stack -> haswidgets())
+				return true;
+			t_stack = (MCStack*)t_stack->next();
 		}
-		while(t_stack != substacks);
+		while (t_stack != substacks);
 	}
+
 	return false;
 }
 
-////////////////////////////////////////////////////////////////////////////////
+bool MCStack::foreachstack(MCStackForEachCallback p_callback, void *p_context)
+{
+    if (!p_callback(this, p_context))
+        return false;
+    
+	bool t_continue;
+	t_continue = true;
+    
+	if (substacks != NULL)
+	{
+		MCStack *t_stack = substacks;
+		do
+		{
+            		t_continue = p_callback(t_stack, p_context);
+			t_stack = (MCStack *)t_stack->next();
+		}
+		while (t_continue && t_stack != substacks);
+	}
+	
+	return t_continue;
+}
 
 bool MCStack::foreachchildstack(MCStackForEachCallback p_callback, void *p_context)
 {
