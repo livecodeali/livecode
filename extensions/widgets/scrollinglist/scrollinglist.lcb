@@ -723,7 +723,7 @@ handler setProperties(in pProperties as Array)
    redraw all
 end handler
 
-handler getProperties() as Array
+handler getProperties() returns Array
    variable tProperties as Array
    put the empty array into tProperties
    put mLineProperties into tProperties["lineProperties"]
