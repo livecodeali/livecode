@@ -2598,6 +2598,10 @@ private command revAddInclusion pInclusion, pKey, @xSettings
    put pInclusion after xSettings[pKey]
 end revAddInclusion
 
+private command revAddToggleInclusion pInclusion, @xSettings
+   put true into xSettings[pInclusion]
+end revAddToggleInclusion
+
 ------------------- SMART CHECKING --------------------
 
 command revSearchForInclusions pStack, @xSettings
@@ -2635,6 +2639,7 @@ private command revSmartChecking pStackFilesList, @xSettings
    put revAbsoluteFolderListing(revEnvironmentResourcesPath("Script Libraries")) into tEnvironmentIcons
    put revAbsoluteFolderListing(revEnvironmentUserResourcesPath("Script Libraries")) into tUserIcons
    
+   local tFoundInclusionsA
    repeat for each line tStackFile in pStackFilesList
       put the short name of stack tStackFile & return & the substacks of stack tStackFile into tStacksList
       repeat for each line tStack in tStacksList
@@ -2644,26 +2649,82 @@ private command revSmartChecking pStackFilesList, @xSettings
             exit revSmartChecking
          end if
          
-         revCheckObject the long name of stack tStack, tUserLibs, tNewSettings
+         revCheckObject the long name of stack tStack, tUserLibs, tFoundInclusionsA
          put the number of cards of stack tStack into tCardNum
          repeat with tCard=1 to tCardNum
-            revCheckObject the long id of cd tCard of stack tStack, tUserLibs, tNewSettings
+            revCheckObject the long id of cd tCard of stack tStack, tUserLibs, tFoundInclusionsA
             put the number of controls of cd tCard of stack tStack into tControlNum
             repeat with tControl = 1 to tControlNum
-               revCheckObject the long id of control tControl of cd tCard of stack tStack, tUserLibs, tNewSettings
+               revCheckObject the long id of control tControl of cd tCard of stack tStack, tUserLibs, tFoundInclusionsA
             end repeat
          end repeat
          repeat for each line tBg in the backgroundIDs of stack tStack
-            revCheckObject the long id of bg id tBg of stack tStack, tUserLibs, tNewSettings
+            revCheckObject the long id of bg id tBg of stack tStack, tUserLibs, tFoundInclusionsA
          end repeat
       end repeat
    end repeat
    
    -- Update the output settings
+   repeat for each key tSettingsKey in tFoundInclusionsA
+      repeat for each key tInclusion in tFoundInclusionsA[tSettingsKey]
+         if tSettingsKey is "resources" then
+            revAddToggleInclusion tSettingsKey, tNewSettings
+         else
+            revAddInclusion tInclusion, tSettingsKey, tNewSettings
+         end if
+      end repeat
+   end repeat
    put tNewSettings into xSettings
 end revSmartChecking
 
-private command revCheckObject pObject,pUserLibraries, @xSettings
+private function revCheckContains pHaystack, pLib, pKey
+   repeat for each item tPattern in sPatternsA[pLib][pKey]
+      if pHaystack contains tPattern then
+         return true
+      end if
+   end repeat
+   
+   return false
+end revCheckContains
+
+private function revCheckProperties pProps, pLib
+   return revCheckContains(pProps, pLib, "Property")
+end revCheckProperties
+
+private function revCheckHandlers pScript, pLib
+   return revCheckContains(pScript, pLib, "Script")
+end revCheckHandlers
+
+private function revCheckRoots pScript, pLib
+   return revCheckContains(pScript, pLib, "Root")
+end revCheckRoots
+
+private function revCheckRegex pScript, pLib
+   # Allow regex search patterns
+   local tRegex
+   repeat for each item tRegex in sPatternsA[pLib]["Regex"]
+      if matchText(pScript,tRegex) then
+         return true
+      end if
+   end repeat
+   
+   return false
+end revCheckRegex
+
+private function revCheckLibrary pScript, pLibrary
+   local tHandlers
+   put revIDEExtensionLibraryHandlers(pLibrary) into tHandlers
+   
+   repeat for each line tHandler in tHandlers
+      if pScript contains tHandler then
+         return true
+      end if
+   end repeat
+   
+   return false
+end revCheckLibrary
+
+private command revCheckObject pObject,pUserLibraries, @xFoundA
    -- Should never get here if the stack is password protected
    if the password of stack (revTargetStack(pObject)) then
       exit revCheckObject
@@ -2675,96 +2736,71 @@ private command revCheckObject pObject,pUserLibraries, @xSettings
    # AL-2015-01-29: [[ Scriptify revSaveAsStandalone ]] Use script locals to check for library inclusions
    local tProps, tLib, tProperty
    put the customPropertySets of pObject into tProps
+   
    repeat for each key tLib in sPatternsA
       local tSettingsKey
       put sPatternsA[tLib]["Key"] into tSettingsKey
       
       # AL-2015-01-29: Don't search the script for handlers if this lib is already included
-      if tLib is among the lines of xSettings[tSettingsKey]  then
+      if xFoundA[tSettingsKey][tLib] then
          next repeat
       end if
       
-      repeat for each item tProperty in sPatternsA[tLib]["Property"]
-         if lineOffset(tProperty, tProps) is not 0 then
-            revAddInclusion tLib, tSettingsKey, xSettings
-            # AL-2015-01-29: If we are including this lib then go on to the next one
-            exit repeat
-         end if
-      end repeat
+      if revCheckProperties(tProps, tLib) then
+         put true into xFoundA[tSettingsKey][tLib]
+      end if
    end repeat
+   
    
    local tScript
    put the script of pObject into tScript
    
    if tScript is not empty then
-      
       repeat for each key tLib in sPatternsA
          put sPatternsA[tLib]["Key"] into tSettingsKey
          
          # AL-2015-01-29: Don't search the script for handlers if this lib is already included
-         if tLib is among the lines of xSettings[tSettingsKey]  then
+         if xFoundA[tSettingsKey][tLib] then
             next repeat
          end if
          
-         local tHandler
-         repeat for each item tHandler in sPatternsA[tLib]["Script"]
-            if lineOffset(tHandler,tScript) is not 0 then
-               revAddInclusion tLib, tSettingsKey, xSettings
-               # AL-2015-01-29: If we are including this lib then go on to the next one
-               exit repeat
-            end if
-         end repeat
-         
-         # AL-2015-01-29: Don't search the script for roots if this lib is already included
-         if tLib is among the lines of xSettings[tSettingsKey]  then
+         if revCheckHandlers(tScript, tLib) then
+            put true into xFoundA[tSettingsKey][tLib]
             next repeat
          end if
          
-         local tRoot
-         repeat for each item tRoot in sPatternsA[tLib]["Root"]
-            if lineOffset(tRoot,tScript) is not 0 then
-               revAddInclusion tLib, tSettingsKey, xSettings
-               # AL-2015-01-29: If we are including this lib then go on to the next one
-               exit repeat
-            end if
-         end repeat
+         if revCheckRoots(tScript, tLib) then
+            put true into xFoundA[tSettingsKey][tLib]
+            next repeat
+         end if
          
-         # Allow regex search patterns
-         local tRegex
-         repeat for each item tRegex in sPatternsA[tLib]["Regex"]
-            if matchText(tScript,tRegex) then
-               revAddInclusion tLib, tSettingsKey, xSettings
-               # AL-2015-01-29: If we are including this lib then go on to the next one
-               exit repeat
-            end if
-         end repeat
+         if revCheckRegex(tScript, tLib) then
+            put true into xFoundA[tSettingsKey][tLib]
+            next repeat
+         end if
       end repeat
       
       -- Detect widgets created in script
       repeat for each key tWidget in revIDEExtensions("widget","installed", false)
-         if tWidget is among the lines of xSettings["extensions"] then
+         if xFoundA["extensions"][tWidget] then
             next repeat
          end if
          
-         if lineOffset(tWidget, tScript) is not 0 then
-            revAddInclusion tWidget, "extensions", xSettings
+         if tScript contains tWidget then
+            put true into xFoundA["extensions"][tWidget]
          end if
       end repeat
       
       -- Detect use of library extensions
       local tHandlers
       repeat for each key tLibrary in revIDEExtensions("library","installed", false) 
-         if tLibrary is among the lines of xSettings["extensions"] then
+         if xFoundA["extensions"][tLibrary] then
             next repeat
          end if
          
-         put revIDEExtensionLibraryHandlers(tLibrary) into tHandlers
-         repeat for each line tHandler in tHandlers
-            if lineOffset(tHandler, tScript) is not 0 then
-               revAddInclusion tLibrary, "extensions", xSettings
-            end if
-         end repeat
-         
+         if revCheckLibrary(tScript, tLibrary) then
+            put true into xFoundA["extensions"][tLibrary]
+         end if
       end repeat
    end if
    
@@ -2772,15 +2808,22 @@ private command revCheckObject pObject,pUserLibraries, @xSettings
    repeat for each item tItem in "answerDialog answer,askDialog ask,pdfPrinter open printing to pdf"
       put word 1 of tItem into tInclusion
       put word 2 to -1 of tItem into tSyntax
-      if not xSettings[tInclusion] and lineOffset(tSyntax, tScript) is not 0 then
-         put true into xSettings[tInclusion]
+      if xFoundA["resources"][tInclusion] then
+         next repeat
+      end if
+      
+      if tScript contains tSyntax then
+         put true into xFoundA["resources"][tInclusion]
       end if
    end repeat
    
    # OK-2007-11-13 : Support for LiveCode print dialogs. The dialogs are included if there is any reference to systemPrintSelector in the script,
    # or if we are building for linux. (This might include the files more often than they are required).
-   if offset("systemPrintSelector", tScript) is not 0 or "Linux" is among the lines of sPlatformList then
-      put true into xSettings["revolutionPrintDialogs"]
+   if not xFoundA["resources"]["systemPrintSelector"] then
+      if tScript contains "systemPrintSelector" or \ 
+            "Linux" is among the lines of sPlatformList then
+         put true into xFoundA["resources"][tInclusion]
+      end if
    end if
 end revCheckObject
 
