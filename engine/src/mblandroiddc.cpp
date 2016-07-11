@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -20,7 +20,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "parsedef.h"
 #include "mcio.h"
 
-//#include "execpt.h"
+
 #include "printer.h"
 #include "globals.h"
 #include "dispatch.h"
@@ -35,11 +35,14 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "osspec.h"
 #include "redraw.h"
 #include "region.h"
+#include "font.h"
 
 #include "mbldc.h"
 
 #include "mblandroidutil.h"
 #include "mblandroidjava.h"
+
+#include "mblnotification.h"
 
 #include "graphics.h"
 #include "resolution.h"
@@ -51,7 +54,9 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include <GLES/gl.h>
 #include <unistd.h>
 
-#include "stacktile.cpp"
+#include "libscript/script.h"
+
+extern "C" bool MCModulesInitialize();
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -93,7 +98,7 @@ static jmethodID s_openglview_configure_method = 0;
 static JavaVM *s_java_vm = nil;
 // The JNIEnv for the android UI thread.
 static JNIEnv *s_android_ui_env;
-// The JNI environment pointer *for our auxillary thread*. This only has lifetime
+// The JNI environment pointer *for our auxiliary thread*. This only has lifetime
 // as long as 'mobile_main' is running.
 static JNIEnv *s_java_env = nil;
 
@@ -109,6 +114,8 @@ static void *s_yield_callback_context = nil;
 
 // The bitmap containing the current visible state of the view
 static jobject s_android_bitmap = nil;
+static int s_android_bitmap_loc_x = 0;
+static int s_android_bitmap_loc_y = 0;
 static int s_android_bitmap_width = 0;
 static int s_android_bitmap_height = 0;
 static int s_android_bitmap_stride = 0;
@@ -423,6 +430,14 @@ bool MCScreenDC::device_getwindowgeometry(Window w, MCRectangle &drect)
 	return true;
 }
 
+void *MCScreenDC::GetNativeWindowHandle(Window p_window)
+{
+	if (p_window == nil)
+		return nil;
+	
+	return s_android_container;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void MCScreenDC::beep(void)
@@ -453,13 +468,62 @@ void MCScreenDC::setbeep(uint4 property, int4 beep)
 
 MCImageBitmap *MCScreenDC::snapshot(MCRectangle &r, uint4 window, MCStringRef displayname, MCPoint *size)
 {
-	return NULL;
+	// scale rectangle from logical -> device coords
+	MCRectangle t_rect;
+	t_rect = logicaltoscreenrect(r);
+	
+	// don't scale size - we want the bitmap to be sized to logical coords.
+	int16_t t_size_width, t_size_height;
+	if (size != nil)
+	{
+		t_size_width = size->x;
+		t_size_height = size->y;
+	}
+	else
+	{
+		t_size_width = r.width;
+		t_size_height = r.height;
+	}
+	
+	jobject t_bitmap;
+	// get snapshot image as java Bitmap object
+	MCAndroidEngineRemoteCall("getSnapshotBitmapAtSize", "oiiiiii", &t_bitmap, t_rect.x, t_rect.y, t_rect.width, t_rect.height, t_size_width, t_size_height);
+	if (t_bitmap == nil)
+		return nil;
+	
+	// read Bitmap info & data into MCImageBitmap struct
+	JNIEnv *env;
+	env = MCJavaGetThreadEnv();
+	AndroidBitmapInfo t_info;
+	AndroidBitmap_getInfo(env, t_bitmap, &t_info);
+	
+	MCImageBitmap t_imagebitmap;
+	t_imagebitmap.width = t_info.width;
+	t_imagebitmap.height = t_info.height;
+	t_imagebitmap.stride = t_info.stride;
+	
+	if (AndroidBitmap_lockPixels(env, t_bitmap, (void**)&t_imagebitmap.data) < 0)
+		return nil;
+	
+	MCImageBitmapCheckTransparency(&t_imagebitmap);
+	
+	MCImageBitmap *t_copy;
+	t_copy = nil;
+	
+	// return a copy of the image bitmap
+	MCImageCopyBitmap(&t_imagebitmap, t_copy);
+	
+	AndroidBitmap_unlockPixels(env, t_bitmap);
+	
+	return t_copy;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 Boolean MCScreenDC::wait(real8 duration, Boolean dispatch, Boolean anyevent)
 {
+    MCDeletedObjectsEnterWait(dispatch);
+    
 	real8 curtime = MCS_time();
 
 	if (duration < 0.0)
@@ -477,6 +541,10 @@ Boolean MCScreenDC::wait(real8 duration, Boolean dispatch, Boolean anyevent)
 	{
 		// IM-2014-03-06: [[ revBrowserCEF ]] Call additional runloop callbacks
 		DoRunloopActions();
+
+        // MM-2015-06-05: [[ MobileSockets ]] Dispatch any waiting notifications.
+        if (MCNotifyDispatch(dispatch == True) && anyevent)
+            break;
 
 		real8 eventtime = exittime;
 		if (handlepending(curtime, eventtime, dispatch))
@@ -547,7 +615,9 @@ Boolean MCScreenDC::wait(real8 duration, Boolean dispatch, Boolean anyevent)
 	// MW-2012-09-19: [[ Bug 10218 ]] Make sure we update the screen in case
 	//   any engine event handling methods need us to.
 	MCRedrawUpdateScreen();
-
+    
+    MCDeletedObjectsLeaveWait(dispatch);
+    
 	return abort;
 }
 
@@ -625,9 +695,7 @@ Window MCScreenDC::get_current_window(void)
 
 static MCRectangle android_view_get_bounds(void)
 {
-	MCRectangle r;
-	MCU_set_rect(r, 0, 0, s_android_bitmap_width, s_android_bitmap_height);
-	return r;
+	return MCRectangleMake(s_android_bitmap_loc_x, s_android_bitmap_loc_y, s_android_bitmap_width, s_android_bitmap_height);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1054,7 +1122,8 @@ void MCStack::view_device_updatewindow(MCRegionRef p_region)
 			//   to prevent a flicker back to an old frame when making the opengl layer visible.
 			view_device_updatewindow(p_region);
 
-			MCAndroidEngineRemoteCall("hideBitmapView", "v", nil);
+            // MW-2015-05-06: [[ Bug 15232 ]] Prevent black flash when enabling setting acceleratedRendering to true
+			MCAndroidEngineRemoteCall("hideBitmapViewInTime", "v", nil);
 		}
 	}
 
@@ -1180,6 +1249,13 @@ static void *mobile_main(void *arg)
 		return (void *)1;
 	}
 
+    // PM-2015-02-19: [[ Bug 14489 ]] Init statics on restart of an app
+    if (!MCJavaInitialize(s_java_env))
+    {
+		co_leave_engine();
+		return (void *)1;
+	}
+    
 	// MW-2011-08-11: [[ Bug 9671 ]] Make sure we initialize MCstackbottom.
 	int i;
 	MCstackbottom = (char *)&i;
@@ -1226,6 +1302,9 @@ static void *mobile_main(void *arg)
 		// Yield for now as we don't detect error states correctly.
 		co_yield_to_android();
 
+        // Free global refs
+        MCJavaFinalize(s_java_env);
+        
 		// Now detach (will be called as a result of doDestroy)
 		s_java_vm -> DetachCurrentThread();
 		co_leave_engine();
@@ -1248,14 +1327,15 @@ static void *mobile_main(void *arg)
 
 	MCLog("Starting up project", 0);
 	send_startup_message(false);
-
+    
+    // PM-2015-02-02: [[ Bug 14456 ]] Make sure the billing provider is properly initialized before a preopenstack/openstack message is sent
+    MCAndroidInitEngine();
+    
 	if (!MCquit)
 		MCdispatcher -> gethome() -> open();
-
+    
 	MCLog("Hiding splash screen", 0);
 	MCAndroidEngineRemoteCall("hideSplashScreen", "v", nil);
-
-    MCAndroidInitEngine();
 
 	while(s_engine_running)
 	{
@@ -1281,6 +1361,8 @@ static void *mobile_main(void *arg)
 	for (int i = 0; i < envc; i++)
 		MCValueRelease(t_env[i]);
 
+    // Free global refs
+    MCJavaFinalize(s_java_env);
 	// We have finished with the engine now, so detach from the thread
 	s_java_vm -> DetachCurrentThread();
 
@@ -1411,8 +1493,15 @@ static void co_yield_to_android_and_call(co_yield_callback_t callback, void *con
 
 void MCAndroidBreakWait(void)
 {
-	s_schedule_wakeup_was_broken = true;
-	co_yield_to_engine();
+    // MM-2015-06-08: [[ MobileSockets ]] Make sure we execute on the UI thread.
+    //   Calling scheduleWakeUp indirectly has this effect.
+    s_schedule_wakeup_was_broken = true;
+    JNIEnv *t_env;
+    t_env = MCJavaGetThreadEnv();
+    if (t_env != nil)
+        t_env -> CallVoidMethod(s_android_view, s_schedule_wakeup_method, 0, s_schedule_wakeup_breakable);
+    else
+        s_android_ui_env -> CallVoidMethod(s_android_view, s_schedule_wakeup_method, 0, s_schedule_wakeup_breakable);
 }
 
 struct MCAndroidEngineCallThreadContext
@@ -1420,7 +1509,10 @@ struct MCAndroidEngineCallThreadContext
 	const char *method;
 	void *return_value;
 
+	const char *java_class;
+	
     jobject object;
+    bool is_static;
     MCJavaMethodParams *params;
 };
 
@@ -1447,10 +1539,21 @@ static void MCAndroidEngineCallThreadCallback(void *p_context)
 
     jclass t_class = nil;
 
-    t_class = t_env->GetObjectClass(context->object);
+	if (t_success)
+	{
+		if (context->is_static)
+			t_class = t_env->FindClass(context->java_class);
+		else
+			t_class = t_env->GetObjectClass(context->object);
+		t_success = t_class != nil;
+	}
+	
     if (t_success)
 	{
-		t_method_id = t_env -> GetMethodID(t_class, context -> method, t_params->signature);
+		if (context->is_static)
+			t_method_id = t_env->GetStaticMethodID(t_class, context->method, t_params->signature);
+		else
+			t_method_id = t_env -> GetMethodID(t_class, context -> method, t_params->signature);
 		if (t_method_id == 0)
 			t_success = false;
 	}
@@ -1460,7 +1563,10 @@ static void MCAndroidEngineCallThreadCallback(void *p_context)
 		switch(t_params->return_type)
 		{
 		case kMCJavaTypeVoid:
-            t_env -> CallVoidMethodA(context->object, t_method_id, t_params->params);
+			if (context->is_static)
+				t_env->CallStaticVoidMethodA(t_class, t_method_id, t_params->params);
+			else
+				t_env -> CallVoidMethodA(context->object, t_method_id, t_params->params);
 			if (t_cleanup_java_refs && t_env -> ExceptionCheck())
 			{
 				t_exception_thrown = true;
@@ -1468,7 +1574,10 @@ static void MCAndroidEngineCallThreadCallback(void *p_context)
 			}
 			break;
 		case kMCJavaTypeInt:
-			*((int32_t *)(context -> return_value)) = t_env -> CallIntMethodA(context->object, t_method_id, t_params->params);
+			if (context->is_static)
+				*((int32_t *)(context->return_value)) = t_env->CallStaticIntMethodA(t_class, t_method_id, t_params->params);
+			else
+				*((int32_t *)(context -> return_value)) = t_env -> CallIntMethodA(context->object, t_method_id, t_params->params);
 			if (t_cleanup_java_refs && t_env -> ExceptionCheck())
 			{
 				t_exception_thrown = true;
@@ -1476,7 +1585,10 @@ static void MCAndroidEngineCallThreadCallback(void *p_context)
 			}
 			break;
         case kMCJavaTypeLong:
-            *((int64_t *)(context -> return_value)) = t_env -> CallLongMethodA(context->object, t_method_id, t_params->params);
+			if (context->is_static)
+				*((int64_t *)(context -> return_value)) = t_env -> CallStaticLongMethodA(t_class, t_method_id, t_params->params);
+			else
+				*((int64_t *)(context -> return_value)) = t_env -> CallLongMethodA(context->object, t_method_id, t_params->params);
             if (t_cleanup_java_refs && t_env -> ExceptionCheck())
             {
                 t_exception_thrown = true;
@@ -1484,7 +1596,10 @@ static void MCAndroidEngineCallThreadCallback(void *p_context)
             }
             break;
         case kMCJavaTypeFloat:
-            *((float*)(context -> return_value)) = t_env -> CallFloatMethodA(context->object, t_method_id, t_params->params);
+			if (context->is_static)
+				*((float*)(context -> return_value)) = t_env -> CallStaticFloatMethodA(t_class, t_method_id, t_params->params);
+			else
+				*((float*)(context -> return_value)) = t_env -> CallFloatMethodA(context->object, t_method_id, t_params->params);
             if (t_cleanup_java_refs && t_env -> ExceptionCheck())
             {
                 t_exception_thrown = true;
@@ -1492,7 +1607,10 @@ static void MCAndroidEngineCallThreadCallback(void *p_context)
             }
             break;
         case kMCJavaTypeDouble:
-            *((double *)(context -> return_value)) = t_env -> CallDoubleMethodA(context->object, t_method_id, t_params->params);
+			if (context->is_static)
+				*((double *)(context -> return_value)) = t_env -> CallStaticDoubleMethodA(t_class, t_method_id, t_params->params);
+			else
+				*((double *)(context -> return_value)) = t_env -> CallDoubleMethodA(context->object, t_method_id, t_params->params);
             if (t_cleanup_java_refs && t_env -> ExceptionCheck())
             {
                 t_exception_thrown = true;
@@ -1500,7 +1618,10 @@ static void MCAndroidEngineCallThreadCallback(void *p_context)
             }
             break;
 		case kMCJavaTypeBoolean:
-			*((bool *)(context -> return_value)) = JNI_TRUE == t_env -> CallBooleanMethodA(context->object, t_method_id, t_params->params);
+			if (context->is_static)
+				*((bool *)(context -> return_value)) = JNI_TRUE == t_env -> CallStaticBooleanMethodA(t_class, t_method_id, t_params->params);
+			else
+				*((bool *)(context -> return_value)) = JNI_TRUE == t_env -> CallBooleanMethodA(context->object, t_method_id, t_params->params);
 			if (t_cleanup_java_refs && t_env -> ExceptionCheck())
 			{
 				t_exception_thrown = true;
@@ -1510,7 +1631,10 @@ static void MCAndroidEngineCallThreadCallback(void *p_context)
 		case kMCJavaTypeCString:
 		{
 			jstring t_java_string;
-			t_java_string = (jstring)t_env -> CallObjectMethodA(context->object, t_method_id, t_params->params);
+			if (context->is_static)
+				t_java_string = (jstring)t_env -> CallStaticObjectMethodA(t_class, t_method_id, t_params->params);
+			else
+				t_java_string = (jstring)t_env -> CallObjectMethodA(context->object, t_method_id, t_params->params);
 			if (t_cleanup_java_refs && t_env -> ExceptionCheck())
 			{
 				t_exception_thrown = true;
@@ -1529,7 +1653,10 @@ static void MCAndroidEngineCallThreadCallback(void *p_context)
 		case kMCJavaTypeMCString:
 			{
 				jstring t_java_string;
-				t_java_string = (jstring)t_env -> CallObjectMethodA(context->object, t_method_id, t_params->params);
+				if (context->is_static)
+					t_java_string = (jstring)t_env -> CallStaticObjectMethodA(t_class, t_method_id, t_params->params);
+				else
+					t_java_string = (jstring)t_env -> CallObjectMethodA(context->object, t_method_id, t_params->params);
 				if (t_cleanup_java_refs && t_env -> ExceptionCheck())
 				{
 					t_exception_thrown = true;
@@ -1548,7 +1675,10 @@ static void MCAndroidEngineCallThreadCallback(void *p_context)
 		case kMCJavaTypeMCStringUnicode:
 			{
 				jstring t_java_string;
-				t_java_string = (jstring)t_env -> CallObjectMethodA(context->object, t_method_id, t_params->params);
+				if (context->is_static)
+					t_java_string = (jstring)t_env -> CallStaticObjectMethodA(t_class, t_method_id, t_params->params);
+				else
+					t_java_string = (jstring)t_env -> CallObjectMethodA(context->object, t_method_id, t_params->params);
 				if (t_cleanup_java_refs && t_env -> ExceptionCheck())
 				{
 					t_exception_thrown = true;
@@ -1568,7 +1698,10 @@ static void MCAndroidEngineCallThreadCallback(void *p_context)
 		case kMCJavaTypeMCStringRef:
 			{
 				jstring t_java_string;
-				t_java_string = (jstring)t_env -> CallObjectMethodA(context->object, t_method_id, t_params->params);
+				if (context->is_static)
+					t_java_string = (jstring)t_env -> CallStaticObjectMethodA(t_class, t_method_id, t_params->params);
+				else
+					t_java_string = (jstring)t_env -> CallObjectMethodA(context->object, t_method_id, t_params->params);
 				if (t_cleanup_java_refs && t_env -> ExceptionCheck())
 				{
 					t_exception_thrown = true;
@@ -1588,7 +1721,10 @@ static void MCAndroidEngineCallThreadCallback(void *p_context)
 		case kMCJavaTypeByteArray:
 			{
 				jbyteArray t_byte_array;
-				t_byte_array = (jbyteArray)t_env -> CallObjectMethodA(context->object, t_method_id, t_params->params);
+				if (context->is_static)
+					t_byte_array = (jbyteArray)t_env -> CallStaticObjectMethodA(t_class, t_method_id, t_params->params);
+				else
+					t_byte_array = (jbyteArray)t_env -> CallObjectMethodA(context->object, t_method_id, t_params->params);
 				if (t_cleanup_java_refs && t_env -> ExceptionCheck())
 				{
 					t_exception_thrown = true;
@@ -1604,11 +1740,36 @@ static void MCAndroidEngineCallThreadCallback(void *p_context)
 				t_env -> DeleteLocalRef(t_byte_array);
 			}
 			break;
+        case kMCJavaTypeMCValueRef:
+            {
+                jobject t_object;
+				if (context->is_static)
+					t_object = t_env -> CallStaticObjectMethodA(t_class, t_method_id, t_params->params);
+				else
+					t_object = t_env -> CallObjectMethodA(context->object, t_method_id, t_params->params);
+                if (t_cleanup_java_refs && t_env -> ExceptionCheck())
+                {
+                    t_exception_thrown = true;
+                    t_success = false;
+                }
+                
+                MCValueRef t_value;
+                if (t_success)
+                    t_success = MCJavaObjectToValueRef(t_env, t_object, t_value);
+                if (t_success)
+                    *((MCValueRef *)context -> return_value) = t_value;
+                
+                t_env -> DeleteLocalRef(t_object);
+            }
+            break;
         case kMCJavaTypeObject:
 		case kMCJavaTypeMap:
             {
                 jobject t_object;
-                t_object = (jobject)t_env->CallObjectMethodA(context->object, t_method_id, t_params->params);
+				if (context->is_static)
+					t_object = t_env -> CallStaticObjectMethodA(t_class, t_method_id, t_params->params);
+				else
+					t_object = t_env -> CallObjectMethodA(context->object, t_method_id, t_params->params);
                 if (t_cleanup_java_refs && t_env->ExceptionCheck())
                 {
                     t_exception_thrown = true;
@@ -1624,6 +1785,9 @@ static void MCAndroidEngineCallThreadCallback(void *p_context)
             }
 		}
 	}
+	
+	if (t_class != nil)
+		t_env->DeleteLocalRef(t_class);
 
 	if (t_exception_thrown)
 	{
@@ -1633,13 +1797,14 @@ static void MCAndroidEngineCallThreadCallback(void *p_context)
 #endif
 		t_env -> ExceptionClear();
 	}
-
-    t_env->DeleteLocalRef(t_class);
 }
 
-void MCAndroidJavaMethodCall(jobject p_object, const char *p_method, void *p_return_value, MCJavaMethodParams *p_params, bool p_on_engine_thread)
+// If object is nil then call class static method
+void MCAndroidJavaMethodCall(const char *p_class, jobject p_object, const char *p_method, void *p_return_value, MCJavaMethodParams *p_params, bool p_on_engine_thread)
 {
 	MCAndroidEngineCallThreadContext t_context;
+	t_context . java_class = p_class;
+	t_context . is_static = p_object == nil;
     t_context . object = p_object;
 	t_context . method = p_method;
 	t_context . return_value = p_return_value;
@@ -1655,73 +1820,89 @@ void MCAndroidJavaMethodCall(jobject p_object, const char *p_method, void *p_ret
     }
 }
 
-void MCAndroidObjectCall(jobject p_object, const char *p_method, const char *p_signature, void *p_return_value, ...)
+void MCAndroidObjectCallWithArgs(jobject p_object, const char *p_method, const char *p_signature, void *p_return_value, bool p_on_engine_thread, va_list p_args)
 {
     bool t_success = true;
-	va_list args;
 
+	JNIEnv *t_env = MCJavaGetThreadEnv();
+	
     MCJavaMethodParams *t_params = nil;
 
-	va_start(args, p_return_value);
-    t_success = MCJavaConvertParameters(s_java_env, p_signature, args, t_params);
-	va_end(args);
+    t_success = MCJavaConvertParameters(t_env, p_signature, p_args, t_params, !p_on_engine_thread);
 
     if (t_success)
-        MCAndroidJavaMethodCall(p_object, p_method, p_return_value, t_params, true);
+        MCAndroidJavaMethodCall(nil, p_object, p_method, p_return_value, t_params, p_on_engine_thread);
 
-    MCJavaMethodParamsFree(s_java_env, t_params);
+    MCJavaMethodParamsFree(t_env, t_params, !p_on_engine_thread);
+}
+
+void MCAndroidStaticCallWithArgs(const char *p_class, const char *p_method, const char *p_signature, void *p_return_value, bool p_on_engine_thread, va_list p_args)
+{
+    bool t_success = true;
+
+	JNIEnv *t_env = MCJavaGetThreadEnv();
+	
+    MCJavaMethodParams *t_params = nil;
+
+	if (t_success)
+		t_success = MCJavaConvertParameters(t_env, p_signature, p_args, t_params, !p_on_engine_thread);
+
+    if (t_success)
+        MCAndroidJavaMethodCall(p_class, nil, p_method, p_return_value, t_params, p_on_engine_thread);
+
+    MCJavaMethodParamsFree(t_env, t_params, !p_on_engine_thread);
+}
+
+void MCAndroidObjectCall(jobject p_object, const char *p_method, const char *p_signature, void *p_return_value, ...)
+{
+	va_list args;
+
+	va_start(args, p_return_value);
+    MCAndroidObjectCallWithArgs(p_object, p_method, p_signature, p_return_value, true, args);
+	va_end(args);
 }
 
 void MCAndroidObjectRemoteCall(jobject p_object, const char *p_method, const char *p_signature, void *p_return_value, ...)
 {
-    MCLog("MCAndroidObjectRemoteCall <%p>.%s(%s)", p_object, p_method, p_signature);
-    bool t_success = true;
 	va_list args;
 
-    MCJavaMethodParams *t_params = nil;
-
 	va_start(args, p_return_value);
-    t_success = MCJavaConvertParameters(s_java_env, p_signature, args, t_params, true);
+    MCAndroidObjectCallWithArgs(p_object, p_method, p_signature, p_return_value, false, args);
 	va_end(args);
-
-    if (t_success)
-        MCAndroidJavaMethodCall(p_object, p_method, p_return_value, t_params, false);
-
-    MCJavaMethodParamsFree(s_java_env, t_params, true);
 }
 
 void MCAndroidEngineCall(const char *p_method, const char *p_signature, void *p_return_value, ...)
 {
-    bool t_success = true;
 	va_list args;
 
-    MCJavaMethodParams *t_params = nil;
-
 	va_start(args, p_return_value);
-    t_success = MCJavaConvertParameters(s_java_env, p_signature, args, t_params);
+    MCAndroidObjectCallWithArgs(s_android_view, p_method, p_signature, p_return_value, true, args);
 	va_end(args);
-
-    if (t_success)
-        MCAndroidJavaMethodCall(s_android_view, p_method, p_return_value, t_params, true);
-
-    MCJavaMethodParamsFree(s_java_env, t_params);
 }
 
 void MCAndroidEngineRemoteCall(const char *p_method, const char *p_signature, void *p_return_value, ...)
 {
-    bool t_success = true;
 	va_list args;
 
-    MCJavaMethodParams *t_params = nil;
-
 	va_start(args, p_return_value);
-    t_success = MCJavaConvertParameters(s_java_env, p_signature, args, t_params, true);
+    MCAndroidObjectCallWithArgs(s_android_view, p_method, p_signature, p_return_value, false, args);
 	va_end(args);
+}
 
-    if (t_success)
-        MCAndroidJavaMethodCall(s_android_view, p_method, p_return_value, t_params, false);
+void MCAndroidStaticCall(const char *p_class_name, const char *p_method, const char *p_signature, void *p_return_value, ...)
+{
+	va_list args;
+	va_start(args, p_return_value);
+	MCAndroidStaticCallWithArgs(p_class_name, p_method, p_signature, p_return_value, true, args);
+	va_end(args);
+}
 
-    MCJavaMethodParamsFree(s_java_env, t_params, true);
+void MCAndroidStaticRemoteCall(const char *p_class_name, const char *p_method, const char *p_signature, void *p_return_value, ...)
+{
+	va_list args;
+	va_start(args, p_return_value);
+	MCAndroidStaticCallWithArgs(p_class_name, p_method, p_signature, p_return_value, false, args);
+	va_end(args);
 }
 
 void *MCAndroidGetActivity(void)
@@ -1766,7 +1947,7 @@ extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doResume(JNIEnv
 extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doLowMemory(JNIEnv *env, jobject object) __attribute__((visibility("default")));
 extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doProcess(JNIEnv *env, jobject object, bool timedout) __attribute__((visibility("default")));
 extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doWait(JNIEnv *env, jobject object, double time, bool dispatch, bool anyevent) __attribute__((visibility("default")));
-extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doReconfigure(JNIEnv *env, jobject object, int w, int h, jobject bitmap) __attribute__((visibility("default")));
+extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doReconfigure(JNIEnv *env, jobject object, int x, int y, int w, int h, jobject bitmap) __attribute__((visibility("default")));
 extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doTouch(JNIEnv *env, jobject object, int action, int id, int timestamp, int x, int y) __attribute__((visibility("default")));
 extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doKeyPress(JNIEnv *env, jobject object, int modifiers, int char_code, int key_code) __attribute__((visibility("default")));
 extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doShake(JNIEnv *env, jobject object, int action, jlong timestamp) __attribute__((visibility("default")));
@@ -1789,6 +1970,9 @@ extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doKeyboardHidde
 JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doCreate(JNIEnv *env, jobject object, jobject activity, jobject container, jobject view)
 {
     MCInitialize();
+    MCSInitialize();
+    MCModulesInitialize();
+    MCScriptInitialize();
     
 	MCLog("doCreate called", 0);
 
@@ -1932,7 +2116,7 @@ JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doProcess(JNIEnv *env, job
 	if (!s_engine_running)
 		return;
 
-	s_schedule_wakeup_was_broken = !timedout;
+	s_schedule_wakeup_was_broken = !timedout || s_schedule_wakeup_was_broken;
 	co_yield_to_engine();
 }
 
@@ -1946,9 +2130,9 @@ JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doWait(JNIEnv *env, jobjec
 	MCscreen -> wait(time, dispatch, anyevent);
 }
 
-JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doReconfigure(JNIEnv *env, jobject object, int w, int h, jobject bitmap)
+JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doReconfigure(JNIEnv *env, jobject object, int x, int y, int w, int h, jobject bitmap)
 {
-	MCLog("doReconfigure(%d, %d, %p)", w, h, bitmap);
+	MCLog("doReconfigure(%d, %d, %d, %d, %p)", x, y, w, h, bitmap);
 
 	bool t_resizing_bitmap;
 	t_resizing_bitmap = (s_android_bitmap != nil);
@@ -1966,6 +2150,9 @@ JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doReconfigure(JNIEnv *env,
 	s_android_bitmap_width = t_info . width;
 	s_android_bitmap_height = t_info . height;
 	s_android_bitmap_stride = t_info . stride;
+	
+	s_android_bitmap_loc_x = x;
+	s_android_bitmap_loc_y = y;
 
 	// MW-2011-10-01: [[ Bug 9772 ]] If we are resizing, we do a 'fit window', else
 	//   we yield to engine.
@@ -2174,8 +2361,6 @@ JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doMediaCanceled(JNIEnv *en
 	MCAndroidMediaCanceled();
 }
 
-void MCNotificationPostUrlWakeUp(MCStringRef t_url);
-
 extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doLaunchFromUrl(JNIEnv *env, jobject object, jstring url) __attribute__((visibility("default")));
 JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doLaunchFromUrl(JNIEnv *env, jobject object, jstring url)
 {
@@ -2183,6 +2368,13 @@ JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doLaunchFromUrl(JNIEnv *en
     if (MCJavaStringToStringRef(env, url, &t_url_str))
         MCNotificationPostUrlWakeUp(*t_url_str);
 }
+
+extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doLaunchDataChanged(JNIEnv *env, jobject object) __attribute__((visibility("default")));
+JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doLaunchDataChanged(JNIEnv *env, jobject object)
+{
+	/* UNCHECKED */ MCNotificationPostLaunchDataChanged();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 static jmethodID s_get_asset_info_method = 0;
@@ -2699,7 +2891,7 @@ bool android_run_on_main_thread(void *p_callback, void *p_callback_state, int p_
 		
 		MCRunOnMainThreadHelper *t_helper;
 		t_helper = new MCRunOnMainThreadHelper(p_callback, p_callback_state, p_options);
-		MCAndroidEngineCall("nativeNotify", "(II)V", nil, MCRunOnMainThreadHelper::DispatchThunk, t_helper);
+		MCAndroidEngineCall("nativeNotify", "vii", nil, MCRunOnMainThreadHelper::DispatchThunk, t_helper);
 		return true;
 	}
 	
@@ -2762,10 +2954,11 @@ JNIEXPORT jstring JNICALL Java_com_runrev_android_Engine_doGetCustomPropertyValu
 
     MCExecValue t_value;
     MCExecContext ctxt(nil, nil, nil);
-    if (!MCdefaultstackptr -> getcustomprop(ctxt, *t_set_name, *t_prop_name, t_value))
+    
+    if (MCdefaultstackptr -> getcustomprop(ctxt, *t_set_name, *t_prop_name, nil, t_value))
     {
         MCAutoStringRef t_string_value;
-        MCExecTypeConvertAndReleaseAlways(ctxt, t_value . type, &t_value , kMCExecValueTypeStringRef, &t_string_value);
+        MCExecTypeConvertAndReleaseAlways(ctxt, t_value . type, &t_value , kMCExecValueTypeStringRef, &(&t_string_value));
 
         if (!ctxt . HasError())
             t_success = MCJavaStringFromStringRef(env, *t_string_value, t_js);
@@ -2802,5 +2995,19 @@ JNIEnv *MCJavaGetThreadEnv()
     return t_env;
 }
 
-////////////////////////////////////////////////////////////////////////////////
+JNIEnv *MCJavaAttachCurrentThread()
+{
+    JNIEnv *t_env;
+    t_env = nil;
+    if (s_java_vm -> AttachCurrentThread(&t_env, nil) < 0)
+        return nil;
+    return t_env;
+}
 
+void MCJavaDetachCurrentThread()
+{
+    s_java_vm -> DetachCurrentThread();
+}
+
+
+////////////////////////////////////////////////////////////////////////////////

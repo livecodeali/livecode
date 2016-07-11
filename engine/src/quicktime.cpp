@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2016 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -21,18 +21,22 @@
 #include "objdefs.h"
 #include "parsedef.h"
 
-#include "graphics.h"
-#include "stack.h"
-#include "execpt.h"
-#include "player.h"
-#include "util.h"
 #include "osspec.h"
 #include "variable.h"
+
+/* Pretty much everything in this file is only needed if quicktime
+ * effects are enabled. */
+#if defined(FEATURE_QUICKTIME_EFFECTS)
+
+#include "graphics.h"
+#include "stack.h"
+
+#include "player.h"
+#include "util.h"
 
 #ifdef _WINDOWS_DESKTOP
 #include "w32prefix.h"
 #include "w32dc.h"
-#include "w32context.h"
 
 #include "digitalv.h"
 #include "QTML.h"
@@ -45,12 +49,9 @@
 #include <ImageCodec.h>
 
 #define PIXEL_FORMAT_32 k32BGRAPixelFormat
-// SN-2014-06-26 [[ PlatformPlayer ]]
-// Function used in both quicktime.cpp and player.cpp
-extern OSErr MCS_path2FSSpec(MCStringRef fname, FSSpec *fspec);
 
 #elif defined(_MAC_DESKTOP)
-#include "osxprefix.h"
+#include <QuickTime/QuickTime.h>
 
 #ifdef __LITTLE_ENDIAN__
 #define PIXEL_FORMAT_32 k32BGRAPixelFormat
@@ -58,6 +59,7 @@ extern OSErr MCS_path2FSSpec(MCStringRef fname, FSSpec *fspec);
 #define PIXEL_FORMAT_32 k32ARGBPixelFormat
 #endif
 
+#if MAC_OS_X_VERSION_MAX_ALLOWED > MAC_OS_X_VERSION_10_6
 inline void SetRect(Rect *t_rect, int l, int t, int r, int b)
 {
     t_rect -> left = l;
@@ -79,10 +81,9 @@ void *GetPixBaseAddr(PixMapHandle pix);
 void LockPixels(PixMapHandle pix);
 void UnlockPixels(PixMapHandle pix);
 }
-
 #endif
 
-#ifdef FEATURE_QUICKTIME_EFFECTS
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -108,11 +109,8 @@ extern "C" int initialise_weak_link_QuickDraw(void);
 
 /////////
 
-bool MCQTInit(void)
+bool MCQTInitialize(void)
 {
-	if (MCdontuseQT)
-		return false;
-	
 	if (s_qt_initted)
 		return true;
 	
@@ -141,6 +139,14 @@ bool MCQTInit(void)
 #endif
 	
 	return s_qt_initted;
+}
+
+bool MCQTInit(void)
+{
+	if (MCdontuseQT)
+		return false;
+	
+	return MCQTInitialize();
 }
 
 void MCQTFinit(void)
@@ -224,12 +230,60 @@ static bool path_to_dataref(MCStringRef p_path, DataReferenceRecord& r_rec)
 	if (t_success)
 	{
 		OSErr t_error;
-		t_error = QTNewDataReferenceFromFullPathCFString(t_cf_path, kQTNativeDefaultPathStyle, 0, &r_rec . dataRef, &r_rec . dataRefType);
+		// PM-2015-10-06: [[ Bug 15321 ]] Use kQTPOSIXPathStyle, since filename is of the form C:/dir1/dir2/filename.wav
+		// Using kQTNativeDefaultPathStyle results in QTNewDataReferenceFromFullPathCFString() failure (returns -50)
+		t_error = QTNewDataReferenceFromFullPathCFString(t_cf_path, kQTPOSIXPathStyle, 0, &r_rec . dataRef, &r_rec . dataRefType);
 		t_success = noErr == t_error;
 	}
 	CFRelease(t_cf_path);
 	return t_success;
 }
+
+#ifdef _WINDOWS
+// SN-2014-06-26 [[ PlatformPlayer ]]
+// Function used in both quicktime.cpp and player-legacy.cpp
+#define PATH_MAX 260
+OSErr MCS_path2FSSpec(MCStringRef p_filename, FSSpec *fspec)
+{ //For QT movie only
+	MCAutoStringRef t_filename;
+	char *nativepath;
+	char *temp;
+    
+	/* UNCHECKED */ MCS_resolvepath(p_filename, &t_filename);
+    
+	if (MCStringGetNativeCharAtIndex(*t_filename, 1) != ':' &&
+		MCStringGetNativeCharAtIndex(*t_filename, 0) != '/')
+	{//not c:/mc/xxx, not /mc/xxx
+		MCAutoStringRef t_native;
+		MCAutoStringRef t_path;
+		MCAutoStringRef t_curdir;
+		
+		/* UNCHECKED */ MCS_getcurdir(&t_curdir);
+		/* UNCHECKED */ MCStringMutableCopy(*t_curdir, &t_path);
+		if (MCStringGetLength(p_filename) + MCStringGetLength(*t_curdir) < PATH_MAX)
+		{
+			// MW-2005-01-25: If the current directory is the root of a volume then it *does*
+			//   have a path separator so we don't need to add one
+			if (MCStringGetNativeCharAtIndex(*t_path, MCStringGetLength(*t_path) - 1) != '/')
+            /* UNCHECKED */ MCStringAppendChar(*t_path, '/');
+            
+			/* UNCHECKED */ MCStringAppend(*t_path, *t_filename);
+			/* UNCHECKED */ MCS_pathtonative(*t_path, &t_native);
+			/* UNCHECKED */ MCStringConvertToCString(*t_native, temp);
+			nativepath = strclone(temp);
+		}
+	}
+	else
+	{
+		/* UNCHECKED */ MCStringConvertToCString(*t_filename, temp);
+		nativepath = strclone(temp);
+	}
+    
+	OSErr err = NativePathNameToFSSpec(nativepath, fspec, 0);
+	delete nativepath;
+	return err;
+}
+#endif
 
 static void exportToSoundFile(MCStringRef sourcefile, MCStringRef destfile)
 {
@@ -241,8 +295,9 @@ static void exportToSoundFile(MCStringRef sourcefile, MCStringRef destfile)
     MCAutoStringRef t_src_resolved;
 	MCAutoStringRef t_dst_resolved;
     
+    // PM-2015-06-16: [[ Bug 15321 ]] Make sure t_dst_resolved gets the correct value
     t_success = MCS_resolvepath(sourcefile, &t_src_resolved)
-                && MCS_resolvepath(destfile, &t_src_resolved);
+                && MCS_resolvepath(destfile, &t_dst_resolved);
     
 	t_success = (*t_src_resolved != NULL && *t_dst_resolved != NULL);
 	
@@ -359,8 +414,18 @@ void MCQTStopRecording(void)
 			exportToSoundFile(recordtempfile, recordexportfile);
 			MCS_unlink(recordtempfile);
 		}
-		MCValueRelease(recordexportfile);
-		recordexportfile = NULL;
+
+		if (recordexportfile != NULL)
+		{
+			MCValueRelease(recordexportfile);
+			recordexportfile = NULL;
+		}
+
+		if (recordtempfile != NULL)
+		{
+			MCValueRelease(recordtempfile);
+			recordtempfile = NULL;
+		}
 	}
 }
 
@@ -1140,6 +1205,16 @@ void MCQTEffectEnd(void)
 
 #else    // if not FEATURE_QUICKTIME_EFFECTS
 
+bool MCQTInitialize()
+{
+	return false;
+}
+
+bool MCQTInit()
+{
+    return false;
+}
+
 void MCQTEffectsList(MCStringRef &r_list)
 {
     r_list = MCValueRetain(kMCEmptyString);
@@ -1190,5 +1265,5 @@ void MCQTGetVersion(MCStringRef& r_version)
 }
 
 
-#endif
+#endif /* !FEATURE_QUICKTIME_EFFECTS */
 

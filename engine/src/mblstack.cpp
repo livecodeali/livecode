@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -21,7 +21,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "objdefs.h"
 #include "parsedef.h"
 
-//#include "execpt.h"
+
 #include "dispatch.h"
 #include "stack.h"
 #include "card.h"
@@ -158,6 +158,11 @@ void MCStack::clearscroll(void)
 {
 }
 
+// MERG-2015-10-12: [[ DocumentFilename ]] Stub for documentFilename.
+void MCStack::updatedocumentfilename(void)
+{
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 MCRectangle MCStack::view_platform_getwindowrect() const
@@ -194,6 +199,17 @@ void MCStack::view_platform_updatewindow(MCRegionRef p_dirty_region)
 	
 	if (t_scaled_region != nil)
 		MCRegionDestroy(t_scaled_region);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool MCStack::configure_window_buffer()
+{
+	return true;
+}
+
+void MCStack::release_window_buffer()
+{
 }
 
 ////////////////////////////////////////////////////////////////////////////////

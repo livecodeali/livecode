@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -48,6 +48,8 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "uuid.h"
 
+#include "libscript/script.h"
+
 ////////////////////////////////////////////////////////////////////////////////
 
 MC_EXEC_DEFINE_EVAL_METHOD(Engine, Version, 1)
@@ -84,6 +86,7 @@ MC_EXEC_DEFINE_EXEC_METHOD(Engine, Get, 1)
 MC_EXEC_DEFINE_EXEC_METHOD(Engine, PutIntoVariable, 3)
 MC_EXEC_DEFINE_EXEC_METHOD(Engine, PutOutput, 2)
 MC_EXEC_DEFINE_EXEC_METHOD(Engine, Do, 3)
+MC_EXEC_DEFINE_EXEC_METHOD(Engine, DoInCaller, 3)
 MC_EXEC_DEFINE_EXEC_METHOD(Engine, InsertScriptOfObjectInto, 2)
 MC_EXEC_DEFINE_EXEC_METHOD(Engine, Quit, 1)
 MC_EXEC_DEFINE_EXEC_METHOD(Engine, CancelMessage, 1)
@@ -109,7 +112,9 @@ MC_EXEC_DEFINE_EXEC_METHOD(Engine, LockMessages, 0)
 MC_EXEC_DEFINE_EXEC_METHOD(Engine, UnlockErrors, 0)
 MC_EXEC_DEFINE_EXEC_METHOD(Engine, UnlockMessages, 0)
 MC_EXEC_DEFINE_EXEC_METHOD(Engine, Set, 2)
+MC_EXEC_DEFINE_EXEC_METHOD(Engine, Return, 1)
 MC_EXEC_DEFINE_EXEC_METHOD(Engine, ReturnValue, 1)
+MC_EXEC_DEFINE_EXEC_METHOD(Engine, ReturnError, 1)
 MC_EXEC_DEFINE_SET_METHOD(Engine, CaseSensitive, 1)
 MC_EXEC_DEFINE_GET_METHOD(Engine, CaseSensitive, 1)
 MC_EXEC_DEFINE_SET_METHOD(Engine, CenturyCutOff, 1)
@@ -443,12 +448,11 @@ void MCEngineEvalParam(MCExecContext& ctxt, integer_t p_index, MCValueRef& r_val
 void MCEngineEvalParamCount(MCExecContext& ctxt, integer_t& r_count)
 {
 	// MW-2013-11-15: [[ Bug 11277 ]] If we don't have a handler then 'the param'
-	//   makes no sense so just return 0.
-    // PM-2014-04-14: [[Bug 12105]] Do this check to prevent crash in LC server
+    //   makes no sense so just return 0.
 	if (ctxt.GetHandler() != nil)
 		r_count = ctxt.GetHandler()->getnparams();
 	else
-        ctxt . LegacyThrow(EE_PARAMCOUNT_NOHANDLER);
+        r_count = 0;
 }
 
 void MCEngineEvalParams(MCExecContext& ctxt, MCStringRef& r_string)
@@ -600,18 +604,18 @@ void MCEngineEvalMe(MCExecContext& ctxt, MCStringRef& r_string)
 
 void MCEngineEvalTarget(MCExecContext& ctxt, MCStringRef& r_string)
 {
-	if (MCtargetptr == nil)
+	if (MCtargetptr . object == nil)
 		r_string = MCValueRetain(kMCEmptyString);
 	else
-		MCtargetptr->getstringprop(ctxt, 0, P_NAME, False, r_string);
+		MCtargetptr . object -> getstringprop(ctxt, MCtargetptr . part_id, P_NAME, False, r_string);
 }
 
 void MCEngineEvalTargetContents(MCExecContext& ctxt, MCStringRef& r_string)
 {
-	if (MCtargetptr == nil)
+	if (MCtargetptr . object == nil)
 		r_string = MCValueRetain(kMCEmptyString);
 	else
-		MCtargetptr->getstringprop(ctxt, 0, MCtargetptr->gettype() == CT_FIELD ? P_TEXT : P_NAME, False, r_string);
+		MCtargetptr . object -> getstringprop(ctxt, MCtargetptr . part_id, MCtargetptr . object -> gettype() == CT_FIELD ? P_TEXT : P_NAME, False, r_string);
 }
 
 //////////
@@ -649,10 +653,9 @@ void MCEngineEvalValue(MCExecContext& ctxt, MCStringRef p_script, MCValueRef& r_
 		return;
 	}
 
-	if (ctxt.GetHandler() != nil)
-		ctxt.GetHandler()->eval(ctxt, p_script, r_value);
-	else
-		ctxt.GetHandlerList()->eval(ctxt, p_script, r_value);
+    // SN-2015-06-03: [[ Bug 11277 ]] MCHandler::eval refactored
+    ctxt.eval(ctxt, p_script, r_value);
+
 	if (ctxt.HasError())
 		ctxt.LegacyThrow(EE_VALUE_ERROR, p_script);
 }
@@ -691,9 +694,9 @@ void MCEngineExecSet(MCExecContext& ctxt, MCProperty *p_target, MCValueRef p_val
 	}
 }
 
-void MCEngineExecGet(MCExecContext& ctxt, MCValueRef p_value)
+void MCEngineExecGet(MCExecContext& ctxt, /* take */ MCExecValue& p_value)
 {
-	ctxt . SetItToValue(p_value);
+    ctxt . GiveValueToIt(p_value);
 }
 
 void MCEngineExecPutOutput(MCExecContext& ctxt, MCStringRef p_value)
@@ -764,6 +767,21 @@ void MCEngineExecPutIntoVariable(MCExecContext& ctxt, MCValueRef p_value, int p_
                 return;
             }
             
+            // AL-2015-04-01: [[ Bug 15139 ]] Make sure the mark text is the correct value type.
+            MCValueRef t_mark_text;
+            if (!ctxt . ConvertToString(p_var . mark . text, (MCStringRef &)t_mark_text))
+            {
+                ctxt . Throw();
+                return;
+            }
+
+            // SN-2015-07-27: [[ Bug 15646 ]] MCExecContext::ConvertToString
+            //  already makes a copy. We want to make sure that p_var.mark.text
+            //  has 0 reference when exiting this function, so p_var.mark.text
+            //  must become t_mark_text, not get a copy of it.
+            MCValueRelease(p_var . mark . text);
+            p_var . mark . text = t_mark_text;
+            
             // SN-2014-09-03: [[ Bug 13314 ]] MCMarkedText::changed updated to store the number of chars appended
             if (p_var . mark . changed != 0)
             {
@@ -805,7 +823,13 @@ void MCEngineExecPutIntoVariable(MCExecContext& ctxt, MCExecValue p_value, int p
         if (MCValueGetTypeCode(p_var . mark . text) == kMCValueTypeCodeData &&
             p_value . type == kMCExecValueTypeDataRef)
         {
-            MCEngineExecPutIntoVariable(ctxt, p_value . dataref_value, p_where, p_var);
+            // AL-2014-11-20: Make sure the incoming exec value is released.
+            MCAutoDataRef t_value_data;
+            MCExecTypeConvertAndReleaseAlways(ctxt, p_value . type, &p_value, kMCExecValueTypeDataRef, &(&t_value_data));
+            if (ctxt . HasError())
+                return;
+            
+            MCEngineExecPutIntoVariable(ctxt, *t_value_data, p_where, p_var);
             return;
         }
         
@@ -818,9 +842,19 @@ void MCEngineExecPutIntoVariable(MCExecContext& ctxt, MCExecValue p_value, int p
     }
 }
 
+void MCEngineExecReturn(MCExecContext& ctxt, MCValueRef p_value)
+{
+	ctxt.SetTheResultToValue(p_value);
+}
+
 void MCEngineExecReturnValue(MCExecContext& ctxt, MCValueRef p_value)
 {
-	ctxt . SetTheResultToValue(p_value);
+    ctxt.SetTheReturnValue(p_value);
+}
+
+void MCEngineExecReturnError(MCExecContext& ctxt, MCValueRef p_value)
+{
+    ctxt.SetTheReturnError(p_value);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -835,13 +869,38 @@ void MCEngineExecDo(MCExecContext& ctxt, MCStringRef p_script, int p_line, int p
 		added = True;
 	}
 
-	if (ctxt.GetHandler() != nil)
-		ctxt.GetHandler() -> doscript(ctxt, p_script, p_line, p_pos);
-	else
-		ctxt.GetHandlerList() -> doscript(ctxt, p_script, p_line, p_pos);
+    // SN-2015-06-03: [[ Bug 11277 ]] MCHandler::doscript refactored
+    ctxt.doscript(ctxt, p_script, p_line, p_pos);
 
 	if (added)
 		MCnexecutioncontexts--;
+}
+
+void MCEngineExecDoInCaller(MCExecContext& ctxt, MCStringRef p_script, int p_line, int p_pos)
+{
+    Boolean added = False;
+    if (MCnexecutioncontexts < MAX_CONTEXTS)
+    {
+        ctxt.SetLineAndPos(p_line, p_pos);
+        MCexecutioncontexts[MCnexecutioncontexts++] = &ctxt;
+        added = True;
+    }
+    
+    if (MCnexecutioncontexts < 2)
+    {
+        if (added)
+            MCnexecutioncontexts--;
+        ctxt . LegacyThrow(EE_DO_NOCALLER);
+        return;
+    }
+    
+    MCExecContext *caller = MCexecutioncontexts[MCnexecutioncontexts - 2];
+    
+    // SN-2015-06-03: [[ Bug 11277 ]] MCHandler::doscript refactored
+    caller -> doscript(*caller, p_script, p_line, p_pos);
+    
+    if (added)
+        MCnexecutioncontexts--;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -850,17 +909,20 @@ void MCEngineExecQuit(MCExecContext& ctxt, integer_t p_retcode)
 {
 // MW-2011-06-22: [[ SERVER ]] Don't send messages in server-mode.
 #ifndef _SERVER
-	switch(MCdefaultstackptr->getcard()->message(MCM_shut_down_request))
-	{
-		case ES_PASS:
-		case ES_NOT_HANDLED:
-			break;
-		default:
-			return;
-	}
-	// IM-2013-05-01: [[ BZ 10586 ]] remove #ifdefs so this message is sent
-	// here on Android in the same place as (almost) everything else
-	MCdefaultstackptr->getcard()->message(MCM_shut_down);
+    if (MCdefaultstackptr != nil && !MCdefaultstackptr->getstate(CS_DELETE_STACK))
+    {
+        switch(MCdefaultstackptr->getcard()->message(MCM_shut_down_request))
+        {
+            case ES_PASS:
+            case ES_NOT_HANDLED:
+                break;
+            default:
+                return;
+        }
+        // IM-2013-05-01: [[ BZ 10586 ]] remove #ifdefs so this message is sent
+        // here on Android in the same place as (almost) everything else
+        MCdefaultstackptr->getcard()->message(MCM_shut_down);
+    }
 #endif
 
 	MCretcode = p_retcode;
@@ -1122,27 +1184,28 @@ void MCEngineExecDispatch(MCExecContext& ctxt, int p_handler_type, MCNameRef p_m
 	}
 	
 	// Work out the target object
-	MCObject *t_object;
+	MCObjectPtr t_object;
 	if (p_target != nil)
-		t_object = p_target -> object;
+		t_object = *p_target;
 	else
-		t_object = ctxt . GetObject();
+		t_object = ctxt . GetObjectPtr();
 		
 	// Fetch current default stack and target settings
 	MCStack *t_old_stack;
 	t_old_stack = MCdefaultstackptr;
-	MCObject *t_old_target;
+	MCObjectPtr t_old_target;
 	t_old_target = MCtargetptr;
 	
 	// Cache the current 'this stack' (used to see if we should switch back
 	// the default stack).
 	MCStack *t_this_stack;
-	t_this_stack = t_object -> getstack();
+	t_this_stack = t_object . object -> getstack();
 	
 	// Retarget this stack and the target to be relative to the target object
 	MCdefaultstackptr = t_this_stack;
 	MCtargetptr = t_object;
-
+    MCtargetptr . part_id = 0;
+    
 	// MW-2012-10-30: [[ Bug 10478 ]] Turn off lockMessages before dispatch.
 	Boolean t_old_lock;
 	t_old_lock = MClockmessages;
@@ -1165,7 +1228,7 @@ void MCEngineExecDispatch(MCExecContext& ctxt, int p_handler_type, MCNameRef p_m
 	Boolean olddynamic = MCdynamicpath;
 	MCdynamicpath = MCdynamiccard != NULL;
 	if (t_stat == ES_PASS || t_stat == ES_NOT_HANDLED)
-		switch(t_stat = t_object->handle((Handler_type)p_handler_type, p_message, p_parameters, t_object))
+		switch(t_stat = t_object . object -> handle((Handler_type)p_handler_type, p_message, p_parameters, t_object . object))
 		{
 		case ES_ERROR:
 			ctxt . LegacyThrow(EE_DISPATCH_BADCOMMAND, p_message);
@@ -1260,8 +1323,9 @@ static void MCEngineSplitScriptIntoMessageAndParameters(MCExecContext& ctxt, MCS
             
             // MW-2011-08-11: [[ Bug 9668 ]] Make sure we copy 'pdata' if we use it, since
             //   mptr (into which it points) only lasts as long as this method call.
+            // SN-2015-06-03: [[ Bug 11277 ]] MCHandler::eval_ctxt refactored
             MCExecValue t_value;
-            ctxt . GetHandler() -> eval_ctxt(ctxt, *t_expression, t_value);
+            ctxt . eval_ctxt(ctxt, *t_expression, t_value);
             if (!ctxt.HasError())
                 newparam->set_exec_argument(ctxt, t_value);
             else
@@ -1320,40 +1384,75 @@ static void MCEngineSendOrCall(MCExecContext& ctxt, MCStringRef p_script, MCObje
 	}
 	if ((stat = optr->message(*t_message, t_params, p_is_send, True)) == ES_NOT_HANDLED)
 	{
+        // The message was not handled by the target object, so this is
+        // just a bunch of script to be executed as if it were in a handler
+        // in the target object (using domess).
+        
 		MCHandler *t_handler;
 		t_handler = optr -> findhandler(HT_MESSAGE, *t_message);
 		if (t_handler != NULL && t_handler -> isprivate())
+        {
 			ctxt . LegacyThrow(EE_SEND_BADEXP, *t_message);
-		else
-		{
-            MCAutoStringRef tptr;
+            goto cleanup;
+        }
 
-			if (t_params != NULL)
-			{
-                MCAutoValueRef t_value;
-				/* UNCHECKED */ t_params->eval(ctxt, &t_value);
-                MCAutoStringRef t_value_string;
-				ctxt . ConvertToString(*t_value, &t_value_string);
-                MCStringFormat(&tptr, "%@ %@", *t_message, *t_value_string);
-				
-			}
-            else
-                tptr = MCNameGetString(*t_message);
+        // The 'split into message and parameters' function above is used
+        // to ensure that all the parameters are evaluated in the current
+        // context (not the target). Since domess just takes a string, we
+        // convert the entire script back into a string with the params
+        // having been evaluated. This means in particular that variables
+        // containing arrays will not work here - they will be converted to
+        // the empty string.
+        
+        MCAutoListRef t_param_list;
+        MCListCreateMutable(',', &t_param_list);
+        MCParameter *t_param_ptr;
+        t_param_ptr = t_params;
+        
+        bool t_has_params;
+        t_has_params = t_params != nil;
+        while (t_param_ptr != NULL)
+        {
+            MCAutoValueRef t_value;
+            MCAutoStringRef t_value_string;
             
-			if ((stat = optr->domess(*tptr)) == ES_ERROR)
-				ctxt . LegacyThrow(EE_STATEMENT_BADCOMMAND, *t_message);
-		}
+            if (!t_param_ptr->eval(ctxt, &t_value) ||
+                !ctxt . ConvertToString(*t_value, &t_value_string) ||
+                !MCListAppend(*t_param_list, *t_value_string))
+                goto cleanup;
+
+            t_param_ptr = t_param_ptr -> getnext();
+        }
+        
+        MCAutoStringRef tptr;
+        if (t_has_params)
+        {
+            MCAutoStringRef t_params_string;
+            if (!MCListCopyAsString(*t_param_list, &t_params_string) ||
+                !MCStringCreateWithStringsAndSeparator(&tptr, ' ',
+                                                       MCNameGetString(*t_message),
+                                                       *t_params_string))
+                goto cleanup;
+        }
+        else
+            tptr = MCNameGetString(*t_message);
+        
+        if ((stat = optr->domess(*tptr)) == ES_ERROR)
+            ctxt . LegacyThrow(EE_STATEMENT_BADCOMMAND, *t_message);
 	}
 	else if (stat == ES_PASS)
 		stat = ES_NORMAL;
 	else if (stat == ES_ERROR)
 		ctxt . LegacyThrow(EE_SEND_BADEXP, *t_message);
-	while (t_params != NULL)
+
+cleanup:
+    while (t_params != NULL)
 	{
 		MCParameter *tmp = t_params;
 		t_params = t_params->getnext();
 		delete tmp;
 	}
+    
 	if (added)
 		MCnexecutioncontexts--;
 	MClockmessages = oldlock;
@@ -1735,7 +1834,8 @@ void MCEngineEvalOwnerAsObject(MCExecContext& ctxt, MCObjectPtr p_object, MCObje
     if (!(p_object . object -> gettype() == CT_STACK && MCdispatcher -> ismainstack(static_cast<MCStack *>(p_object . object))))
     {
         r_owner . object = p_object . object -> getparent();
-        r_owner . part_id  = 0;
+        // SN-2015-01-13: [[ Bug 14376 ]] Let's get the parid of the owner, as in pre-7.0
+        r_owner . part_id  = p_object . part_id;
         return;
     }
     
@@ -1807,20 +1907,12 @@ void MCEngineEvalMeAsObject(MCExecContext& ctxt, MCObjectPtr& r_object)
     // refers to the derived object context, otherwise it is the object
     // we were compiled in.
     
-    MCObject *t_object;
+    MCObjectPtr t_object;
     
     if (ctxt . GetParentScript() == NULL)
-        t_object = nil; // destobj!
+        r_object . object = nil; // destobj!
     else
-        t_object = ctxt . GetObject();
-
-        r_object . object = t_object;
-        r_object . part_id = 0;
-    
-    if (t_object != nil)
-        return;
-    
-  //  ctxt . LegacyThrow(EE_CHUNK_NOTARGET);
+        r_object = ctxt . GetObjectPtr();
 }
 
 void MCEngineEvalMenuObjectAsObject(MCExecContext& ctxt, MCObjectPtr& r_object)
@@ -1837,10 +1929,9 @@ void MCEngineEvalMenuObjectAsObject(MCExecContext& ctxt, MCObjectPtr& r_object)
 
 void MCEngineEvalTargetAsObject(MCExecContext& ctxt, MCObjectPtr& r_object)
 {
-    if (MCtargetptr != nil)
+    if (MCtargetptr . object != nil)
     {
-        r_object . object = MCtargetptr;
-        r_object . part_id = 0;
+        r_object = MCtargetptr;
         return;
     }
     
@@ -1945,8 +2036,110 @@ void MCEngineEvalSHA1Uuid(MCExecContext& ctxt, MCStringRef p_namespace_id, MCStr
 
 void MCEngineGetEditionType(MCExecContext& ctxt, MCStringRef& r_edition)
 {
-    if (MCStringCreateWithCString(MClicenseparameters . license_class == kMCLicenseClassCommunity ? "community" : "commercial", r_edition))
+    bool t_success;
+    switch (MClicenseparameters.license_class)
+    {
+        case kMCLicenseClassCommunity:
+            t_success = MCStringCreateWithCString("community", r_edition);
+            break;
+			
+		case kMCLicenseClassEvaluation:
+        case kMCLicenseClassCommercial:
+            t_success = MCStringCreateWithCString("commercial", r_edition);
+            break;
+			
+		case kMCLicenseClassProfessionalEvaluation:
+        case kMCLicenseClassProfessional:
+            t_success = MCStringCreateWithCString("professional", r_edition);
+            break;
+            
+        default:
+            t_success = false;
+            break;
+    }
+    
+    if (t_success)
         return;
     
     ctxt . Throw();
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+void MCEngineEvalIsStrictlyNothing(MCExecContext& ctxt, MCValueRef value, bool& r_result)
+{
+    r_result = MCValueGetTypeCode(value) == kMCValueTypeCodeNull;
+}
+
+void MCEngineEvalIsNotStrictlyNothing(MCExecContext& ctxt, MCValueRef value, bool& r_result)
+{
+    r_result = MCValueGetTypeCode(value) != kMCValueTypeCodeNull;
+}
+
+void MCEngineEvalIsStrictlyABoolean(MCExecContext& ctxt, MCValueRef value, bool& r_result)
+{
+    r_result = MCValueGetTypeCode(value) == kMCValueTypeCodeBoolean;
+}
+
+void MCEngineEvalIsNotStrictlyABoolean(MCExecContext& ctxt, MCValueRef value, bool& r_result)
+{
+    r_result = MCValueGetTypeCode(value) != kMCValueTypeCodeBoolean;
+}
+
+void MCEngineEvalIsStrictlyAnInteger(MCExecContext& ctxt, MCValueRef value, bool& r_result)
+{
+    r_result = MCValueGetTypeCode(value) == kMCValueTypeCodeNumber &&
+                MCNumberIsInteger((MCNumberRef)value);
+}
+
+void MCEngineEvalIsNotStrictlyAnInteger(MCExecContext& ctxt, MCValueRef value, bool& r_result)
+{
+    r_result = !(MCValueGetTypeCode(value) == kMCValueTypeCodeNumber &&
+                 MCNumberIsInteger((MCNumberRef)value));
+}
+
+void MCEngineEvalIsStrictlyAReal(MCExecContext& ctxt, MCValueRef value, bool& r_result)
+{
+    r_result = MCValueGetTypeCode(value) == kMCValueTypeCodeNumber &&
+                MCNumberIsReal((MCNumberRef)value);
+}
+
+void MCEngineEvalIsNotStrictlyAReal(MCExecContext& ctxt, MCValueRef value, bool& r_result)
+{
+    r_result = !(MCValueGetTypeCode(value) == kMCValueTypeCodeNumber &&
+                 MCNumberIsReal((MCNumberRef)value));
+}
+
+void MCEngineEvalIsStrictlyAString(MCExecContext& ctxt, MCValueRef value, bool& r_result)
+{
+    r_result = MCValueGetTypeCode(value) == kMCValueTypeCodeString ||
+                MCValueGetTypeCode(value) == kMCValueTypeCodeName;
+}
+
+void MCEngineEvalIsNotStrictlyAString(MCExecContext& ctxt, MCValueRef value, bool& r_result)
+{
+    r_result = !(MCValueGetTypeCode(value) == kMCValueTypeCodeString ||
+                 MCValueGetTypeCode(value) == kMCValueTypeCodeName);
+}
+
+void MCEngineEvalIsStrictlyABinaryString(MCExecContext& ctxt, MCValueRef value, bool& r_result)
+{
+    r_result = MCValueGetTypeCode(value) == kMCValueTypeCodeData;
+}
+
+void MCEngineEvalIsNotStrictlyABinaryString(MCExecContext& ctxt, MCValueRef value, bool& r_result)
+{
+    r_result = MCValueGetTypeCode(value) != kMCValueTypeCodeData;
+}
+
+void MCEngineEvalIsStrictlyAnArray(MCExecContext& ctxt, MCValueRef value, bool& r_result)
+{
+    r_result = MCValueGetTypeCode(value) == kMCValueTypeCodeArray;
+}
+
+void MCEngineEvalIsNotStrictlyAnArray(MCExecContext& ctxt, MCValueRef value, bool& r_result)
+{
+    r_result = MCValueGetTypeCode(value) != kMCValueTypeCodeArray;
+}
+
+////////////////////////////////////////////////////////////////////////////////

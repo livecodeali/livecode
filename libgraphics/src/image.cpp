@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -47,12 +47,12 @@ bool MCGImageCreateWithSkBitmap(const SkBitmap &p_bitmap, MCGImageRef &r_image)
 	if (t_success)
 	{
 		t_bitmap = new SkBitmap(p_bitmap);
-        t_bitmap -> lockPixels();
 		t_success = nil != t_bitmap;
 	}
 	
 	if (t_success)
 	{
+		t_bitmap -> lockPixels();
 		t_image -> bitmap = t_bitmap;
 		t_image -> is_valid = true;
 		t_image -> references = 1;

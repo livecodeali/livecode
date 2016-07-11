@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -41,9 +41,9 @@ MC_EXEC_DEFINE_EXEC_METHOD(BusyIndicator, StopActivityIndicator, 0)
 
 static MCExecEnumTypeElementInfo _kMCBusyIndicatorElementInfo[] =
 {
-    { "in line", kMCBusyIndicatorInLine},
-    { "square", kMCBusyIndicatorSquare},
-    { "keyboard", kMCBusyIndicatorKeyboard}
+	{ "in line", kMCBusyIndicatorInLine, false },
+	{ "square", kMCBusyIndicatorSquare, false },
+	{ "keyboard", kMCBusyIndicatorKeyboard, false },
 };
 
 static MCExecEnumTypeInfo _kMCBusyIndicatorTypeInfo =
@@ -57,9 +57,9 @@ MCExecEnumTypeInfo *kMCBusyIndicatorTypeInfo = &_kMCBusyIndicatorTypeInfo;
 
 static MCExecEnumTypeElementInfo _kMCActivityIndicatorElementInfo[] =
 {
-    { "white", kMCActivityIndicatorWhite },
-    { "large white", kMCActivityIndicatorWhiteLarge},
-    { "gray", kMCActivityIndicatorGray}
+	{ "white", kMCActivityIndicatorWhite, false },
+	{ "large white", kMCActivityIndicatorWhiteLarge, false },
+	{ "gray", kMCActivityIndicatorGray, false },
 };
 
 static MCExecEnumTypeInfo _kMCActivityIndicatorTypeInfo =
@@ -76,9 +76,6 @@ MCExecEnumTypeInfo* kMCActivityIndicatorTypeInfo = &_kMCActivityIndicatorTypeInf
 // MM-2013-02-04: [[ Bug 10642 ]] Added new optional opacity parameter to busy indicator.
 void MCBusyIndicatorExecStartBusyIndicator(MCExecContext& ctxt, intenum_t p_indicator, MCStringRef p_label, int32_t p_opacity)
 {
-#ifdef /* MCBusyIndicatorExecStart */ LEGACY_EXEC
-    MCSystemBusyIndicatorStart(p_indicator, p_label, p_opacity);
-#endif /* MCBusyIndicatorExecStart */
     if(MCSystemBusyIndicatorStart(p_indicator, p_label, p_opacity))
         return;
     
@@ -87,9 +84,6 @@ void MCBusyIndicatorExecStartBusyIndicator(MCExecContext& ctxt, intenum_t p_indi
 
 void MCBusyIndicatorExecStopBusyIndicator(MCExecContext& ctxt)
 {
-#ifdef /* MCBusyIndicatorExecStop */ LEGACY_EXEC
-    MCSystemBusyIndicatorStop();
-#endif /* MCBusyIndicatorExecStop */
     if(MCSystemBusyIndicatorStop())
         return;
     
@@ -98,9 +92,6 @@ void MCBusyIndicatorExecStopBusyIndicator(MCExecContext& ctxt)
 
 void MCBusyIndicatorExecStartActivityIndicator(MCExecContext& ctxt, intenum_t p_indicator, integer_t* p_location_x, integer_t* p_location_y)
 {
-#ifdef /* MCActivityIndicatorExecStart */ LEGACY_EXEC
-    MCSystemActivityIndicatorStart (p_indicator, p_location);
-#endif /* MCActivityIndicatorExecStart */
     // Check whether the location is provided
     if (p_location_x == nil || p_location_y == nil)
         MCSystemActivityIndicatorStart(p_indicator, -1, -1);
@@ -110,8 +101,5 @@ void MCBusyIndicatorExecStartActivityIndicator(MCExecContext& ctxt, intenum_t p_
 
 void MCBusyIndicatorExecStopActivityIndicator(MCExecContext& ctxt)
 {
-#ifdef /* MCActivityIndicatorExecStop */ LEGACY_EXEC
-    MCSystemActivityIndicatorStop ();
-#endif /* MCActivityIndicatorExecStop */
     MCSystemActivityIndicatorStop ();
 }

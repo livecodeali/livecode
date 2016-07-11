@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -21,6 +21,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "objdefs.h"
 #include "parsedef.h"
 #include "mcio.h"
+#include "mode.h"
 
 #include "globals.h"
 #include "osspec.h"
@@ -29,11 +30,14 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "exec.h"
 #include "util.h"
 #include "uidc.h"
+#include "mcerror.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
 MC_EXEC_DEFINE_EVAL_METHOD(Files, Directories, 1)
+MC_EXEC_DEFINE_EVAL_METHOD(Files, DirectoriesOfDirectory, 2)
 MC_EXEC_DEFINE_EVAL_METHOD(Files, Files, 1)
+MC_EXEC_DEFINE_EVAL_METHOD(Files, FilesOfDirectory, 2)
 MC_EXEC_DEFINE_EVAL_METHOD(Files, DiskSpace, 1)
 MC_EXEC_DEFINE_EVAL_METHOD(Files, DriverNames, 1)
 MC_EXEC_DEFINE_EVAL_METHOD(Files, Drives, 1)
@@ -147,22 +151,15 @@ MCExecEnumTypeInfo *kMCFilesEofEnumTypeInfo = &_kMCFilesEofEnumTypeInfo;
 
 //////////
 
-void MCFilesEvalDirectories(MCExecContext& ctxt, MCStringRef& r_string)
+void MCFilesEvalDirectories(MCExecContext & ctxt,
+                            MCStringRef & r_string)
 {
-	if (MCsecuremode & MC_SECUREMODE_DISK)
-	{
-		ctxt . LegacyThrow(EE_DISK_NOPERM);
-		return;
-	}
-	MCAutoListRef t_list;
-	if (MCS_getentries(false, false, &t_list) && MCListCopyAsString(*t_list, r_string))
-		return;
-
-    // SN-2014-10-07: [[ Bug 13619 ]] 'the folders' should return empty, in case of an error
-    r_string = MCValueRetain(kMCEmptyString);
+	MCFilesEvalDirectoriesOfDirectory(ctxt, nil, r_string);
 }
 
-void MCFilesEvalFiles(MCExecContext& ctxt, MCStringRef& r_string)
+void MCFilesEvalDirectoriesOfDirectory(MCExecContext& ctxt,
+                                       MCStringRef p_directory,
+                                       MCStringRef& r_string)
 {
 	if (MCsecuremode & MC_SECUREMODE_DISK)
 	{
@@ -170,11 +167,40 @@ void MCFilesEvalFiles(MCExecContext& ctxt, MCStringRef& r_string)
 		return;
 	}
 	MCAutoListRef t_list;
-	if (MCS_getentries(true, false, &t_list) && MCListCopyAsString(*t_list, r_string))
-		return;
+	if (MCS_getentries(p_directory, false, false, &t_list))
+	{
+		MCListCopyAsString(*t_list, r_string);
+	}
+	else
+	{
+		MCStringCopy(kMCEmptyString, r_string);
+	}
+}
 
-    // SN-2014-10-07: [[ Bug 13619 ]] 'the files' should return empty, in case of an error
-    r_string = MCValueRetain(kMCEmptyString);
+void MCFilesEvalFiles(MCExecContext & ctxt,
+                      MCStringRef & r_string)
+{
+	MCFilesEvalFilesOfDirectory(ctxt, nil, r_string);
+}
+
+void MCFilesEvalFilesOfDirectory(MCExecContext& ctxt,
+                                 MCStringRef p_directory,
+                                 MCStringRef& r_string)
+{
+	if (MCsecuremode & MC_SECUREMODE_DISK)
+	{
+		ctxt . LegacyThrow(EE_DISK_NOPERM);
+		return;
+	}
+	MCAutoListRef t_list;
+	if (MCS_getentries(p_directory, true, false, &t_list))
+	{
+		MCListCopyAsString(*t_list, r_string);
+	}
+	else
+	{
+		MCStringCopy(kMCEmptyString, r_string);
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -254,9 +280,18 @@ void MCFilesEvalSpecialFolderPath(MCExecContext& ctxt, MCStringRef p_folder, MCS
 		return;
 	}
 
+    bool t_error;
     MCNewAutoNameRef t_path;
+    t_error = false;
     MCNameCreate(p_folder, &t_path);
-	if (MCS_getspecialfolder(*t_path, r_path))
+    // We have a special, mode-specific resource folder
+    if (MCNameIsEqualTo(*t_path, MCN_resources, kMCStringOptionCompareCaseless))
+        MCModeGetResourcesFolder(r_path);
+    else if (!MCS_getspecialfolder(*t_path, r_path))
+        t_error = true;
+
+    // MCModeGetResourcesFolder won't fail, but can return an empty path
+    if (!t_error)
 	{
 		if (MCStringIsEmpty(r_path))
 			ctxt.SetTheResultToCString("folder not found");
@@ -455,6 +490,8 @@ void MCFilesEvalQueryRegistryWithType(MCExecContext& ctxt, MCStringRef p_key, MC
 		{
 			ctxt.SetTheResultToValue(*t_error);
 			r_string = MCValueRetain(kMCEmptyString);
+            // SN-2014-11-18: [[ Bug 14052 ]] Assign the empty string to the type as well.
+            r_type = MCValueRetain(kMCEmptyString);
 		}
 		else
 			ctxt.SetTheResultToEmpty();
@@ -729,13 +766,15 @@ void MCFilesEvalShell(MCExecContext& ctxt, MCStringRef p_command, MCStringRef& r
 {
 	if (MCsecuremode & MC_SECUREMODE_PROCESS)
 	{
-		ctxt . LegacyThrow(EE_SHELL_NOPERM);
+		MCeerror->add(EE_SHELL_NOPERM, 0, 0, p_command);
+		ctxt . Throw();
 		return;
 	}
 
 	if (MCS_runcmd(p_command, r_output) != IO_NORMAL)
 	{
-		ctxt . LegacyThrow(EE_SHELL_BADCOMMAND);
+		MCeerror->add(EE_SHELL_BADCOMMAND, 0, 0, p_command);
+		ctxt . Throw();
 		return;
 	}
 }
@@ -1101,22 +1140,31 @@ void MCFilesExecPerformReadFixedFor(MCExecContext& ctxt, IO_handle p_stream, int
 	}
 	while (tsize < size);
 
+    bool t_success;
+    t_success = true;
+    
 	MCStringRef t_buffer;
-	MCStringCreateMutable(0, t_buffer);
+    t_buffer = nil;
+    if (t_success)
+        t_success = MCStringCreateMutable(0, t_buffer);
+    
+    bool t_used_buffer;
+    t_used_buffer = true;
+    
 	uindex_t t_num_chars;
-	
 	switch (p_unit_type) 
 	{
 	case FU_INT1:
 		{
 			char buffer[I1L];
 			int1 *i1ptr = (int1 *)t_current.Chars();
-			for (uint4 i = 0 ; i < p_count ; i++)
+			for (uint4 i = 0 ; t_success && i < p_count ; i++)
 			{
 				t_num_chars = sprintf(buffer, "%d", i1ptr[i]);
 				if (i != 0)
-					MCStringAppendNativeChar(t_buffer, ',');
-				MCStringAppendNativeChars(t_buffer, (char_t *)buffer, t_num_chars);
+					t_success = MCStringAppendNativeChar(t_buffer, ',');
+                if (t_success)
+                    t_success = MCStringAppendNativeChars(t_buffer, (char_t *)buffer, t_num_chars);
 			}
 		}
 		break;
@@ -1124,12 +1172,13 @@ void MCFilesExecPerformReadFixedFor(MCExecContext& ctxt, IO_handle p_stream, int
 		{
 			char buffer[I2L];
 			int2 *i2ptr = (int2 *)t_current.Chars();
-			for (uint4 i = 0 ; i < p_count ; i++)
+			for (uint4 i = 0 ; t_success && i < p_count ; i++)
 			{
 				t_num_chars = sprintf(buffer, "%d", i2ptr[i]);
 				if (i != 0)
-					MCStringAppendNativeChar(t_buffer, ',');
-				MCStringAppendNativeChars(t_buffer, (char_t *)buffer, t_num_chars);
+					t_success = MCStringAppendNativeChar(t_buffer, ',');
+                if (t_success)
+                    t_success = MCStringAppendNativeChars(t_buffer, (char_t *)buffer, t_num_chars);
 			}
 		}
 		break;
@@ -1137,12 +1186,13 @@ void MCFilesExecPerformReadFixedFor(MCExecContext& ctxt, IO_handle p_stream, int
 		{
 			char buffer[I4L];
 			int4 *i4ptr = (int4 *)t_current.Chars();
-			for (uint4 i = 0 ; i < p_count ; i++)
+			for (uint4 i = 0 ; t_success && i < p_count ; i++)
 			{
 				t_num_chars = sprintf(buffer, "%d", i4ptr[i]);
 				if (i != 0)
-					MCStringAppendNativeChar(t_buffer, ',');
-				MCStringAppendNativeChars(t_buffer, (char_t *)buffer, t_num_chars);
+					t_success = MCStringAppendNativeChar(t_buffer, ',');
+                if (t_success)
+                    t_success = MCStringAppendNativeChars(t_buffer, (char_t *)buffer, t_num_chars);
 			}
 		}
 		break;
@@ -1150,12 +1200,13 @@ void MCFilesExecPerformReadFixedFor(MCExecContext& ctxt, IO_handle p_stream, int
 		{
 			char buffer[I4L];
 			int4 *i8ptr = (int4 *)t_current.Chars();
-			for (uint4 i = 0 ; i < p_count ; i++)
+			for (uint4 i = 0 ; t_success && i < p_count ; i++)
 			{
 				t_num_chars = sprintf(buffer, "%d", i8ptr[i]);
 				if (i != 0)
-					MCStringAppendNativeChar(t_buffer, ',');
-				MCStringAppendNativeChars(t_buffer, (char_t *)buffer, t_num_chars);
+					t_success = MCStringAppendNativeChar(t_buffer, ',');
+                if (t_success)
+                    t_success = MCStringAppendNativeChars(t_buffer, (char_t *)buffer, t_num_chars);
 			}
 		}
 		break;
@@ -1163,12 +1214,13 @@ void MCFilesExecPerformReadFixedFor(MCExecContext& ctxt, IO_handle p_stream, int
 		{
 			char buffer[R4L];
 			real4 *r4ptr = (real4 *)t_current.Chars();
-			for (uint4 i = 0 ; i < p_count ; i++)
+			for (uint4 i = 0 ; t_success && i < p_count ; i++)
 			{
 				t_num_chars = sprintf(buffer, "%f", r4ptr[i]);
 				if (i != 0)
-					MCStringAppendNativeChar(t_buffer, ',');
-				MCStringAppendNativeChars(t_buffer, (char_t *)buffer, t_num_chars);
+					t_success = MCStringAppendNativeChar(t_buffer, ',');
+                if (t_success)
+                    t_success = MCStringAppendNativeChars(t_buffer, (char_t *)buffer, t_num_chars);
 			}
 		}
 		break;
@@ -1176,12 +1228,13 @@ void MCFilesExecPerformReadFixedFor(MCExecContext& ctxt, IO_handle p_stream, int
 		{
 			char buffer[R8L];
 			real8 *r8ptr = (real8 *)t_current.Chars();
-			for (uint4 i = 0 ; i < p_count ; i++)
+			for (uint4 i = 0 ; t_success && i < p_count ; i++)
 			{
 				t_num_chars = sprintf(buffer, "%lf", r8ptr[i]);
 				if (i != 0)
-					MCStringAppendNativeChar(t_buffer, ',');
-				MCStringAppendNativeChars(t_buffer, (char_t *)buffer, t_num_chars);
+					t_success = MCStringAppendNativeChar(t_buffer, ',');
+                if (t_success)
+                    t_success = MCStringAppendNativeChars(t_buffer, (char_t *)buffer, t_num_chars);
 			}
 		}
 		break;
@@ -1189,12 +1242,13 @@ void MCFilesExecPerformReadFixedFor(MCExecContext& ctxt, IO_handle p_stream, int
 		{
 			char buffer[U1L];
 			uint1 *u1ptr = (uint1 *)t_current.Chars();
-			for (uint4 i = 0 ; i < p_count ; i++)
+			for (uint4 i = 0 ; t_success && i < p_count ; i++)
 			{
 				t_num_chars = sprintf(buffer, "%d", u1ptr[i]);
 				if (i != 0)
-					MCStringAppendNativeChar(t_buffer, ',');
-				MCStringAppendNativeChars(t_buffer, (char_t *)buffer, t_num_chars);
+					t_success = MCStringAppendNativeChar(t_buffer, ',');
+                if (t_success)
+                    t_success = MCStringAppendNativeChars(t_buffer, (char_t *)buffer, t_num_chars);
 			}
 		}
 		break;
@@ -1202,12 +1256,12 @@ void MCFilesExecPerformReadFixedFor(MCExecContext& ctxt, IO_handle p_stream, int
 		{
 			char buffer[U2L];
 			uint2 *u2ptr = (uint2 *)t_current.Chars();
-			for (uint4 i = 0 ; i < p_count ; i++)
+			for (uint4 i = 0 ; t_success && i < p_count ; i++)
 			{
 				t_num_chars = sprintf(buffer, "%d", u2ptr[i]);
 				if (i != 0)
-					MCStringAppendNativeChar(t_buffer, ',');
-				MCStringAppendNativeChars(t_buffer, (char_t *)buffer, t_num_chars);
+					t_success && MCStringAppendNativeChar(t_buffer, ',');
+				t_success && MCStringAppendNativeChars(t_buffer, (char_t *)buffer, t_num_chars);
 			}
 		}
 		break;
@@ -1215,12 +1269,13 @@ void MCFilesExecPerformReadFixedFor(MCExecContext& ctxt, IO_handle p_stream, int
 		{
 			char buffer[U4L];
 			uint4 *u4ptr = (uint4 *)t_current.Chars();
-			for (uint4 i = 0 ; i < p_count ; i++)
+			for (uint4 i = 0 ; t_success && i < p_count ; i++)
 			{
 				t_num_chars = sprintf(buffer, "%d", u4ptr[i]);
 				if (i != 0)
-					MCStringAppendNativeChar(t_buffer, ',');
-				MCStringAppendNativeChars(t_buffer, (char_t *)buffer, t_num_chars);
+					t_success && MCStringAppendNativeChar(t_buffer, ',');
+                if (t_success)
+                    t_success && MCStringAppendNativeChars(t_buffer, (char_t *)buffer, t_num_chars);
 			}
 		}
 		break;
@@ -1228,30 +1283,37 @@ void MCFilesExecPerformReadFixedFor(MCExecContext& ctxt, IO_handle p_stream, int
 		{
 			char buffer[U8L];
 			uint4 *u8ptr = (uint4 *)t_current.Chars();
-			for (uint4 i = 0 ; i < p_count ; i++)
+			for (uint4 i = 0 ; t_success && i < p_count ; i++)
 			{
 				t_num_chars = sprintf(buffer, "%d", u8ptr[i]);
 				if (i != 0)
-					MCStringAppendNativeChar(t_buffer, ',');
-				MCStringAppendNativeChars(t_buffer, (char_t *)buffer, t_num_chars);
+					t_success && MCStringAppendNativeChar(t_buffer, ',');
+                if (t_success)
+                    t_success && MCStringAppendNativeChars(t_buffer, (char_t *)buffer, t_num_chars);
 			}
 		}
         break;
     default:
         // AL-2014-06-12: [[ Bug 12195 ]] If the encoding is binary, return the bytes read as data
         if (p_encoding == kMCFileEncodingBinary)
-        {
-            if (!MCDataCreateWithBytes((byte_t*)t_current . Chars(), tsize, (MCDataRef&)r_output))
-                r_stat = IO_ERROR;
-        }
+            t_success = MCDataCreateWithBytes((byte_t*)t_current . Chars(), tsize, (MCDataRef&)r_output);
         else
-        {
-            if (!MCStringCreateWithBytes((byte_t*)t_current . Chars(), tsize, kMCStringEncodingNative, false, (MCStringRef&)r_output))
-            r_stat = IO_ERROR;
-        }
-        return;
+            t_success = MCStringCreateWithBytes((byte_t*)t_current . Chars(), tsize, kMCStringEncodingNative, false, (MCStringRef&)r_output);
+        
+        // AL_2015-03-27: [[ Bug 15056 ]] Don't overwrite the output value with the buffer in this case.
+        t_used_buffer = false;
+        break;
 	}
-	/* UNCHECKED */ MCStringCopyAndRelease(t_buffer, (MCStringRef&)r_output);
+    if (t_success && t_used_buffer)
+        t_success = MCStringCopyAndRelease(t_buffer, (MCStringRef&)r_output);
+    else
+        MCValueRelease(t_buffer);
+	
+	// If creating the buffer from the read data failed, then treat it as an IO error.
+	// Otherwise leave 'stat' as it is - as it could be EOF (which isn't stricly a
+	// failure).
+    if (!t_success)
+        r_stat = IO_ERROR;
 }
 
 // Refactoring of the waiting block used in MCFilesExecPerformRead*
@@ -1312,7 +1374,8 @@ uint4 MCFilesExecPerformReadCodeUnit(MCExecContext& ctxt, int4 p_index, intenum_
 				MCStringAppendNativeChar(x_buffer, (char)t_bytes.Bytes()[0]);
 				t_codeunit_added = 1;
 			}
-			else
+            // SN-2014-12-02: [[ Bug 14135 ]] Do not wait if reading empty may occur
+			else if (!p_empty_allowed)
 				MCFilesExecPerformWait(ctxt, p_index, x_duration, r_stat);
 			break;
 
@@ -1323,7 +1386,7 @@ uint4 MCFilesExecPerformReadCodeUnit(MCExecContext& ctxt, int4 p_index, intenum_
 			r_stat = MCS_readall(t_bytes.Bytes(), 2, p_stream, t_bytes_read);
 
 			if (t_bytes_read == 2 ||
-					(t_bytes_read == 1 && r_stat == EOF))
+					(t_bytes_read == 1 && r_stat == IO_EOF))
 			{
 				unichar_t t_codeunit;
 
@@ -1335,8 +1398,9 @@ uint4 MCFilesExecPerformReadCodeUnit(MCExecContext& ctxt, int4 p_index, intenum_
 
 				MCStringAppendChar(x_buffer, t_codeunit);
 				t_codeunit_added = 1;
-			}
-			else
+            }
+            // SN-2014-12-02: [[ Bug 14135 ]] Do not wait if reading empty may occur
+			else if (!p_empty_allowed)
 				MCFilesExecPerformWait(ctxt, p_index, x_duration, r_stat);
             break;
                 
@@ -1346,17 +1410,17 @@ uint4 MCFilesExecPerformReadCodeUnit(MCExecContext& ctxt, int4 p_index, intenum_
             t_bytes . New(4);
             r_stat = MCS_readall(t_bytes.Bytes(), 4, p_stream, t_bytes_read);
             
-            if (t_bytes_read == 4 || r_stat == EOF)
+            if (t_bytes_read == 4 || r_stat == IO_EOF)
             {
-                uint32_t t_codeunit;
                 MCAutoStringRef t_string;
                 
-                /* UNCHECKED */ MCStringCreateWithBytes((byte_t*)&t_codeunit, t_bytes_read, MCS_file_to_string_encoding((MCFileEncodingType)p_encoding), false, &t_string);
+                /* UNCHECKED */ MCStringCreateWithBytes(t_bytes . Bytes(), t_bytes_read, MCS_file_to_string_encoding((MCFileEncodingType)p_encoding), false, &t_string);
                 /* UNCHECKED */ MCStringAppend(x_buffer, *t_string);
                 
                 t_codeunit_added = MCStringGetLength(*t_string);
             }
-            else
+            // SN-2014-12-02: [[ Bug 14135 ]] Do not wait if reading empty may occur
+            else if (!p_empty_allowed)
                 MCFilesExecPerformWait(ctxt, p_index, x_duration, r_stat);
             break;
                 
@@ -1435,8 +1499,9 @@ uint4 MCFilesExecPerformReadCodeUnit(MCExecContext& ctxt, int4 p_index, intenum_
 					if (r_stat == IO_NORMAL)
 						MCS_putback(t_bytes . Bytes()[t_bytes_read - 1], p_stream);
 				}
-			}
-			else
+            }
+            // SN-2014-12-02: [[ Bug 14135 ]] Do not wait if reading empty may occur
+			else if (!p_empty_allowed)
 				MCFilesExecPerformWait(ctxt, p_index, x_duration, r_stat);
 
 			break;
@@ -1502,11 +1567,24 @@ bool MCFilesExecPerformReadChunk(MCExecContext &ctxt, int4 p_index, intenum_t p_
 
         break;
     case FU_CHARACTER:
-        //  This loop accumulates codeunits into the buffer and then returns when it crosses a char boundary
-        //  It does this by monitoring the length of the range [index, length(buffer)) for its length in characters
+    {
+        // In order to make the reading of 1 char faster, we use a temporary,
+        // small buffer.
+        // We copy the codeunit(s) we read over the last character boundary at
+        //  the previous reading, and put it into our reading buffer.
+        MCAutoStringRef t_read_buffer;
+        uindex_t t_initial_length;
+        
+        if (!MCStringMutableCopySubstring(x_buffer, MCRangeMake(p_last_boundary, UINDEX_MAX), &t_read_buffer))
+            return false;
+        
+        // We keep track of the number of codeunit that we have copied for the
+        //  main buffer.
+        t_initial_length = MCStringGetLength(*t_read_buffer);
+        
         while(true)
         {
-            uint4 t_codeunit_read = MCFilesExecPerformReadCodeUnit(ctxt, p_index, p_encoding, p_empty_allowed, x_duration, x_stream, x_buffer, r_stat);
+            uint4 t_codeunit_read = MCFilesExecPerformReadCodeUnit(ctxt, p_index, p_encoding, p_empty_allowed, x_duration, x_stream, *t_read_buffer, r_stat);
 
             if (!t_codeunit_read)
             {
@@ -1525,16 +1603,24 @@ bool MCFilesExecPerformReadChunk(MCExecContext &ctxt, int4 p_index, intenum_t p_
             }
 
             MCRange t_cu_range, t_char_range;
-            t_cu_range = MCRangeMake(p_last_boundary, MCStringGetLength(x_buffer) - p_last_boundary);
-            MCStringUnmapIndices(x_buffer, kMCCharChunkTypeGrapheme, t_cu_range, t_char_range);
+            t_cu_range = MCRangeMake(0, MCStringGetLength(*t_read_buffer));
+            MCStringUnmapIndices(*t_read_buffer, kMCCharChunkTypeGrapheme, t_cu_range, t_char_range);
 
             if (t_char_range . length > 1)
             {
-                // The codeunit loaded is now on part of a second character: must end now the loop and mark the position
+                // We append the reading buffer MINUS the initial codeunits
+                MCAutoStringRef t_new_codeunits;
+                if (!MCStringCopySubstring(*t_read_buffer, MCRangeMake(t_initial_length, UINDEX_MAX), &t_new_codeunits)
+                        || !MCStringAppend(x_buffer, *t_new_codeunits))
+                    return false;
+                
+                // The last codeunit is now on part of a new character:
+                //  we can end here the loop, and appendmust end now the loop and mark the position
                 r_new_boundary = MCStringGetLength(x_buffer) - t_codeunit_read;
                 break;
             }
         }
+    }
         break;
 
     default:
@@ -2135,7 +2221,7 @@ void MCFilesExecReadFromProcess(MCExecContext& ctxt, MCNameRef p_process, MCStri
         // SN-2014-10-14: [[ Bug 13658 ]] In case we want to read everything (EOF, end, empty) from a binary process,
         //  the sentinel must be empty, not Ctrl-D (0x04, which might appear in a binary data output.
         MCAutoStringRef t_sentinel;
-        if (MCprocesses[t_index] . encoding == kMCFileEncodingBinary &&
+        if (MCprocesses[t_index] . encoding == (Encoding_type) kMCFileEncodingBinary &&
             MCStringGetLength(p_sentinel) == 1 && MCStringGetCharAtIndex(p_sentinel, 0) == 0x4)
             t_sentinel = kMCEmptyString;
         else
@@ -2220,6 +2306,7 @@ void MCFilesExecWriteToStream(MCExecContext& ctxt, IO_handle p_stream, MCStringR
 		break;
 	default:
 		{
+            r_stat = IO_NORMAL;
 			while (len)
 			{
 				uindex_t t_start_pos;
@@ -2232,7 +2319,7 @@ void MCFilesExecWriteToStream(MCExecContext& ctxt, IO_handle p_stream, MCStringR
 				MCAutoStringRef s;
 				/* UNCHECKED */ MCStringCopySubstring(p_data, MCRangeMake(t_start_pos, t_data_pos - t_start_pos), &s); 
 				real8 n;
-				if (!MCU_stor8(*s, n))
+				if (!MCTypeConvertStringToReal(*s, n))
 				{
 					ctxt . LegacyThrow(EE_FUNCTION_NAN);
 					r_stat = IO_ERROR;
@@ -2733,7 +2820,7 @@ void MCFilesGetFiles(MCExecContext& ctxt, MCStringRef& r_value)
 	if (ctxt . EnsureDiskAccessIsAllowed())
 	{
 		MCAutoListRef t_list;
-		if (MCS_getentries(true, false, &t_list) && MCListCopyAsString(*t_list, r_value))
+		if (MCS_getentries(nil, true, false, &t_list) && MCListCopyAsString(*t_list, r_value))
 			return;
 
 		ctxt . Throw();
@@ -2745,7 +2832,7 @@ void MCFilesGetDetailedFiles(MCExecContext& ctxt, MCStringRef& r_value)
 	if (ctxt . EnsureDiskAccessIsAllowed())
 	{
 		MCAutoListRef t_list;
-		if (MCS_getentries(true, true, &t_list) && MCListCopyAsString(*t_list, r_value))
+		if (MCS_getentries(nil, true, true, &t_list) && MCListCopyAsString(*t_list, r_value))
 			return;
 
 		ctxt . Throw();
@@ -2757,7 +2844,7 @@ void MCFilesGetFolders(MCExecContext& ctxt, MCStringRef& r_value)
 	if (ctxt . EnsureDiskAccessIsAllowed())
 	{
 		MCAutoListRef t_list;
-		if (MCS_getentries(false, false, &t_list) && MCListCopyAsString(*t_list, r_value))
+		if (MCS_getentries(nil, false, false, &t_list) && MCListCopyAsString(*t_list, r_value))
 			return;
 
 		ctxt . Throw();
@@ -2769,7 +2856,7 @@ void MCFilesGetDetailedFolders(MCExecContext& ctxt, MCStringRef& r_value)
 	if (ctxt . EnsureDiskAccessIsAllowed())
 	{
 		MCAutoListRef t_list;
-		if (MCS_getentries(false, true, &t_list) && MCListCopyAsString(*t_list, r_value))
+		if (MCS_getentries(nil, false, true, &t_list) && MCListCopyAsString(*t_list, r_value))
 			return;
 
 		ctxt . Throw();

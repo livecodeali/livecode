@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -259,6 +259,8 @@ bool MCGRegionCopyWithTransform(MCGRegionRef p_region, const MCGAffineTransform 
 		t_clip.setRect(floorf(t_bounds.left()), floorf(t_bounds.top()), ceilf(t_bounds.right()), ceilf(t_bounds.bottom()));
 		
 		t_copy->region.setPath(t_path, t_clip);
+        
+        r_copy = t_copy;
 		
 		return true;
 	}

@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -202,6 +202,8 @@ public:
 
 	bool lockgcontext(MCGContextRef& r_ctxt);
 	void unlockgcontext(MCGContextRef ctxt);
+	
+	MCGAffineTransform getdevicetransform(void) { return MCGAffineTransformMakeIdentity(); }
 
 	void clear(const MCRectangle *rect);
 	MCRegionRef computemaskregion(void);

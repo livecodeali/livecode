@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -25,7 +25,12 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #define UNLICENSED_USING_LIMIT 50
 #define UNLICENSED_INSERT_LIMIT 10
 
-#define DEFAULT_TEXT_FONT "helvetica"
+#if defined(__EMSCRIPTEN__)
+#	define DEFAULT_TEXT_FONT "Droid Sans Fallback"
+#else
+// SN-2015-05-14: [[ Bug 14116 ]] Make the default font a correct PostScript font
+#	define DEFAULT_TEXT_FONT "Helvetica"
+#endif
 #define DEFAULT_TEXT_SIZE 14
 #define DEFAULT_TAB_SPACING 8
 #define DEFAULT_BORDER 2
@@ -211,6 +216,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #define F_PLAY_SELECTION        (1UL << 20)
 #define F_SHOW_SELECTION        (1UL << 21)
 #define F_SHOW_VOLUME           (1UL << 22)
+#define F_MIRRORED              (1UL << 23)
 // MCVideoClip attributes, scale is for backward compatibility
 #define F_SCALE_FACTOR          (1UL << 15)
 // MCEPS attributes
@@ -294,7 +300,8 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #define F_HAS_SHIFT             (1UL << 16)
 #define F_HAS_BACK_COLOR        (1UL << 17)
 #define F_HAS_COLOR_NAME        (1UL << 18)
-//#define F_HAS_TAB               (1UL << 19) // [[ TabAlignments ]] No longer required
+// SN-2014-12-04: [[ Bug 14149 ]] Flag required for saving in legacy format.
+#define F_HAS_TAB               (1UL << 19) // [[ TabAlignments ]] No longer required
 #define F_HAS_BACK_COLOR_NAME   (1UL << 20)
 #define F_HAS_LINK              (1UL << 21)
 #define F_HAS_IMAGE             (1UL << 22)
@@ -399,10 +406,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #define CS_MIXED                (1UL << 20)
 #define CS_MOUSE_UP_MENU        (1UL << 21)
 #define CS_VISITED              (1UL << 22)
-
-// MW-2008-10-28: [[ ParentScripts ]] If this state flag is set it means that
-//   the button is referenced as a parentScript.
-#define CS_IS_PARENTSCRIPT		(1UL << 21)
 
 // MCImage state
 #define CS_BEEN_MOVED           (1UL << 13)
@@ -562,6 +565,9 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #define FA_LINK               (1UL << 14)
 #define FA_FONT               (1UL << 15)  // to mark a font change in paragraph HTML
 
+// Font is special and should be ignored for font lookups, etc
+#define FA_SYSTEM_FONT        (1UL << 31)
+
 #define STYLE_LENGTH           256
 
 typedef struct
@@ -600,7 +606,16 @@ enum Draw_index {
     DI_TOP,
     DI_BOTTOM,
     DI_SHADOW,
-    DI_FOCUS
+    DI_FOCUS,
+    
+    // Pseudo-DIs used for theming
+    DI_PSEUDO_TEXT_COLOR,           // Text colour for non-selected text
+    DI_PSEUDO_TEXT_BACKGROUND,      // Text background colour
+    DI_PSEUDO_TEXT_COLOR_SEL_FORE,  // Text colour for selected text, use DI_FORE
+    DI_PSEUDO_TEXT_COLOR_SEL_BACK,  // Text colour for selected text, use DI_BACK
+    DI_PSEUDO_TEXT_BACKGROUND_SEL,  // Text selection colour
+    DI_PSEUDO_BUTTON_TEXT,          // Text colour for button text
+    DI_PSEUDO_BUTTON_TEXT_SEL      // Text colour for selected menu items
 };
 
 
@@ -763,6 +778,8 @@ enum Lang_charset
 	LCH_LITHUANIAN,
     LCH_UNICODE,
     LCH_UTF8,
+    // SN-2015-06-18: [[ Bug 11803 ]] Added for Android TextEncode
+    LCH_WINDOWS_NATIVE,
 	LCH_DEFAULT = 255
 };
 

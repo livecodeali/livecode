@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -347,16 +347,27 @@ void MCDialogExecAnswerFolder(MCExecContext &ctxt, bool p_plural, MCStringRef p_
 
 void MCDialogExecAnswerNotify(MCExecContext &ctxt, integer_t p_type, MCStringRef p_prompt, MCStringRef *p_buttons, uindex_t p_button_count, MCStringRef p_title, bool p_sheet)
 {
-#ifndef _MOBILE
+#if !defined(_MOBILE) && !defined(__EMSCRIPTEN__)
 	MCAutoStringRef t_value, t_result;
 	MCAutoListRef t_button_list;
 	MCAutoStringRef t_buttons_string;
 
-	/* UNCHECKED */ MCListCreateMutable('\n', &t_button_list);
-	for (uindex_t i = 0; i < p_button_count; i++)
-		/* UNCHECKED */ MCListAppend(*t_button_list, p_buttons[i]);
-	/* UNCHECKED */ MCListCopyAsString(*t_button_list, &t_buttons_string);
+	bool t_success;
+	t_success = true;
+	
+	if (t_success)
+		t_success = MCListCreateMutable('\n', &t_button_list);
+	for (uindex_t i = 0; t_success && i < p_button_count; i++)
+		t_success = MCListAppend(*t_button_list, p_buttons[i]);
+	if (t_success)
+		t_success = MCListCopyAsString(*t_button_list, &t_buttons_string);
 
+	if (!t_success)
+	{
+		ctxt.Throw();
+		return;
+	}
+	
 	MCStringRef t_args[4];
 	t_args[0] = p_title;
 	t_args[1] = p_prompt;
@@ -397,7 +408,7 @@ void MCDialogExecAnswerNotify(MCExecContext &ctxt, integer_t p_type, MCStringRef
 	}
 
 	int32_t t_result;
-	t_result = MCscreen->popupanswerdialog(p_buttons, p_button_count, t_type, p_title, p_prompt);
+	t_result = MCscreen->popupanswerdialog(p_buttons, p_button_count, t_type, p_title, p_prompt, false);
 	if (t_result == -1)
 		ctxt.SetTheResultToValue(MCN_cancel);
 	else if (p_button_count == 0)
@@ -439,8 +450,18 @@ void MCDialogExecCustomAnswerDialog(MCExecContext &ctxt, MCNameRef p_stack, MCNa
 			t_parent_stack = MCdefaultstackptr;
 		else
 			t_parent_stack = MCtopstackptr;
-
+        
+        Boolean added = False;
+        if (MCnexecutioncontexts < MAX_CONTEXTS)
+        {
+            MCexecutioncontexts[MCnexecutioncontexts++] = &ctxt;
+            added = True;
+        }
+        
 		t_success = ES_NORMAL == t_stack->openrect(t_parent_stack->getrect(), p_sheet ? WM_SHEET : WM_MODAL, p_sheet ? t_parent_stack : nil, WP_DEFAULT, OP_NONE);
+        
+        if (added)
+            MCnexecutioncontexts--;
 	}
 
 	MCtrace = t_old_trace;
@@ -458,7 +479,7 @@ void MCDialogExecCustomAnswerDialog(MCExecContext &ctxt, MCNameRef p_stack, MCNa
 
 void MCDialogExecAskQuestion(MCExecContext& ctxt, int p_type, MCStringRef p_prompt, MCStringRef p_answer, bool p_hint_answer, MCStringRef p_title, bool p_as_sheet)
 {
-#ifndef _MOBILE
+#if !defined(_MOBILE) && !defined(__EMSCRIPTEN__)
 	MCStringRef t_args[4];
 	t_args[0] = p_title;
 	t_args[1] = p_prompt;
@@ -618,6 +639,12 @@ void MCDialogExecAskFileWithTypes(MCExecContext& ctxt, MCStringRef p_prompt, MCS
 			t_success = t_types.Append(t_split);
 	}
 	
+	if (!t_success)
+	{
+		ctxt.Throw();
+		return;
+	}
+	
 	bool t_cancelled;
 	MCAutoStringRef t_value, t_result;
 	if (MCsystemFS && MCscreen -> hasfeature(PLATFORM_FEATURE_OS_FILE_DIALOGS))
@@ -637,10 +664,17 @@ void MCDialogExecAskFileWithTypes(MCExecContext& ctxt, MCStringRef p_prompt, MCS
 		MCAutoListRef t_type_list;
 		MCAutoStringRef t_types_string;
 		
-		/* UNCHECKED */ MCListCreateMutable('\n', &t_type_list);
-		for (uindex_t i = 0; i < t_types.Count(); i++)
-			/* UNCHECKED */ MCListAppend(*t_type_list, t_types[i]);
-		/* UNCHECKED */ MCListCopyAsString(*t_type_list, &t_types_string);
+		t_success = MCListCreateMutable('\n', &t_type_list);
+		for (uindex_t i = 0; t_success && i < t_types.Count(); i++)
+			t_success = MCListAppend(*t_type_list, t_types[i]);
+		if (t_success)
+			t_success = MCListCopyAsString(*t_type_list, &t_types_string);
+		
+		if (!t_success)
+		{
+			ctxt.Throw();
+			return;
+		}
 		
 		MCStringRef t_args[5];
 		uindex_t t_arg_count = 5;
@@ -700,7 +734,17 @@ void MCDialogExecCustomAskDialog(MCExecContext& ctxt, MCNameRef p_stack, MCNameR
 		else
 			t_parent_stack = MCtopstackptr;
 		
+        Boolean added = False;
+        if (MCnexecutioncontexts < MAX_CONTEXTS)
+        {
+            MCexecutioncontexts[MCnexecutioncontexts++] = &ctxt;
+            added = True;
+        }
+        
 		t_success = ES_NORMAL == t_stack->openrect(t_parent_stack->getrect(), p_as_sheet ? WM_SHEET : WM_MODAL, p_as_sheet ? t_parent_stack : nil, WP_DEFAULT, OP_NONE);
+        
+        if (added)
+            MCnexecutioncontexts--;
 	}
 	
 	MCtrace = t_old_trace;
@@ -732,13 +776,13 @@ void MCDialogGetColorDialogColors(MCExecContext& ctxt, uindex_t& r_count, MCStri
     
     for (uindex_t i = 0; t_success && i < t_count; i++)
     {
-        if (t_list[i] . flags != 0)
-        {
-            MCStringRef t_color;
-            t_success = MCStringFormat(t_color, "%d,%d,%d", t_list[i] . red, t_list[i] . green, t_list[i] . blue) && t_colors . Push(t_color);
-        }
-        else
-            t_colors . Push(kMCEmptyString);
+		if (t_list[i].red != 0 || t_list[i].green != 0 || t_list[i].blue != 0)
+		{
+			MCStringRef t_color;
+			t_success = MCStringFormat(t_color, "%d,%d,%d", t_list[i] . red, t_list[i] . green, t_list[i] . blue) && t_colors . Push(t_color);
+		}
+		else
+			t_success = t_colors.Push(kMCEmptyString);
     }
     
     t_colors . Take(r_color_list, r_count);
@@ -755,12 +799,11 @@ void MCDialogSetColorDialogColors(MCExecContext& ctxt, uindex_t p_count, MCStrin
         MCColor t_color;
         if (i >= p_count || MCStringIsEmpty(p_color_list[i]))
         {
-            t_color . flags = 0;
+			t_color = MCzerocolor;
             t_success = t_list . Push(t_color);
         }
         else
         {
-            t_color . flags = DoRed | DoGreen | DoBlue;
             t_success = MCscreen -> parsecolor(p_color_list[i], t_color) && t_list . Push(t_color);
         }
     }

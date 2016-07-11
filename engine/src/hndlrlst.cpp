@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -22,7 +22,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "parsedef.h"
 
 #include "scriptpt.h"
-//#include "execpt.h"
+
 #include "hndlrlst.h"
 #include "handler.h"
 #include "keywords.h"
@@ -162,11 +162,11 @@ void MCHandlerlist::reset(void)
 
 	for(uint32_t i = 0; i < nvars; i++)
 		MCValueRelease(vinits[i]);
-	delete vinits;
+	delete[] vinits; /* Allocated with new[] */
 	vinits = NULL;
 	nvars = 0;
 
-	delete globals;
+	delete[] globals; /* Allocated with new[] */
 	globals = NULL;
 	nglobals = 0;
 
@@ -175,7 +175,7 @@ void MCHandlerlist::reset(void)
 		MCNameDelete(cinfo[i] . name);
 		MCValueRelease(cinfo[i] . value);
 	}
-	delete cinfo;
+	delete[] cinfo; /* Allocated with new[] */
 	cinfo = NULL;
 	nconstants = 0;
 }
@@ -243,10 +243,12 @@ Parse_stat MCHandlerlist::findvar(MCNameRef p_name, bool p_ignore_uql, MCVarref 
 	{
 		MCExecContext *ctxtptr = MCexecutioncontexts[MCdebugcontext];
 		if (ctxtptr->GetHandlerList() != this)
+		{
 			if (ctxtptr->GetHandler()->findvar(p_name, dptr) != PS_NORMAL)
 				return ctxtptr->GetHandlerList()->findvar(p_name, false, dptr);
 			else
 				return PS_NORMAL;
+		}
 	}
 
 	return PS_NO_MATCH;
@@ -356,13 +358,6 @@ bool MCHandlerlist::getlocalnames(MCListRef& r_list)
 	return MCListCopy(*t_list, r_list);
 }
 
-void MCHandlerlist::appendlocalnames(MCStringRef& r_string)
-{
-	MCAutoListRef t_list;
-	/* UNCHECKED */ getlocalnames(&t_list);
-	/* UNCHECKED */ MCListCopyAsString(*t_list, r_string);
-}
-
 bool MCHandlerlist::getglobalnames(MCListRef& r_list)
 {
 	MCAutoListRef t_list;
@@ -427,7 +422,7 @@ Parse_stat MCHandlerlist::parse(MCObject *objptr, MCStringRef script)
 	//   (for example 'getdefaultprinter()' on Linux) so don't indirect in this case.
 	bool t_is_parent_script;
 	if (objptr != NULL)
-		t_is_parent_script = objptr -> getstate(CS_IS_PARENTSCRIPT) && objptr -> gettype() == CT_BUTTON;
+		t_is_parent_script = objptr -> getisparentscript();
 	else
 		t_is_parent_script = false;
 
@@ -641,64 +636,6 @@ void MCHandlerlist::addhandler(Handler_type type, MCHandler *handler)
 	handlers[type - 1] . sort();
 }
 
-#ifdef LEGACY_EXEC
-static bool enumerate_handlers(MCExecPoint& ep, MCStringRef p_type, MCHandlerArray& p_handlers, bool p_first = false, MCObject *p_object = NULL)
-{
-	for(uint32_t j = 0; j < p_handlers . count(); ++j)
-	{
-		MCHandler *t_handler;
-		t_handler = p_handlers . get()[j];
-
-		MCAutoStringRef t_string;
-		/* UNCHECKED */ MCStringFormat(&t_string, 
-										"%s%s%@ %@ %d %d", 
-										p_first ? "" : "\n",
-										t_handler->isprivate() ? "P" : "",
-										p_type,
-										t_handler->getname(),
-										t_handler->getstartline(),
-										t_handler->getendline());
-		
-		ep.concatstringref(*t_string, EC_NONE, p_first);
-
-		// OK-2008-07-23 : Add the object long id to the first handler from each object. This will
-		// allow the script editor to look up handlers faster.
-		if (p_first && p_object != NULL)
-		{
-			MCExecPoint t_ep;
-			MCExecContext t_ctxt(t_ep);
-			MCAutoStringRef t_long_id;
-			p_object -> GetLongId(t_ctxt, &t_long_id);
-			ep.concatstringref(*t_long_id, EC_SPACE, false);
-		}	
-
-		p_first = false;
-	}
-	
-	return p_first;
-}
-#endif 
-
-#ifdef LEGACY_EXEC
-bool MCHandlerlist::enumerate(MCExecPoint& ep, bool p_first)
-{
-	// OK-2008-07-23 : Added parent object reference for script editor.
-	MCObject *t_object;
-	t_object = getparent();
-
-	p_first = enumerate_handlers(ep, MCSTR("M"), handlers[0], p_first, t_object);
-	p_first = enumerate_handlers(ep, MCSTR("F"), handlers[1], p_first, t_object);
-	p_first = enumerate_handlers(ep, MCSTR("G"), handlers[2], p_first, t_object);
-	p_first = enumerate_handlers(ep, MCSTR("S"), handlers[3], p_first, t_object);
-	
-	// MW-2012-09-07: [[ BeforeAfter ]] Make sure before/after appear in the handlerlist.
-	p_first = enumerate_handlers(ep, MCSTR("B"), handlers[4], p_first, t_object);
-	p_first = enumerate_handlers(ep, MCSTR("A"), handlers[5], p_first, t_object);
-	
-	return p_first;
-}
-#endif
-
 static const char *s_handler_types[] =
 {
     "M",
@@ -727,7 +664,7 @@ static bool enumerate_handlers(MCExecContext& ctxt, const char *p_type, MCHandle
 		if (p_first && p_object != nil)
         {
             t_format = "%s%s %@ %d %d %@";
-            p_object -> GetLongId(ctxt, &t_long_id);
+            p_object -> GetLongId(ctxt, 0, &t_long_id);
         }
         else
             t_format = "%s%s %@ %d %d";
@@ -772,18 +709,6 @@ bool MCHandlerlist::enumerate(MCExecContext& ctxt, bool p_first, uindex_t& r_cou
     
     t_handlers . Take(r_handlers, r_count);
 	return p_first;
-}
-
-void MCHandlerlist::eval(MCExecContext &ctxt, MCStringRef p_expression, MCValueRef &r_value)
-{
-	// TODO: Implement execution outside of a handler.
-	ctxt. Unimplemented();
-}
-
-void MCHandlerlist::doscript(MCExecContext& ctxt, MCStringRef p_script, uinteger_t p_line, uinteger_t p_pos)
-{
-	// TODO: Implement execution outside of a handler.
-	ctxt. Unimplemented();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -21,7 +21,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "parsedef.h"
 #include "objdefs.h"
 
-//#include "execpt.h"
+
 #include "dispatch.h"
 #include "stack.h"
 #include "card.h"
@@ -88,7 +88,7 @@ bool MCCardlist::GetRecent(MCExecContext& ctxt, MCStack *stack, Properties which
 				if (which == P_SHORT_NAME)
 					tmp -> card -> GetShortName(ctxt, &t_property);
 				else
-					tmp -> card -> GetLongId(ctxt, &t_property);
+					tmp -> card -> GetLongId(ctxt, 0, &t_property);
 					
 				t_success = !ctxt . HasError();
 				if (t_success)
@@ -104,44 +104,10 @@ bool MCCardlist::GetRecent(MCExecContext& ctxt, MCStack *stack, Properties which
 
 	return t_success;
 }
-#ifdef LEGACY_EXEC
-void MCCardlist::getprop(Properties prop, MCStack *stack, MCExecPoint &ep)
-{
-	trim();
-	MCCardnode *tmp = cards;
-	ep.clear();
-	bool first = true;
-	if (tmp != NULL)
-	{
-		MCExecPoint ep2;
-		do
-		{
-			if (stack == NULL || tmp->card->getstack() == stack)
-			{
-				tmp->card->getprop(0, prop, ep2, False);
-				ep.concatmcstring(ep2.getsvalue(), EC_RETURN, first);
-				first = false;
-			}
-			tmp = tmp->next();
-		}
-		while (tmp != cards);
-	}
-}
-
-void MCCardlist::getnames(MCStack *stack, MCExecPoint &ep)
-{
-	getprop(P_SHORT_NAME, stack, ep);
-}
-
-void MCCardlist::getlongids(MCStack *stack, MCExecPoint &ep)
-{
-	getprop(P_LONG_ID, stack, ep);
-}
-#endif
 
 void MCCardlist::addcard(MCCard *card)
 {
-	if (cards != NULL && cards->card == card || MClockrecent)
+	if ((cards != NULL && cards->card == card) || MClockrecent)
 		return;
 	MCCardnode *nptr = new MCCardnode;
 	nptr->card = card;

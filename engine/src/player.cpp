@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -24,12 +24,6 @@
 #include "player.h"
 #include "exec.h"
 
-#ifdef FEATURE_PLATFORM_PLAYER
-#include "player-platform.cpp"
-#else
-#include "player-legacy.cpp"
-#endif
-
 ////////////////////////////////////////////////////////////////////////////////
 
 MCPropertyInfo MCPlayer::kProperties[] =
@@ -37,16 +31,16 @@ MCPropertyInfo MCPlayer::kProperties[] =
 	DEFINE_RW_OBJ_PROPERTY(P_FILE_NAME, OptionalString, MCPlayer, FileName)
 	DEFINE_RW_OBJ_PROPERTY(P_DONT_REFRESH, Bool, MCPlayer, DontRefresh)
     // PM-2014-09-15: [[ Bug 13437 ]] Make sure the time-related vars are large enough to hold larger time values
-	DEFINE_RW_OBJ_PROPERTY(P_CURRENT_TIME, UInt32, MCPlayer, CurrentTime)
+	DEFINE_RW_OBJ_PROPERTY(P_CURRENT_TIME, Double, MCPlayer, CurrentTime)
     // PM-2014-11-03: [[ Bug 13920 ]] Make sure the loadedTime property is defined
-    DEFINE_RO_OBJ_PROPERTY(P_MOVIE_LOADED_TIME, UInt32, MCPlayer, LoadedTime)
-	DEFINE_RO_OBJ_PROPERTY(P_DURATION, UInt32, MCPlayer, Duration)
+    DEFINE_RO_OBJ_PROPERTY(P_MOVIE_LOADED_TIME, Double, MCPlayer, LoadedTime)
+	DEFINE_RO_OBJ_PROPERTY(P_DURATION, Double, MCPlayer, Duration)
 	DEFINE_RW_OBJ_PROPERTY(P_LOOPING, Bool, MCPlayer, Looping)
 	DEFINE_RW_OBJ_PROPERTY(P_PAUSED, Bool, MCPlayer, Paused)
 	DEFINE_RW_OBJ_PROPERTY(P_ALWAYS_BUFFER, Bool, MCPlayer, AlwaysBuffer)
 	DEFINE_RW_OBJ_PROPERTY(P_PLAY_RATE, Double, MCPlayer, PlayRate)
-	DEFINE_RW_OBJ_PROPERTY(P_START_TIME, OptionalUInt32, MCPlayer, StartTime)
-	DEFINE_RW_OBJ_PROPERTY(P_END_TIME, OptionalUInt32, MCPlayer, EndTime)
+	DEFINE_RW_OBJ_PROPERTY(P_START_TIME, OptionalDouble, MCPlayer, StartTime)
+	DEFINE_RW_OBJ_PROPERTY(P_END_TIME, OptionalDouble, MCPlayer, EndTime)
 	DEFINE_RW_OBJ_PROPERTY(P_SHOW_BADGE, Bool, MCPlayer, ShowBadge)
 	DEFINE_RW_OBJ_PROPERTY(P_SHOW_CONTROLLER, Bool, MCPlayer, ShowController)
 	DEFINE_RW_OBJ_PROPERTY(P_PLAY_SELECTION, Bool, MCPlayer, PlaySelection)
@@ -63,16 +57,17 @@ MCPropertyInfo MCPlayer::kProperties[] =
 	DEFINE_RO_OBJ_PROPERTY(P_NODES, String, MCPlayer, Nodes)
 	DEFINE_RO_OBJ_PROPERTY(P_HOT_SPOTS, String, MCPlayer, HotSpots)
 	DEFINE_RO_OBJ_CUSTOM_PROPERTY(P_CONSTRAINTS, MultimediaQTVRConstraints, MCPlayer, Constraints)
-    DEFINE_RO_OBJ_LIST_PROPERTY(P_ENABLED_TRACKS, LinesOfUInt, MCPlayer, EnabledTracks)
+    // PM-2015-06-01: [[ Bug 15439 ]] EnabledTracks should be RW
+    DEFINE_RW_OBJ_LIST_PROPERTY(P_ENABLED_TRACKS, LinesOfLooseUInt, MCPlayer, EnabledTracks)
     DEFINE_RW_OBJ_PROPERTY(P_PLAY_LOUDNESS, UInt16, MCPlayer, PlayLoudness)
-    DEFINE_RO_OBJ_PROPERTY(P_TIME_SCALE, UInt32, MCPlayer, TimeScale)
-    DEFINE_RW_OBJ_CUSTOM_PROPERTY(P_FORE_COLOR, InterfaceNamedColor, MCPlayer, ForeColor)
-    DEFINE_RW_OBJ_CUSTOM_PROPERTY(P_HILITE_COLOR, InterfaceNamedColor, MCPlayer, HiliteColor)
+    DEFINE_RO_OBJ_PROPERTY(P_TIME_SCALE, Double, MCPlayer, TimeScale)
     // SN-2014-08-06: [[ Bug 13115 ]] Missing formatted (width|height) in the property table
     DEFINE_RO_OBJ_PROPERTY(P_FORMATTED_HEIGHT, Int32, MCPlayer, FormattedHeight)
     DEFINE_RO_OBJ_PROPERTY(P_FORMATTED_WIDTH, Int32, MCPlayer, FormattedWidth)
+    DEFINE_RW_OBJ_PROPERTY(P_DONT_USE_QT, Bool, MCPlayer, DontUseQT)
 #ifdef FEATURE_PLATFORM_PLAYER
     DEFINE_RO_OBJ_ENUM_PROPERTY(P_STATUS, InterfacePlayerStatus, MCPlayer, Status)
+    DEFINE_RW_OBJ_PROPERTY(P_MIRRORED, Bool, MCPlayer, Mirrored)
 #endif
 };
 

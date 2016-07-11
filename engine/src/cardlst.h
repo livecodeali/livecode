@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -75,11 +75,6 @@ public:
 	~MCCardlist();
 	void trim();
 	bool GetRecent(MCExecContext& ctxt, MCStack *stack, Properties which, MCStringRef& r_props);
-#ifdef LEGACY_EXEC
-	void getprop(Properties prop, MCStack *stack, MCExecPoint &);
-	void getnames(MCStack *stack, MCExecPoint &);
-	void getlongids(MCStack *stack, MCExecPoint &);
-#endif
 	void addcard(MCCard *cptr);
 	void deletecard(MCCard *cptr);
 	void deletestack(MCStack *cptr);

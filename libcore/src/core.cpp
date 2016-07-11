@@ -1,3 +1,19 @@
+/* Copyright (C) 2009-2015 LiveCode Ltd.
+
+This file is part of LiveCode.
+
+LiveCode is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License v3 as published by the Free
+Software Foundation.
+
+LiveCode is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
+
 ////////////////////////////////////////////////////////////////////////////////
 //
 //  Private Source File:
@@ -468,7 +484,7 @@ bool MCCStringFormat(char*& r_string, const char *p_format, ...)
 	va_start(t_args, p_format);
 	t_count = _vscprintf(p_format, t_args);
 	va_end(t_args);
-#elif defined(_MACOSX) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_IPHONE) || defined(TARGET_SUBPLATFORM_ANDROID)
+#elif defined(_MACOSX) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_IPHONE) || defined(TARGET_SUBPLATFORM_ANDROID) || defined(__EMSCRIPTEN__)
 	va_start(t_args, p_format);
 	t_count = vsnprintf(nil, 0, p_format, t_args);
 	va_end(t_args);
@@ -494,7 +510,7 @@ bool MCCStringFormatV(char*& r_string, const char *p_format, va_list p_args)
 	int t_count;
 #if defined(_WINDOWS) || defined(_WINDOWS_SERVER)
 	t_count = _vscprintf(p_format, p_args);
-#elif defined(_MACOSX) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_IPHONE) || defined(TARGET_SUBPLATFORM_ANDROID)
+#elif defined(_MACOSX) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_IPHONE) || defined(TARGET_SUBPLATFORM_ANDROID) || defined(__EMSCRIPTEN__)
 	t_count = vsnprintf(nil, 0, p_format, p_args);
 #else
 #error "Implement MCCStringFormat"
@@ -519,7 +535,7 @@ bool MCCStringAppendFormat(char*& x_string, const char *p_format, ...)
 	va_start(t_args, p_format);
 	t_count = _vscprintf(p_format, t_args);
 	va_end(t_args);
-#elif defined(_MACOSX) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_IPHONE) || defined(TARGET_SUBPLATFORM_ANDROID)
+#elif defined(_MACOSX) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_IPHONE) || defined(TARGET_SUBPLATFORM_ANDROID) || defined(__EMSCRIPTEN__)
 	va_start(t_args, p_format);
 	t_count = vsnprintf(nil, 0, p_format, t_args);
 	va_end(t_args);
@@ -562,7 +578,7 @@ bool MCCStringClone(const char *p_string, char *& r_new_string)
 		return true;
 	}
 
-	if (!MCMemoryAllocate(p_string == nil ? 1 : strlen(p_string) + 1, r_new_string))
+	if (!MCMemoryAllocate(strlen(p_string) + 1, r_new_string))
 		return false;
 	strcpy(r_new_string, p_string);
 	return true;
@@ -632,11 +648,14 @@ bool MCCStringToUnicode(const char *p_string, unichar_t*& r_unicode_string)
 
 bool MCCStringFromUnicode(const unichar_t *p_unicode_string, char*& r_string)
 {
+	if (NULL == p_unicode_string)
+		return false;
+
 	uint32_t t_wstring_length;
 	t_wstring_length = 0;
-	if (p_unicode_string != nil)
-		while(p_unicode_string[t_wstring_length] != 0)
-			t_wstring_length++;
+
+	while(p_unicode_string[t_wstring_length] != 0)
+		t_wstring_length++;
 	
 	return MCCStringFromUnicodeSubstring(p_unicode_string, t_wstring_length, r_string);
 }

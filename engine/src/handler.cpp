@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -22,7 +22,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "parsedef.h"
 
 #include "scriptpt.h"
-//#include "execpt.h"
+
 #include "debug.h"
 #include "hndlrlst.h"
 #include "handler.h"
@@ -86,20 +86,20 @@ MCHandler::~MCHandler()
 		MCNameDelete(vinfo[i] . name);
 		MCValueRelease(vinfo[i] . init);
 	}
-	delete vinfo;
+	delete[] vinfo; /* Allocated with new[] */
 
 	for(uint32_t i = 0; i < npnames; i++)
 		MCNameDelete(pinfo[i] . name);
-	delete pinfo;
+	delete[] pinfo; /* Allocated with new[] */
 
-	delete globals;
+	delete[] globals; /* Allocated with new[] */
 
 	for(uint32_t i = 0; i < nconstants; i++)
 	{
 		MCNameDelete(cinfo[i] . name);
 		MCValueRelease(cinfo[i] . value);
 	}
-	delete cinfo;
+	delete[] cinfo; /* Allocated with new[] */
 	
 	// MW-2013-11-08: [[ RefactorIt ]] Delete the it varref.
 	delete m_it;
@@ -451,8 +451,7 @@ Exec_stat MCHandler::exec(MCExecContext& ctxt, MCParameter *plist)
         tspr->exec_ctxt(ctxt);
 		stat = ctxt . GetExecStat();
         
-		// MW-2011-08-17: [[ Redraw ]] Flush any screen updates.
-		MCRedrawUpdateScreen();
+        MCActionsRunAll();
         
 		switch(stat)
 		{
@@ -524,7 +523,7 @@ Exec_stat MCHandler::exec(MCExecContext& ctxt, MCParameter *plist)
                 delete params[i];
             }
         }
-		delete params;
+		delete[] params; /* Allocated with new[] */
 	}
 	if (vars != NULL)
 	{
@@ -537,7 +536,7 @@ Exec_stat MCHandler::exec(MCExecContext& ctxt, MCParameter *plist)
 			}
 			delete vars[nvnames];
 		}
-		delete vars;
+		delete[] vars; /* Allocated with new[] */
 	}
 	params = oldparams;
 	nparams = oldnparams;
@@ -549,216 +548,6 @@ Exec_stat MCHandler::exec(MCExecContext& ctxt, MCParameter *plist)
 	return stat;
 }
 
-
-#ifdef LEGACY_EXEC
-Exec_stat MCHandler::exec(MCExecPoint &ep, MCParameter *plist)
-{
-	uint2 i;
-	MCParameter *tptr = plist;
-	if (prop && !array && plist != NULL)
-		plist = plist->getnext();
-	for (npassedparams = 0 ; tptr != NULL ; npassedparams++)
-		tptr = tptr->getnext();
-	uint2 newnparams = MCU_max(npassedparams, npnames);
-	MCVariable **newparams;
-	if (newnparams == 0)
-		newparams = NULL;
-	else
-		newparams = new MCVariable *[newnparams];
-
-	Boolean err = False;
-	for (i = 0 ; i < newnparams ; i++)
-	{
-		if (plist != NULL)
-		{
-			if (i < npnames && pinfo[i].is_reference)
-			{
-				if ((newparams[i] = plist->eval_argument_var()) == NULL)
-				{
-					err = True;
-					break;
-				}
-			}
-			else
-			{
-                MCExecContext ctxt(ep);
-                MCAutoValueRef t_value;
-				if (!plist->eval_argument(ctxt, &t_value))
-				{
-					err = True;
-					break;
-				}
-				/* UNCHECKED */ MCVariable::createwithname(i < npnames ? pinfo[i] . name : kMCEmptyName, newparams[i]);
-				newparams[i]->set(ctxt, *t_value);
-			}
-			plist = plist->getnext();
-		}
-		else
-		{
-			if (i < npnames && pinfo[i].is_reference)
-			{
-				err = True;
-				break;
-			}
-			/* UNCHECKED */ MCVariable::createwithname(i < npnames ? pinfo[i] . name : kMCEmptyName, newparams[i]);
-		}
-	}
-	if (err)
-	{
-		while (i--)
-			if (i >= npnames || !pinfo[i].is_reference)
-				delete newparams[i];
-		delete newparams;
-		MCeerror->add(EE_HANDLER_BADPARAM, firstline - 1, 1, name);
-		return ES_ERROR;
-	}
-
-	MCVariable **oldparams = params;
-	MCVariable **oldvars = vars;
-	uint2 oldnparams = nparams;
-	uint2 oldnvnames = nvnames;
-	uint2 oldnconstants = nconstants;
-	params = newparams;
-	nparams = newnparams;
-	if (nvnames == 0)
-		vars = NULL;
-	else
-	{
-		vars = new MCVariable *[nvnames];
-		i = nvnames;
-		while (i--)
-		{
-			/* UNCHECKED */ MCVariable::createwithname(vinfo[i] . name, vars[i]);
-
-			// A UQL is indicated by 'init' being nil.
-			if (vinfo[i] . init != nil)
-				vars[i] -> setvalueref(vinfo[i] . init);
-			else
-			{
-				// At the moment UQL detection relies on the fact that the 'name'
-				// and 'value' of a variable share the same base ptr as well as 'is_uql'
-				// being set.
-				vars[i] -> setvalueref(vinfo[i] . name);
-				vars[i] -> setuql();
-			}
-		}
-	}
-
-	executing++;
-	MCresult->clear(False);
-	Exec_stat stat = ES_NORMAL;
-	MCStatement *tspr = statements;
-
-	MCExecContext ctxt(ep);
-	if ((MCtrace || MCnbreakpoints) && tspr != NULL)
-	{
-		MCB_trace(ctxt, firstline, 0);
-
-		// OK-2008-09-05: [[Bug 7115]] - Debugger doesn't stop if traceAbort is set following a breakpoint on the first line of a handler.
-		if (MCexitall)
-			tspr = NULL;
-	}
-	while (tspr != NULL)
-	{
-		if (MCtrace || MCnbreakpoints)
-		{
-			MCB_trace(ctxt, tspr->getline(), tspr->getpos());
-			if (MCexitall)
-				break;
-		}
-		ep.setline(tspr->getline());
-
-		stat = tspr->exec(ep);
-
-		// MW-2011-08-17: [[ Redraw ]] Flush any screen updates.
-		MCRedrawUpdateScreen();
-
-		switch(stat)
-		{
-		case ES_NORMAL:
-			if (MCexitall)
-				tspr = NULL;
-			else
-				tspr = tspr->getnext();
-			break;
-		case ES_EXIT_REPEAT:
-		case ES_NEXT_REPEAT:
-		case ES_ERROR:
-			if ((MCtrace || MCnbreakpoints) && !MCtrylock && !MClockerrors)
-				do
-				{
-					if (!MCB_error(ep, tspr->getline(), tspr->getpos(), EE_HANDLER_BADSTATEMENT))
-						break;
-				}
-				while (MCtrace && (stat = tspr->exec(ep)) != ES_NORMAL);
-			if (stat != ES_NORMAL)
-			{
-				MCeerror->add(EE_HANDLER_BADSTATEMENT, tspr->getline(), tspr->getpos(), name);
-				if (MCexitall)
-					stat = ES_NORMAL;
-				else
-					stat = ES_ERROR;
-				tspr = NULL;
-			}
-			else
-				tspr = tspr->getnext();
-			break;
-		case ES_RETURN_HANDLER:
-			tspr = NULL;
-			break;
-		case ES_EXIT_HANDLER:
-		case ES_EXIT_SWITCH:
-			tspr = NULL;
-			stat = ES_NORMAL;
-			break;
-		default:
-			tspr = NULL;
-			break;
-		}
-	}
-
-	// MW-2007-07-03: [[ Bug 4570 ]] - Exiting a handler except via return should
-	//   clear the result.
-	// MW-2007-09-17: [[ Bug 4570 ]] - REVERTING due to backwards-compatibility
-	//   problems.
-	if (stat == ES_RETURN_HANDLER)
-		stat = ES_NORMAL;
-
-	if (!MCexitall && (MCtrace || MCnbreakpoints))
-		MCB_trace(ctxt, lastline, 0);
-
-	executing--;
-	if (params != NULL)
-	{
-		i = newnparams;
-		while (i--)
-			if (i >= npnames || !pinfo[i].is_reference)
-				delete params[i];
-		delete params;
-	}
-	if (vars != NULL)
-	{
-		while (nvnames--)
-		{
-			if (nvnames >= oldnvnames)
-			{
-				MCNameDelete(vinfo[nvnames] . name);
-				MCNameDelete(vinfo[nvnames] . init);
-			}
-			delete vars[nvnames];
-		}
-		delete vars;
-	}
-	params = oldparams;
-	nparams = oldnparams;
-	vars = oldvars;
-	nvnames = oldnvnames;
-	nconstants = oldnconstants;
-	if (stat == ES_PASS)
-		gotpass = True;  // so MCObject::timer can distinguish pass from not handled
-	return stat;
-}
-#endif
 
 MCVariable *MCHandler::getvar(uint2 index, Boolean isparam)
 {
@@ -977,48 +766,6 @@ bool MCHandler::getvarnames(bool p_all, MCListRef& r_list)
 	return MCListCopy(*t_list, r_list);
 }
 
-#ifdef LEGACY_EXEC
-Exec_stat MCHandler::getvarnames(MCExecPoint& ep, Boolean all)
-{
-	MCAutoListRef t_list;
-	MCAutoStringRef t_string;
-	/* UNCHECKED */ getvarnames(all == True, &t_list);
-	/* UNCHECKED */ MCListCopyAsString(*t_list, &t_string);
-	/* UNCHECKED */ ep.setvalueref(*t_string);
-	return ES_NORMAL;
-}
-#endif
-
-void MCHandler::eval(MCExecContext &ctxt, MCStringRef p_expression, MCValueRef &r_value)
-{
-    MCScriptPoint sp(ctxt, p_expression);
-	sp.sethandler(this);
-    MCExpression *exp = NULL;
-    Symbol_type type;
-
-	if (sp.parseexp(False, True, &exp) == PS_NORMAL && sp.next(type) == PS_EOF)
-        ctxt . EvalExprAsValueRef(exp, EE_HANDLER_BADEXP, r_value);
-    else
-        ctxt . Throw();
-
-    delete exp;
-}
-
-void MCHandler::eval_ctxt(MCExecContext &ctxt, MCStringRef p_expression, MCExecValue &r_value)
-{
-    MCScriptPoint sp(ctxt, p_expression);
-	sp.sethandler(this);
-    MCExpression *exp = NULL;
-    Symbol_type type;
-    
-	if (sp.parseexp(False, True, &exp) == PS_NORMAL && sp.next(type) == PS_EOF)
-        ctxt . EvaluateExpression(exp, EE_HANDLER_BADEXP, r_value);
-    else
-        ctxt . Throw();
-    
-    delete exp;
-}
-
 uint4 MCHandler::linecount()
 {
 	uint4 count = 0;
@@ -1029,133 +776,6 @@ uint4 MCHandler::linecount()
 		stmp = stmp->getnext();
 	}
 	return count;
-}
-
-void MCHandler::deletestatements(MCStatement *statements)
-{
-	while (statements != NULL)
-	{
-		MCStatement *tsptr = statements;
-		statements = statements->getnext();
-		delete tsptr;
-	}
-}
-
-void MCHandler::doscript(MCExecContext& ctxt, MCStringRef p_script, uinteger_t p_line, uinteger_t p_pos)
-{
-    MCScriptPoint sp(ctxt, p_script);
-	MCStatement *curstatement = NULL;
-	MCStatement *statements = NULL;
-	MCStatement *newstatement = NULL;
-	Symbol_type type;
-	const LT *te;
-	Exec_stat stat = ES_NORMAL;
-	Boolean oldexplicit = MCexplicitvariables;
-	MCexplicitvariables = False;
-	uint4 count = 0;
-	sp.setline(p_line - 1);
-	while (stat == ES_NORMAL)
-	{
-		switch (sp.next(type))
-		{
-		case PS_NORMAL:
-			if (type == ST_ID)
-				if (sp.lookup(SP_COMMAND, te) != PS_NORMAL)
-					newstatement = new MCComref(sp.gettoken_nameref());
-				else
-				{
-					if (te->type != TT_STATEMENT)
-					{
-						MCeerror->add(EE_DO_NOTCOMMAND, p_line, p_pos, sp.gettoken_stringref());
-						stat = ES_ERROR;
-					}
-					else
-						newstatement = MCN_new_statement(te->which);
-				}
-			else
-			{
-				MCeerror->add(EE_DO_NOCOMMAND, p_line, p_pos, sp.gettoken_stringref());
-				stat = ES_ERROR;
-			}
-			if (stat == ES_NORMAL)
-			{
-				if (curstatement == NULL)
-					statements = curstatement = newstatement;
-				else
-				{
-					curstatement->setnext(newstatement);
-					curstatement = newstatement;
-				}
-				if (curstatement->parse(sp) != PS_NORMAL)
-				{
-					MCeerror->add(EE_DO_BADCOMMAND, p_line, p_pos, p_script);
-					stat = ES_ERROR;
-				}
-				count += curstatement->linecount();
-			}
-			break;
-		case PS_EOL:
-			if (sp.skip_eol() != PS_NORMAL)
-			{
-				MCeerror->add(EE_DO_BADLINE, p_line, p_pos, p_script);
-				stat = ES_ERROR;
-			}
-			break;
-		case PS_EOF:
-			stat = ES_PASS;
-			break;
-		default:
-			stat = ES_ERROR;
-		}
-	}
-	MCexplicitvariables = oldexplicit;
-
-	if (MClicenseparameters . do_limit > 0 && count >= MClicenseparameters . do_limit)
-	{
-		MCeerror -> add(EE_DO_NOTLICENSED, p_line, p_pos, p_script);
-		stat = ES_ERROR;
-	}
-
-	if (stat == ES_ERROR)
-	{
-		deletestatements(statements);
-		ctxt.Throw();
-		return;
-	}
-
-	MCExecContext ctxt2(ctxt);
-	while (statements != NULL)
-	{
-        statements->exec_ctxt(ctxt2);
-		Exec_stat stat = ctxt2 . GetExecStat();
-		if (stat == ES_ERROR)
-		{
-			deletestatements(statements);
-			MCeerror->add(EE_DO_BADEXEC, p_line, p_pos, p_script);
-			ctxt.Throw();
-			return;
-		}
-		if (MCexitall || stat != ES_NORMAL)
-		{
-			deletestatements(statements);
-			if (stat == ES_ERROR)
-				ctxt.Throw();
-			return;
-		}
-		else
-		{
-			MCStatement *tsptr = statements;
-			statements = statements->getnext();
-			delete tsptr;
-		}
-	}
-	if (MCscreen->abortkey())
-	{
-		MCeerror->add(EE_DO_ABORT, p_line, p_pos);
-		ctxt.Throw();
-		return;
-	}
-	return;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1183,9 +803,8 @@ void MCHandler::compile(MCSyntaxFactoryRef ctxt)
 		case HT_AFTER:
 			t_type = kMCSyntaxHandlerTypeAfterMessage;
 			break;
-		default:
-			MCAssert(false);
-			break;
+        default:
+            MCUnreachableReturn();
 	}
 	
 	MCSyntaxFactoryBeginHandler(ctxt, t_type, name);

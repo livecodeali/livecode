@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -23,7 +23,7 @@
 #include "parsedef.h"
 
 #include "mcerror.h"
-//#include "execpt.h"
+
 #include "printer.h"
 #include "globals.h"
 #include "dispatch.h"

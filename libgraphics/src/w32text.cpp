@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -24,9 +24,9 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 // MM-2014-07-31: [[ ThreadedRendering ]] Updated to make text rendering thread safe, by using TLS to ensure we have seperate DC for each thread.
 //  This should probably be moved to a central thread library at some point, which will also help with clean up (we only clean up the main thread at the moment).
 
-static __declspec( thread ) bool s_initialized_on_thread = false;
-static __declspec( thread ) HDC s_measure_dc = NULL;
-static __declspec( thread ) HDC s_draw_dc = NULL;
+static bool s_initialized = false;
+static HDC s_measure_dc = NULL;
+static HDC s_draw_dc = NULL;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -89,6 +89,8 @@ static void w32_draw_text_render_transparent_buffer(HDC p_gdi_context, const uni
 	// The text color is the inverse of what the RGB buffer has been set to.
 	SetTextColor(p_gdi_context, p_nearest_white ? RGB(0xff, 0xff, 0xff) : RGB(0x00, 0x00, 0x00));
 
+	SetTextAlign(p_gdi_context, TA_BASELINE | TA_LEFT | TA_NOUPDATECP);
+
 	// Render the text.
     ExtTextOutW(p_gdi_context, 0, 0, p_rtl ? ETO_RTLREADING : 0, NULL, (LPCWSTR)p_text, p_text_length, NULL);
 
@@ -147,6 +149,8 @@ static void w32_draw_text_render_opaque_buffer(HDC p_gdi_context, const unichar_
 
 	// The text color is the fill color.
 	SetTextColor(p_gdi_context, RGB((p_fill_color >> 16) & 0xFF, (p_fill_color >> 8) & 0xFF, (p_fill_color >> 0) & 0xFF));
+
+	SetTextAlign(p_gdi_context, TA_BASELINE | TA_LEFT | TA_NOUPDATECP);
 
 	// Render the text.
 	ExtTextOutW(p_gdi_context, 0, 0, p_rtl ? ETO_RTLREADING : 0, NULL, (LPCWSTR)p_text, p_text_length, NULL);
@@ -437,7 +441,7 @@ static void __MCGContextDrawPlatformTextScreen(MCGContextRef self, const unichar
 		t_xform . eM21 = t_transform . c;
 		t_xform . eM22 = t_transform . d;
 		t_xform . eDx = t_transform . tx - (t_clipped_bounds . x);
-		t_xform . eDy = t_transform . ty - (t_clipped_bounds . y - t_text_bounds . y);
+		t_xform . eDy = t_transform . ty - (t_clipped_bounds . y);
 		t_success = SetWorldTransform(s_draw_dc, &t_xform);
 	}
 
@@ -575,8 +579,6 @@ static void __MCGContextDrawPlatformTextIdeal(MCGContextRef self, const unichar_
 //   using ideal metrics or not.
 void MCGContextDrawPlatformText(MCGContextRef self, const unichar_t *p_text, uindex_t p_length, MCGPoint p_location, const MCGFont& p_font, bool p_rtl)
 {
-	MCGPlatformInitialize();
-
 	if (p_font . ideal)
 	{
 		__MCGContextDrawPlatformTextIdeal(self, p_text, p_length, p_location, p_font, p_rtl);
@@ -604,8 +606,8 @@ MCGFloat __MCGContextMeasurePlatformTextScreen(MCGContextRef self, const unichar
 	{
 		XFORM t_xform;
 		t_xform . eM11 = p_transform . a;
-		t_xform . eM12 = 0;
-		t_xform . eM21 = 0;
+		t_xform . eM12 = p_transform . b;
+		t_xform . eM21 = p_transform . c;
 		t_xform . eM22 = p_transform . d;
 		t_xform . eDx = 0;
 		t_xform . eDy = 0;
@@ -677,8 +679,6 @@ MCGFloat __MCGContextMeasurePlatformTextIdeal(MCGContextRef self, const unichar_
 // MM-2014-04-16: [[ Bug 11964 ]] Updated prototype to take transform parameter.
 MCGFloat __MCGContextMeasurePlatformText(MCGContextRef self, const unichar_t *p_text, uindex_t p_length, const MCGFont &p_font, const MCGAffineTransform &p_transform)
 {
-	MCGPlatformInitialize();
-
 	if (p_font . ideal)
 		return __MCGContextMeasurePlatformTextIdeal(self, p_text, p_length, p_font);
 
@@ -689,10 +689,10 @@ MCGFloat __MCGContextMeasurePlatformText(MCGContextRef self, const unichar_t *p_
 
 void MCGPlatformInitialize(void)
 {
-	if (s_initialized_on_thread)
+	if (s_initialized)
 		return;
 
-	s_initialized_on_thread = true;
+	s_initialized = true;
 
 	s_measure_dc = CreateCompatibleDC(NULL);
 	SetGraphicsMode(s_measure_dc, GM_ADVANCED);
@@ -703,12 +703,115 @@ void MCGPlatformInitialize(void)
 
 void MCGPlatformFinalize(void)
 {
-	if (!s_initialized_on_thread)
+	if (!s_initialized)
 		return;
 
 	DeleteDC(s_draw_dc);
 	DeleteDC(s_measure_dc);
-	s_initialized_on_thread = false;
+	s_initialized = false;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static void __expand_bounds(RECT& r, POINT& p)
+{
+    if (p . x < r . left)
+        r . left = p . x;
+    if (p . x > r . right)
+        r . right = p . x;
+    if (p . y < r . top)
+        r . top = p . y;
+    if (p . y > r . bottom)
+        r . bottom = p . y;
+}
+
+bool MCGContextMeasurePlatformTextImageBounds(MCGContextRef self, const unichar_t *p_text, uindex_t p_length, const MCGFont& p_font, const MCGAffineTransform& p_transform, MCGRectangle &r_bounds)
+{
+    bool t_success;
+    t_success = true;
+
+    if (t_success)
+        t_success = SelectObject(s_measure_dc, p_font . fid) != NULL;
+
+    if (t_success)
+    {
+        XFORM t_xform;
+        t_xform . eM11 = p_transform . a;
+        t_xform . eM12 = 0;
+        t_xform . eM21 = 0;
+        t_xform . eM22 = p_transform . d;
+        t_xform . eDx = 0;
+        t_xform . eDy = 0;
+        t_success = SetWorldTransform(s_measure_dc, &t_xform);
+    }
+
+    if (t_success)
+    {
+        BeginPath(s_measure_dc);
+        SetBkMode(s_measure_dc, TRANSPARENT);
+        SetTextAlign(s_measure_dc, TA_BASELINE);
+        if (p_font . fixed_advance == 0)
+            TextOutW(s_measure_dc, 0, 0, p_text, p_length / 2);
+        else
+        {
+            // MW-2013-12-05: [[ Bug 11535 ]] If fixed advance, then make the advance
+            //   width of each char fixed_advance.
+            INT *t_dxs;
+            /* UNCHECKED */ MCMemoryNewArray(p_length / 2, t_dxs);
+            for(uindex_t i = 0; i < p_length / 2; i++)
+                t_dxs[i] = p_font . fixed_advance;
+            ExtTextOutW(s_measure_dc, 0, 0, 0, NULL, p_text, p_length / 2, t_dxs);
+            MCMemoryDeleteArray(t_dxs);
+        }
+        EndPath(s_measure_dc);
+
+        int t_count;
+        t_count = GetPath(s_measure_dc, NULL, NULL, 0);
+
+        RECT t_bounds;
+        t_bounds . left = INT_MAX;
+        t_bounds . top = INT_MAX;
+        t_bounds . right = INT_MIN;
+        t_bounds . bottom = INT_MIN;
+
+        POINT *t_points;
+        BYTE *t_types;
+        t_points = new POINT[t_count];
+        t_types = new BYTE[t_count];
+        GetPath(s_measure_dc, t_points, t_types, t_count);
+
+        for(int i = 0; i < t_count;)
+        {
+            switch(t_types[i] & ~PT_CLOSEFIGURE)
+            {
+                case PT_MOVETO:
+                    __expand_bounds(t_bounds, t_points[i]);
+                    i += 1;
+                    break;
+
+                case PT_LINETO:
+                    __expand_bounds(t_bounds, t_points[i]);
+                    i += 1;
+                    break;
+
+                case PT_BEZIERTO:
+                    __expand_bounds(t_bounds, t_points[i + 0]);
+                    __expand_bounds(t_bounds, t_points[i + 1]);
+                    __expand_bounds(t_bounds, t_points[i + 2]);
+                    i += 3;
+                    break;
+            }
+        }
+
+        delete t_points;
+        delete t_types;
+
+		r_bounds = MCGRectangleMake(t_bounds.left, t_bounds.top, t_bounds.right - t_bounds.left, t_bounds.bottom - t_bounds.top);
+    }
+
+    AbortPath(s_measure_dc);
+
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

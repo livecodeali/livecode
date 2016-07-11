@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -79,15 +79,9 @@ public:
 	bool IsEmpty(void);
 
 	// Create a return-delimited list of external names.
-#ifdef LEGACY_EXEC
-	bool ListExternals(MCExecPoint& ep);
-#endif
 	bool ListExternals(MCStringRef& r_list);
 
 	// Create a return-delimited list of external handlers of the given type.
-#ifdef LEGACY_EXEC
-	bool ListHandlers(MCExecPoint& ep, Handler_type type);
-#endif
 	bool ListHandlers(Handler_type p_type, MCStringRef& r_list);
 
 	// Looks to see if there is a handler of the given type.

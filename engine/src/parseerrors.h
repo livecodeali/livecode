@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -1698,6 +1698,82 @@ enum Parse_errors
     // AL-2014-10-17: [[ BiDi ]] Returns the result of applying the bi-directional algorithm to text
     // {PE-0552} bidiDirection: bad parameters
 	PE_BIDIDIRECTION_BADPARAM,
+	
+	// MDW-2014-08-23: [[ feature_floor ]] floor: error in source expression
+	// {PE-0553} floor: error in source expression
+	PE_FLOOR_BADPARAM,
+	
+	// MDW-2014-08-23: [[ feature_floor ]] ceil: error in source expression
+	// {PE-0554} ceil: error in source expression
+	PE_CEIL_BADPARAM,
+    
+    // SN-2015-11-15: [[ Bug 165452 ]] New error, if a global variable shadows
+    // a local variable declared beforehand
+    // {PE-0555} global: shadowing a local variable
+    PE_GLOBAL_SHADOW,
+    
+	// {PE-0556} load: error in extension expression
+	PE_LOAD_BADEXTENSION,
+	
+	// {PE-0557} load: expected 'resource'
+	PE_LOAD_NORESOURCE,
+	
+	// {PE-0558} load: expected 'path'
+	PE_LOAD_NOPATH,
+	
+	// {PE-0559} load: error in resource path expression
+	PE_LOAD_BADRESOURCEPATH,
+    
+    // {PE-0560} load: missing file or display name
+    PE_LOAD_NOFILE,
+    
+    // {PE-0561} load: missing 'from'
+    PE_LOAD_NOFROM,
+
+    // {PE-0562} is strictly: missing 'an' or 'a'
+    PE_ISSTRICTLY_NOAN,
+    
+    // {PE-0563} is strictly: missing 'string'
+    PE_ISSTRICTLY_NOSTRING,
+    
+    // {PE-0564} is strictly: missing type
+    PE_ISSTRICTLY_NOTYPE,
+    
+    // {PE-0565} import: no array expression
+    PE_IMPORT_NOARRAY,
+    
+    // {PE-0566} export: no array expression
+    PE_EXPORT_NOARRAY,
+	
+	// {PE-0567} go: error in widget expression
+	PE_GO_BADWIDGETEXP,
+	
+	// {PE-0568} launch: error in widget expression
+	PE_LAUNCH_BADWIDGETEXP,
+
+	// {PE-0568} save: error in format expression
+	PE_SAVE_BADFORMATEXP,
+	
+	// {PE-0569} replace: missing 'styles'
+	PE_REPLACE_NOSTYLES,
+    
+    // {PE-0570} revert: bad stack expression
+    PE_REVERT_BADSTACK,
+	
+    // {PE-0571} vectordot: bad parameter
+    PE_VECTORDOT_BADPARAM,
+    
+    // {PE-0572} return: form not allowed in handler type
+    PE_RETURN_BADFORMINCONTEXT,
+    
+    // {PE-0573} return: form not allowed in handler type
+    PE_RETURN_BADFOR,
+
+	// {PE-0574} files: bad folder expression
+	PE_FILES_BADPARAM,
+
+	// {PE-0574} folders: bad folder expression
+	PE_FOLDERS_BADPARAM,
 };
 
 extern const char *MCparsingerrors;

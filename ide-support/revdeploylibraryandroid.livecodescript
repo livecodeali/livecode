@@ -44,8 +44,11 @@ command deployDo pTargetStack, pTargetDevice
    local tError
    put empty into tError
    
+   local tSettings
+   put the customProperties["cRevStandaloneSettings"] of stack pTargetStack into tSettings
+   
    local tIdentifier
-   put the cRevStandaloneSettings["android,identifier"] of stack pTargetStack into tIdentifier
+   put tSettings["android,identifier"] into tIdentifier
    if tIdentifier is empty then
       put "com.yourcompany.yourapp" into tIdentifier
    end if
@@ -56,7 +59,7 @@ command deployDo pTargetStack, pTargetDevice
       put tempName() & ".apk" into tTempApkFIle
       try
          dispatch "revSaveAsMobileStandalone" to stack "revSaveAsAndroidStandalone" with \
-               pTargetStack, tTempApkFile, "Test"
+               pTargetStack, tTempApkFile, "Test", tSettings
       catch tException
          put "Unable to build app for testing:" && tException into tError
       end try
@@ -169,6 +172,10 @@ function deployIsValidJDK pPath
    return true
 end deployIsValidJDK
 
+function deployRequiredSDK
+   return "Android 4.0.3 (API 15)"
+end deployRequiredSDK
+
 function deployIsValidSDK pPath 
    if there is no folder (pPath & slash & "platforms") or \
          there is no folder (pPath & slash & "platform-tools") or \
@@ -177,7 +184,9 @@ function deployIsValidSDK pPath
       return false
    end if
    
-   if there is no folder (pPath & slash & "platforms/android-8") then
+   // We need API 15 in order to be able to give the value 'screenSize' to the manifest variable configChanges
+   // That was introduced in the API 13, but the SDK manager only have API 15 nowadays
+   if there is no folder (pPath & slash & "platforms/android-15") then
       --return "could not find install of SDK level 8, make sure it has been installed with the Android SDK Manager"
       return false
    end if
@@ -222,6 +231,39 @@ end deployGetSDK
 function deployGetJDK
    return sJavaRoot
 end deployGetJDK
+
+////////////////////////////////////////////////////////////////////////////////
+
+// SN-2015-05-13: [[ AndroidVersions ]] Make the available Android minimum versions
+//  something changeable from a script-only stack
+function deployGetVersionsList
+   return "2.3.3 - Gingerbread,3.0 - Honeycomb,3.1,3.2,4.0 - IceCream Sandwich,4.1 - Jelly Bean,4.2,4.3,4.4 - KitKat,5.0 - Lollipop,5.1"
+end deployGetVersionsList
+
+function deployGetAPIsList
+   return "10,11,12,13,14,16,17,18,19,21,22"
+end deployGetAPIsList
+
+function deployGetApiFromVersion pVersion
+   local tItemNumber, tAPI
+   put 1 into tItemNumber
+   put 0 into tAPI
+   
+   repeat for each item tAndroidVersion in deployGetVersionsList()
+      if pVersion is tAndroidVersion then
+         put item tItemNumber of deployGetAPIsList() into tAPI
+         exit repeat
+      else
+         add 1 to tItemNumber
+      end if
+   end repeat
+   
+   if tAPI = 0 then // Keep the previous behaviour: defaulting to the smallest API
+      put 9 into tAPI
+   end if
+   
+   return tAPI
+end deployGetApiFromVersion
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -270,7 +312,7 @@ function pathToRootClasses pRoot
    if pRoot is empty then
       put sAndroidRoot into pRoot
    end if
-   return pRoot & slash & "platforms/android-8/android.jar"
+   return pRoot & slash & "platforms/android-15/android.jar"
 end pathToRootClasses
 
 function pathToSDKClasses pRoot

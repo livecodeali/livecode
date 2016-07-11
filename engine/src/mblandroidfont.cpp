@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -22,7 +22,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "parsedef.h"
 #include "mcio.h"
 
-//#include "execpt.h"
+
 #include "globals.h"
 #include "dispatch.h"
 #include "stack.h"
@@ -552,11 +552,11 @@ void android_font_destroy(void *font)
 	MCMemoryDelete(font);
 }
 
-void android_font_get_metrics(void *font, float& a, float& d)
+void android_font_get_metrics(void *font, float& a, float& d, float& leading, float& xheight)
 {
 	MCAndroidFont *t_font = (MCAndroidFont*)font;
     
-	/* UNCHECKED */ MCAndroidTypefaceGetMetrics(t_font->typeface, t_font->size, a, d);
+	/* UNCHECKED */ MCAndroidTypefaceGetMetrics(t_font->typeface, t_font->size, a, d, leading, xheight);
 }
 
 float android_font_measure_text(void *p_font, const char *p_text, uint32_t p_text_length, bool p_is_unicode)

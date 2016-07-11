@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -874,11 +874,13 @@ MCParagraph* PrepareLayoutSettings(bool all, MCField *p_field, uint32_t p_part_i
 
 // SN-2014-11-04: [[ Bug 13934 ]] Update the area of the field to redraw,
 //  depending on the paragraph settings.
-void LayoutParagraph(MCParagraph* p_paragraph, MCFieldLayoutSettings &x_layout_settings)
+// SN-2014-12-18: [[ Bug 14161 ]] Add a parameter to force the re-layout of a paragraph
+void LayoutParagraph(MCParagraph* p_paragraph, MCFieldLayoutSettings &x_layout_settings, bool p_force)
 {
     // AL-2014-07-14: [[ Bug 12789 ]] Defragging can cause paragraph to need layout, do make sure we relayout
     //  if it did. Otherwise setting properties that avoid relayout can cause crashes.
-    if (p_paragraph -> getneedslayout() && !x_layout_settings . all && p_paragraph->getopened())
+    // SN-2014-12-18: [[ Bug 14161 ]] The relayout can be forced
+    if (p_force || (p_paragraph -> getneedslayout() && !x_layout_settings . all && p_paragraph->getopened()))
     {
         // MW-2012-01-25: [[ ParaStyles ]] Ask the paragraph to reflow itself.
         // AL-2014-09-22: [[ Bug 11817 ]] If we changed the amount of lines of this paragraph
@@ -938,7 +940,10 @@ template<typename T> void SetParagraphPropOfCharChunk(MCExecContext& ctxt, MCFie
         sptr -> cleanattrs();
 
         // SN-2014-11-04: [[ Bug 13934 ]] Laying out a field refactored.
-        LayoutParagraph(sptr, t_layout_settings);
+        // SN-2014-12-18: [[ Bug 14161 ]] Forces the re-layout of this paragraph which has been changed
+        // SN-2015-01-22: [[ Bug 14428 ]] Ensure that the field is open, before forcing a re-layout
+        //  (MCParagraph::lines is NULL otherwise, and crashes in MCParagraph::countlines).
+        LayoutParagraph(sptr, t_layout_settings, sptr -> getopened());
         
         ei -= sptr->gettextlengthcr();
         sptr = sptr->next();
@@ -959,11 +964,11 @@ template<typename T> void SetCharPropOfCharChunkOfParagraph(MCExecContext& ctxt,
     // Sanity check for lengths
     uindex_t t_para_len;
     t_para_len = p_paragraph->gettextlength();
-    if (si > t_para_len)
+    if (si > 0 && (uindex_t) si > t_para_len)
     {
         si = ei = t_para_len;
     }
-    else if (ei > t_para_len)
+    else if (ei > 0 && (uindex_t) ei > t_para_len)
     {
         ei = t_para_len;
     }
@@ -1043,7 +1048,7 @@ template<typename T> void SetCharPropOfCharChunk(MCExecContext& ctxt, MCField *p
 
             // MCParagraph scope
             {
-                uindex_t t_ei;
+                findex_t t_ei;
                 t_ei = MCU_min(ei, pgptr -> gettextlength());
                 bool t_blocks_changed;
                 bool t_need_layout;
@@ -1108,7 +1113,8 @@ template<typename T> void SetCharPropOfCharChunk(MCExecContext& ctxt, MCField *p
             // end of MCParagraph scope
 
             // SN-2014-11-04: [[ Bug 13934 ]] Laying out a field refactored.
-            LayoutParagraph(pgptr, t_layout_settings);
+            // SN-2014-12-18: [[ Bug 14161 ]] Add a parameter to force the re-layout of a paragraph
+            LayoutParagraph(pgptr, t_layout_settings, false);
         }
 
         si = MCU_max(0, si - t_pg_length);
@@ -1153,7 +1159,7 @@ template<typename T> void SetArrayCharPropOfCharChunk(MCExecContext& ctxt, MCFie
             
             // MCParagraph scope
             {
-                uindex_t t_ei;
+                findex_t t_ei;
                 t_ei = MCU_min(ei, pgptr -> gettextlength());
                 bool t_blocks_changed;
                 bool t_need_layout;
@@ -1218,7 +1224,8 @@ template<typename T> void SetArrayCharPropOfCharChunk(MCExecContext& ctxt, MCFie
             // end of MCParagraph scope
 
             // SN-2014-11-04: [[ Bug 13934 ]] Laying out a field refactored.
-            LayoutParagraph(pgptr, t_layout_settings);
+            // SN-2014-12-18: [[ Bug 14161 ]] Add a parameter to force the re-layout of a paragraph
+            LayoutParagraph(pgptr, t_layout_settings, false);
         }
         
         si = MCU_max(0, si - t_pg_length);
@@ -1297,14 +1304,11 @@ static void setparagraphattr_color(MCParagraphAttrs*& attrs, uint32_t p_flag, si
     else // name null: must interpret the MCColor
         t_color = p_color . color;
 
-    // Make sure the pixel attribute has been generated
-    MCscreen -> alloccolor(t_color);
-
     if (attrs == nil)
         attrs = new MCParagraphAttrs;
 
     attrs -> flags |= p_flag;
-    ((uint32_t *)((char *)attrs + p_field_offset))[0] = t_color . pixel;
+    ((uint32_t *)((char *)attrs + p_field_offset))[0] = MCColorGetPixel(t_color);
 }
 
 static void setparagraphattr_bool(MCParagraphAttrs*& attrs, uint32_t p_flag, bool *p_value, bool &r_new_value)
@@ -1505,7 +1509,7 @@ void MCField::SetStyledTextOfCharChunk(MCExecContext& ctxt, uint32_t p_part_id, 
     MCParagraph *stpgptr = styledtexttoparagraphs(value);
 
     if (stpgptr == nil)
-        stpgptr = texttoparagraphs(MCnullmcstring, false);
+        stpgptr = texttoparagraphs(kMCEmptyString);
         
     setparagraphs(stpgptr, p_part_id, p_start, p_finish);
     
@@ -1651,8 +1655,9 @@ void MCField::GetFormattedHeightOfCharChunk(MCExecContext& ctxt, uint32_t p_part
         int4 maxy = 0;
         do
         {
-            if (maxy != 0)
-                maxy += sptr -> prev() -> computebottommargin() + sptr -> computetopmargin();
+            // FG-2014-12-03: [[ Bug 11688 ]] The margins get counted twice...
+            //if (maxy != 0)
+            //    maxy += sptr -> prev() -> computebottommargin() + sptr -> computetopmargin();
             maxy += sptr->getyextent(ei, fixedheight);
             ei -= sptr->gettextlengthcr();
             sptr = sptr->next();
@@ -1767,7 +1772,13 @@ void MCField::SetImageSourceOfCharChunk(MCExecContext& ctxt, uint32_t p_part_id,
 void MCField::GetVisitedOfCharChunk(MCExecContext& ctxt, uint32_t p_part_id, int32_t si, int32_t ei, bool& r_value)
 {
     bool t_mixed;
-    GetCharPropOfCharChunk< PodFieldPropType<bool> >(ctxt, this, p_part_id, si, si, &MCBlock::GetVisited, false, false, t_mixed, r_value);
+    GetCharPropOfCharChunk< PodFieldPropType<bool> >(ctxt, this, p_part_id, si, ei, &MCBlock::GetVisited, false, false, t_mixed, r_value);
+}
+
+// PM-2015-07-06: [[ Bug 15577 ]] Allow setting of the "visited" property of a block
+void MCField::SetVisitedOfCharChunk(MCExecContext& ctxt, uint32_t p_part_id, int32_t si, int32_t ei, bool p_value)
+{
+    SetCharPropOfCharChunk< PodFieldPropType<bool> >(ctxt, this, false, p_part_id, si, ei, &MCBlock::SetVisited,p_value);
 }
 
 void MCField::GetEncodingOfCharChunk(MCExecContext& ctxt, uint32_t p_part_id, int32_t si, int32_t ei, intenum_t &r_encoding)
@@ -1806,6 +1817,8 @@ void MCField::GetFlaggedRangesOfCharChunk(MCExecContext& ctxt, uint32_t p_part_i
     {
         MCInterfaceFieldRanges t_paragraphRanges;
         sptr -> getflaggedranges(p_part_id, si, ei, t_index_offset, t_paragraphRanges);
+		// PM-2016-01-08: [[ Bug 16666 ]] Update the offset to be relative to the beginning of the text
+		t_index_offset += sptr -> gettextlengthcr();
 
         for (uindex_t i = 0; i < t_paragraphRanges . count; ++i)
             t_ranges . Push(t_paragraphRanges . ranges[i]);
@@ -1890,11 +1903,11 @@ void MCField::SetFlaggedRangesOfCharChunk(MCExecContext& ctxt, uint32_t p_part_i
 
     // Loop while there is a range to flag and and we haven't gone further than ei
     while (t_range_index < value . count
-           && t_next_range . start < ei
+           && (findex_t) t_next_range . start < ei
            && t_paragraph_offset < ei)
     {
         // if the next range doesn't cover this paragraph, we skip the paragraph
-        if (t_next_range . start > t_paragraph_offset + sptr -> gettextlengthcr())
+        if ((findex_t) t_next_range . start > t_paragraph_offset + sptr -> gettextlengthcr())
         {
             t_paragraph_offset += sptr -> gettextlengthcr();
             sptr = sptr -> next();
@@ -1913,7 +1926,7 @@ void MCField::SetFlaggedRangesOfCharChunk(MCExecContext& ctxt, uint32_t p_part_i
                && t_block_offset < ei)
         {
             // skip block if it's not covered by the next range
-            if (t_next_range . start > t_block_offset + bptr -> GetLength())
+            if ((findex_t) t_next_range . start > t_block_offset + bptr -> GetLength())
             {
                 t_block_offset += bptr -> GetLength();
                 bptr = bptr -> next();
@@ -1922,7 +1935,7 @@ void MCField::SetFlaggedRangesOfCharChunk(MCExecContext& ctxt, uint32_t p_part_i
 
             // if the range doesn't start at the beginning of the block
             // we must split the block and skip the first part
-            if (t_next_range . start > t_block_offset)
+            if ((findex_t) t_next_range . start > t_block_offset)
             {
                 bptr -> split(t_next_range . start);
                 t_block_offset += bptr -> GetLength();
@@ -1931,7 +1944,7 @@ void MCField::SetFlaggedRangesOfCharChunk(MCExecContext& ctxt, uint32_t p_part_i
 
             // if the range doesn't cover the block up to its end
             // we must split it
-            if (t_next_range . end < t_block_offset + bptr -> GetLength())
+            if ((findex_t) t_next_range . end < t_block_offset + bptr -> GetLength())
                 bptr -> split(t_next_range . end);
 
             // Flag the block
@@ -1939,7 +1952,7 @@ void MCField::SetFlaggedRangesOfCharChunk(MCExecContext& ctxt, uint32_t p_part_i
 
             // if the range went further than the block
             // we must keep track of this and update the next range to be flagged
-            if (t_next_range . end > t_block_offset + bptr -> GetLength())
+            if ((findex_t) t_next_range . end > t_block_offset + bptr -> GetLength())
                 t_next_range . start = t_block_offset + bptr -> GetLength();
             // otherwise we set the next range to the appropriate value
             else if (t_range_index < value . count)
@@ -2045,7 +2058,7 @@ void MCField::SetLeftIndentOfLineChunk(MCExecContext& ctxt, uint32_t p_part_id, 
 
 void MCField::GetRightIndentOfLineChunk(MCExecContext& ctxt, uint32_t p_part_id, int32_t si, int32_t ei, bool& r_mixed, integer_t*& r_value)
 {
-    GetParagraphPropOfCharChunk< OptionalFieldPropType< PodFieldPropType<integer_t> > >(ctxt, this, p_part_id, si, ei, &MCParagraph::GetLeftIndent, r_mixed, r_value);
+    GetParagraphPropOfCharChunk< OptionalFieldPropType< PodFieldPropType<integer_t> > >(ctxt, this, p_part_id, si, ei, &MCParagraph::GetRightIndent, r_mixed, r_value);
 }
 
 void MCField::GetEffectiveRightIndentOfLineChunk(MCExecContext& ctxt, uint32_t p_part_id, int32_t si, int32_t ei, bool& r_mixed, integer_t& r_value)
@@ -2097,17 +2110,27 @@ void MCField::GetTabStopsOfLineChunk(MCExecContext& ctxt, uint32_t p_part_id, in
     vector_t<uinteger_t> t_vector;
     GetParagraphPropOfCharChunk< VectorFieldPropType<uinteger_t> >(ctxt, this, p_part_id, si, ei, &MCParagraph::GetTabStops, r_mixed, t_vector);
 
-    r_count = t_vector . count;
-    r_values = t_vector . elements;
+    // SN-2015-04-22: [[ Bug 15243 ]] Do not use t_vector if the result is mixed
+    //  as it will be uninitialised.
+    if (!r_mixed)
+    {
+        r_count = t_vector . count;
+        r_values = t_vector . elements;
+    }
 }
 
 void MCField::GetEffectiveTabStopsOfLineChunk(MCExecContext& ctxt, uint32_t p_part_id, int32_t si, int32_t ei, bool& r_mixed, uindex_t& r_count, uinteger_t*& r_values)
 {
     vector_t<uinteger_t> t_vector;
     GetParagraphPropOfCharChunk< VectorFieldPropType<uinteger_t> >(ctxt, this, p_part_id, si, ei, &MCParagraph::GetEffectiveTabStops, r_mixed, t_vector);
-
-    r_count = t_vector.count;
-    r_values = t_vector.elements;
+    
+    // SN-2015-04-22: [[ Bug 15243 ]] Do not use t_vector if the result is mixed
+    //  as it will be uninitialised.
+    if (!r_mixed)
+    {
+        r_count = t_vector.count;
+        r_values = t_vector.elements;
+    }
 }
 
 void MCField::SetTabStopsOfLineChunk(MCExecContext& ctxt, uint32_t p_part_id, int32_t si, int32_t ei, uindex_t count, uinteger_t *values)
@@ -2123,18 +2146,28 @@ void MCField::GetTabWidthsOfLineChunk(MCExecContext& ctxt, uint32_t p_part_id, i
 {
     vector_t<uinteger_t> t_vector;
     GetParagraphPropOfCharChunk< VectorFieldPropType<uinteger_t> >(ctxt, this, p_part_id, si, ei, &MCParagraph::GetTabWidths, r_mixed, t_vector);
-
-    r_count = t_vector . count;
-    r_values = t_vector . elements;
+    
+    // SN-2015-04-22: [[ Bug 15243 ]] Do not use t_vector if the result is mixed
+    //  as it will be uninitialised.
+    if (!r_mixed)
+    {
+        r_count = t_vector . count;
+        r_values = t_vector . elements;
+    }
 }
 
 void MCField::GetEffectiveTabWidthsOfLineChunk(MCExecContext& ctxt, uint32_t p_part_id, int32_t si, int32_t ei, bool& r_mixed, uindex_t& r_count, uinteger_t*& r_values)
 {
     vector_t<uinteger_t> t_vector;
     GetParagraphPropOfCharChunk< VectorFieldPropType<uinteger_t> >(ctxt, this, p_part_id, si, ei, &MCParagraph::GetEffectiveTabWidths, r_mixed, t_vector);
-
-    r_count = t_vector.count;
-    r_values = t_vector.elements;
+    
+    // SN-2015-04-22: [[ Bug 15243 ]] Do not use t_vector if the result is mixed
+    //  as it will be uninitialised.
+    if (!r_mixed)
+    {
+        r_count = t_vector.count;
+        r_values = t_vector.elements;
+    }
 }
 
 void MCField::SetTabWidthsOfLineChunk(MCExecContext& ctxt, uint32_t p_part_id, int32_t si, int32_t ei, uindex_t count, uinteger_t *values)
@@ -2197,6 +2230,9 @@ void MCField::GetEffectiveBackColorOfLineChunk(MCExecContext& ctxt, uint32_t p_p
 void MCField::SetBackColorOfLineChunk(MCExecContext& ctxt, uint32_t p_part_id, int32_t si, int32_t ei, const MCInterfaceNamedColor& p_color)
 {
     SetParagraphPropOfCharChunk< PodFieldPropType<MCInterfaceNamedColor> >(ctxt, this, false, p_part_id, si, ei, &MCParagraph::SetBackColor, p_color);
+
+    // AL-2014-11-18: [[ Bug 14049 ]] Redraw without relayout after changing paragraph color
+    MCObject::Redraw();
 }
 
 void MCField::GetBorderColorOfLineChunk(MCExecContext& ctxt, uint32_t p_part_id, int32_t si, int32_t ei, bool& r_mixed, MCInterfaceNamedColor& r_color)
@@ -2430,8 +2466,10 @@ void MCField::GetTextStyleElementOfCharChunk(MCExecContext& ctxt, MCNameRef p_in
 
 void MCField::GetEffectiveTextStyleElementOfCharChunk(MCExecContext& ctxt, MCNameRef p_index, uint32_t p_part_id, int32_t si, int32_t ei, bool& r_mixed, bool& r_value)
 {
-    bool t_default;
-    bool *t_value_ptr;
+    // SN-2015-03-25: [[ Bug 15030 ]] Initialise t_value_ptr to a value, since
+    //  it will be dereferenced in MCBlock::GetTextStyleElement
+    bool t_default, t_value;
+    bool *t_value_ptr = &t_value;
     GetTextStyleElement(ctxt, p_index, t_default);
     GetArrayCharPropOfCharChunk< OptionalFieldArrayPropType< PodFieldArrayPropType<bool> > >(ctxt, this, p_part_id, si, ei, p_index, &MCBlock::GetTextStyleElement, true, t_default, r_mixed, t_value_ptr);
     
@@ -2513,7 +2551,8 @@ void MCParagraph::GetListDepth(MCExecContext& ctxt, uinteger_t*& r_depth)
     if (attrs == nil || (attrs -> flags & PA_HAS_LIST_STYLE) == 0)
         r_depth = nil;
     else
-        *r_depth = getlistdepth();
+		// PM-2016-01-19: [[ Bug 16742 ]] Default listDepth should be 1 (to match the LC 6.x behavior)
+        *r_depth = getlistdepth() + 1;
 }
 
 void MCParagraph::GetEffectiveListDepth(MCExecContext& ctxt, uinteger_t& r_depth)
@@ -2833,8 +2872,7 @@ void MCParagraph::GetBackColor(MCExecContext& ctxt, MCInterfaceNamedColor &r_col
     else
     {
         MCColor t_color;
-        t_color . pixel = attrs -> background_color;
-        MCscreen -> querycolor(t_color);
+		MCColorSetPixel(t_color, attrs -> background_color);
         get_interface_color(t_color, nil, r_color);
     }
 }
@@ -2844,8 +2882,7 @@ void MCParagraph::GetEffectiveBackColor(MCExecContext& ctxt, MCInterfaceNamedCol
     if (attrs != nil && (attrs -> flags & PA_HAS_BACKGROUND_COLOR) != 0)
     {
         MCColor t_color;
-        t_color . pixel = attrs -> background_color;
-        MCscreen -> querycolor(t_color);
+		MCColorSetPixel(t_color, attrs -> background_color);
         get_interface_color(t_color, nil, r_color);
     }
 }
@@ -2862,8 +2899,7 @@ void MCParagraph::GetBorderColor(MCExecContext& ctxt, MCInterfaceNamedColor &r_c
     else
     {
         MCColor t_color;
-        t_color . pixel = attrs -> background_color;
-        MCscreen -> querycolor(t_color);
+		MCColorSetPixel(t_color, attrs -> border_color);
         get_interface_color(t_color, nil, r_color);
     }
 }
@@ -2873,8 +2909,7 @@ void MCParagraph::GetEffectiveBorderColor(MCExecContext& ctxt, MCInterfaceNamedC
     if (attrs != nil && (attrs -> flags & PA_HAS_BORDER_COLOR) != 0)
     {
         MCColor t_color;
-        t_color . pixel = attrs -> background_color;
-        MCscreen -> querycolor(t_color);
+		MCColorSetPixel(t_color, attrs -> border_color);
         get_interface_color(t_color, nil, r_color);
     }
 }
@@ -3165,6 +3200,14 @@ void MCBlock::SetImageSource(MCExecContext& ctxt, MCStringRef p_image_source)
 void MCBlock::GetVisited(MCExecContext& ctxt, bool& r_value)
 {
     r_value = getvisited() == True;
+}
+
+void MCBlock::SetVisited(MCExecContext& ctxt, bool p_value)
+{
+    if (p_value)
+		setvisited();
+	else
+		clearvisited();
 }
 
 void MCBlock::GetFlagged(MCExecContext& ctxt, bool &r_value)

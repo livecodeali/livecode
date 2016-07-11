@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -21,7 +21,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "objdefs.h"
 #include "parsedef.h"
 
-//#include "execpt.h"
+
 #include "param.h"
 #include "handler.h"
 #include "license.h"
@@ -52,16 +52,6 @@ bool MCExternalHandlerList::IsEmpty(void)
 	return m_handlers . Count() == 0;
 }
 
-#ifdef LEGACY_EXEC
-bool MCExternalHandlerList::ListExternals(MCExecPoint& ep)
-{
-	ep . clear();
-	for(uint32_t i = 0; i < m_externals . Count(); i++)
-		ep . concatcstring(m_externals[i] -> GetName(), EC_RETURN, i == 0);
-	return true;
-}
-#endif
-
 bool MCExternalHandlerList::ListExternals(MCStringRef& r_list)
 {
 	bool t_success;
@@ -87,17 +77,6 @@ bool MCExternalHandlerList::ListExternals(MCStringRef& r_list)
 
 	return t_success;
 }
-
-#ifdef LEGACY_EXEC
-bool MCExternalHandlerList::ListHandlers(MCExecPoint& ep, Handler_type p_type)
-{
-	ep . clear();
-	for(uindex_t i = 0, j = 0; i < m_handlers . Count(); i++)
-		if (m_externals[m_handlers[i] . external] -> GetHandlerType(m_handlers[i] . handler) == p_type)
-			ep . concatnameref(m_handlers[i] . name, EC_RETURN, j++ == 0);
-	return true;
-}
-#endif
 
 bool MCExternalHandlerList::ListHandlers(Handler_type p_type, MCStringRef& r_list)
 {
@@ -272,7 +251,11 @@ MCExternal *MCExternal::Load(MCStringRef p_filename)
 	t_module = nil;
 	if (t_success)
 	{
-		t_module = MCS_loadmodule(p_filename);
+        // AL-2015-02-10: [[ SB Inclusions ]] Load external using new module loading utility
+        // SN-2015-04-07: [[ Bug 15164 ]] Use StringRef (we might want a Unicode
+        //  path to keep its Unicode chars).
+        t_module = (MCSysModuleHandle)MCU_loadmodule_stringref(p_filename);
+
 		if (t_module == NULL)
 			t_success = false;
 	}

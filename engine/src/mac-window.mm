@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -26,11 +26,14 @@
 #include "platform.h"
 #include "platform-internal.h"
 
+#include "mac-clipboard.h"
 #include "mac-internal.h"
 
 #include <objc/objc-runtime.h>
 
 #include "graphics_util.h"
+
+#include "osspec.h"
 
 ///////////////////////////////////////////////////////////////////////////
 
@@ -59,8 +62,20 @@ static bool s_lock_responder_change = false;
         return nil;
     
     m_can_become_key = false;
-    
     return self;
+}
+
+- (NSRect)movingFrame
+{
+    if ([NSApp windowIsMoving:[(MCWindowDelegate *)[self delegate] platformWindow]])
+        return m_moving_frame;
+    else
+        return [self frame];
+}
+
+- (void)setMovingFrame:(NSRect)p_moving_frame
+{
+    m_moving_frame = p_moving_frame;
 }
 
 - (void)setCanBecomeKeyWindow: (BOOL)p_value
@@ -99,7 +114,7 @@ static bool s_lock_responder_change = false;
 		{
 			if ([t_view respondsToSelector:@selector(com_runrev_livecode_nativeViewId)])
 			{
-				[(MCWindowDelegate *)[self delegate] viewFocusSwitched: (uint32_t)[t_view com_runrev_livecode_nativeViewId]];
+				[(MCWindowDelegate *)[self delegate] viewFocusSwitched: (uintptr_t)[t_view com_runrev_livecode_nativeViewId]];
 				return YES;
 			}
 			
@@ -156,6 +171,19 @@ static bool s_lock_responder_change = false;
     return self;
 }
 
+- (NSRect)movingFrame
+{
+    if ([NSApp windowIsMoving:[(MCWindowDelegate *)[self delegate] platformWindow]])
+        return m_moving_frame;
+    else
+        return [self frame];
+}
+
+- (void)setMovingFrame:(NSRect)p_moving_frame
+{
+    m_moving_frame = p_moving_frame;
+}
+
 - (void)dealloc
 {
     if (m_monitor != nil)
@@ -199,7 +227,7 @@ static bool s_lock_responder_change = false;
 		{
 			if ([t_view respondsToSelector:@selector(com_runrev_livecode_nativeViewId)])
 			{
-				[(MCWindowDelegate *)[self delegate] viewFocusSwitched: (uint32_t)[t_view com_runrev_livecode_nativeViewId]];
+				[(MCWindowDelegate *)[self delegate] viewFocusSwitched: (uintptr_t)[t_view com_runrev_livecode_nativeViewId]];
 				return YES;
 			}
 			
@@ -271,7 +299,11 @@ static bool s_lock_responder_change = false;
                          ![targetWindowForEvent isPopupWindow])
                      {
                          if (targetWindowForEvent != t_window)
+						 {
                              [self popupWindowShouldClose: nil];
+							 // IM-2015-04-21: [[ Bug 15129 ]] Block mouse down event after cancelling popup
+							 result = nil;
+						 }
                      }
                      
                      return result;
@@ -308,17 +340,12 @@ static bool s_lock_responder_change = false;
         CGRect t_rect;
         CGRectMakeWithDictionaryRepresentation((CFDictionaryRef)t_rect_dict, &t_rect);
         
-        // MW-2014-06-11: [[ Bug ]] Only temporarily update the frame fields otherwise it screws
-        //   up backingstore scale factor changes.
-        NSPoint t_origin;
-        t_origin = _frame . origin;
+        NSScreen * t_screen = [[NSScreen screens] objectAtIndex:0];
+        t_rect . origin . y = [t_screen frame] . size . height - t_rect . origin . y - t_rect . size . height;
         
-        _frame . origin . x = t_rect . origin . x;
-        _frame . origin . y = [[NSScreen mainScreen] frame] . size . height - t_rect . origin . y - t_rect . size . height;
+        [(NSWindow <com_runrev_livecode_MCMovingFrame> *)self setMovingFrame:NSRectFromCGRect(t_rect)];
         
         ((MCMacPlatformWindow *)window) -> ProcessDidMove();
-    
-        _frame . origin = t_origin;
     }
     
     [t_info_array release];
@@ -370,6 +397,7 @@ static bool s_lock_responder_change = false;
 //   frame sizes).
 - (NSSize)windowWillResize:(NSWindow *)sender toSize:(NSSize)frameSize
 {
+    NSLog(@"windowWillResize");
     MCRectangle t_frame;
     t_frame = MCRectangleMake(0, 0, frameSize . width, frameSize . height);
     
@@ -407,13 +435,19 @@ static bool s_lock_responder_change = false;
 
 - (void)windowMoveFinished
 {
-	// IM-2014-10-29: [[ Bug 13814 ]] Make sure we unset the user reshape flag once dragging is finished.
+    // IM-2014-10-29: [[ Bug 13814 ]] Make sure we unset the user reshape flag once dragging is finished.
 	m_user_reshape = false;
+    m_window -> ProcessDidMove();
 }
 
 - (void)windowDidMove:(NSNotification *)notification
 {
-	m_window -> ProcessDidMove();
+    m_window -> ProcessDidMove();
+}
+
+- (void)windowDidChangeScreen:(NSNotification *)notification
+{
+    m_window -> ProcessDidMove();
 }
 
 - (void)windowWillStartLiveResize:(NSNotification *)notification
@@ -468,7 +502,7 @@ static bool s_lock_responder_change = false;
 - (void)windowDidResignKey:(NSNotification *)notification
 {
     if (s_inside_focus_event)
-        m_window -> ProcessDidBecomeKey();
+        m_window -> ProcessDidResignKey();
     else
     {
         s_inside_focus_event = true;
@@ -479,7 +513,7 @@ static bool s_lock_responder_change = false;
 
 - (void)windowDidChangeBackingProperties:(NSNotification *)notification
 {
-    MCLog("didChangeBacking %lf", objc_msgSend_fpret(m_window -> GetHandle(), @selector(backingScaleFactor)));
+    //MCLog("didChangeBacking %lf", objc_msgSend_fpret(m_window -> GetHandle(), @selector(backingScaleFactor)));
 }
 
 - (void)didEndSheet: (NSWindow *)sheet returnCode: (NSInteger)returnCode contextInfo: (void *)info
@@ -772,12 +806,19 @@ static bool s_lock_responder_change = false;
 static void map_key_event(NSEvent *event, MCPlatformKeyCode& r_key_code, codepoint_t& r_mapped, codepoint_t& r_unmapped)
 {
 	MCMacPlatformMapKeyCode([event keyCode], [event modifierFlags], r_key_code);
-	
-    // MW-2014-06-26: [[ Bug 12681 ]] Special case numeric keypad keys so they are processed
-    //   in the correct way.
-    if (r_key_code > 0xff00 && r_key_code <= 0xffff &&
-        (r_key_code < kMCPlatformKeyCodeKeypadSpace || r_key_code > kMCPlatformKeyCodeKeypadEqual || r_key_code == kMCPlatformKeyCodeKeypadEnter
-         ))
+    
+    // SN-2014-12-08: [[ Bug 14067 ]] If the key pressed was a numpad key, then we
+    // do not produce a mapped char. That will allow a different treatment, as we
+    // do not want to use the numeric value of the native char to get the rawKeyDown
+    // parameter.
+    if (([event modifierFlags] & NSNumericPadKeyMask) != 0)
+    {
+        MCMacMapNSStringToCodepoint([event characters], r_unmapped);
+        r_mapped = r_unmapped;
+        return;
+    }
+    
+    if (r_key_code > 0xff00 && r_key_code <= 0xffff)
     {
         r_mapped = r_unmapped = 0xffffffffU;
         return;
@@ -926,7 +967,7 @@ static void map_key_event(NSEvent *event, MCPlatformKeyCode& r_key_code, codepoi
 
 - (void)doCommandBySelector:(SEL)aSelector
 {
-	MCLog("doCommandBySelector:", 0);
+    //MCLog("doCommandBySelector:", 0);
 	
 	MCMacPlatformWindow *t_window;
 	t_window = [self platformWindow];
@@ -1009,7 +1050,7 @@ static void map_key_event(NSEvent *event, MCPlatformKeyCode& r_key_code, codepoi
 
 - (void)unmarkText
 {
-	MCLog("unmarkText", 0);
+    //MCLog("unmarkText", 0);
 	
 	MCMacPlatformWindow *t_window;
 	t_window = [self platformWindow];
@@ -1036,7 +1077,7 @@ static void map_key_event(NSEvent *event, MCPlatformKeyCode& r_key_code, codepoi
 	
 	MCRange t_marked_range, t_selected_range;
 	MCPlatformCallbackSendTextInputQueryTextRanges(t_window, t_marked_range, t_selected_range);
-	MCLog("selectedRange() = (%d, %d)", t_selected_range . offset, t_selected_range . length);
+    //MCLog("selectedRange() = (%d, %d)", t_selected_range . offset, t_selected_range . length);
 	return NSMakeRange(t_selected_range . offset, t_selected_range . length);
 }
 
@@ -1049,7 +1090,7 @@ static void map_key_event(NSEvent *event, MCPlatformKeyCode& r_key_code, codepoi
 	
 	MCRange t_marked_range, t_selected_range;
 	MCPlatformCallbackSendTextInputQueryTextRanges(t_window, t_marked_range, t_selected_range);
-	MCLog("markedRange() = (%d, %d)", t_marked_range . offset, t_marked_range . length);
+    //MCLog("markedRange() = (%d, %d)", t_marked_range . offset, t_marked_range . length);
 	return NSMakeRange(t_marked_range . offset, t_marked_range . length);
 }
 
@@ -1062,7 +1103,7 @@ static void map_key_event(NSEvent *event, MCPlatformKeyCode& r_key_code, codepoi
 	
 	MCRange t_marked_range, t_selected_range;
 	MCPlatformCallbackSendTextInputQueryTextRanges(t_window, t_marked_range, t_selected_range);
-	MCLog("hasMarkedText() = %d", t_marked_range . offset != UINDEX_MAX);
+    //MCLog("hasMarkedText() = %d", t_marked_range . offset != UINDEX_MAX);
 	return t_marked_range . offset != UINDEX_MAX;
 }
 
@@ -1095,7 +1136,7 @@ static void map_key_event(NSEvent *event, MCPlatformKeyCode& r_key_code, codepoi
 
 - (NSArray*)validAttributesForMarkedText
 {
-	MCLog("validAttributesForMarkedText() = []", nil);
+    //MCLog("validAttributesForMarkedText() = []", nil);
 	return [NSArray array];
 }
 
@@ -1119,7 +1160,7 @@ static void map_key_event(NSEvent *event, MCPlatformKeyCode& r_key_code, codepoi
 	if (actualRange != nil)
 		*actualRange = NSMakeRange(t_actual_range . offset, t_actual_range . length);
 	
-	MCLog("firstRectForCharacterRange(%d, %d -> %d, %d) = [%d, %d, %d, %d]", aRange . location, aRange . length, t_actual_range . offset, t_actual_range . length, t_rect . x, t_rect . y, t_rect . width, t_rect . height);
+    //MCLog("firstRectForCharacterRange(%d, %d -> %d, %d) = [%d, %d, %d, %d]", aRange . location, aRange . length, t_actual_range . offset, t_actual_range . length, t_rect . x, t_rect . y, t_rect . width, t_rect . height);
 	
 	t_ns_rect . origin = [[self window] convertBaseToScreen: t_ns_rect . origin];
 	
@@ -1141,7 +1182,7 @@ static void map_key_event(NSEvent *event, MCPlatformKeyCode& r_key_code, codepoi
 	uindex_t t_index;
 	MCPlatformCallbackSendTextInputQueryTextIndex(t_window, t_location, t_index);
 	
-	MCLog("characterIndexForPoint(%d, %d) = %d", t_location . x, t_location . y, t_index);
+    //MCLog("characterIndexForPoint(%d, %d) = %d", t_location . x, t_location . y, t_index);
 	
 	return t_index;
 }
@@ -1345,9 +1386,12 @@ static void map_key_event(NSEvent *event, MCPlatformKeyCode& r_key_code, codepoi
 
 - (NSDragOperation)draggingEntered: (id<NSDraggingInfo>)sender
 {
-	MCPlatformPasteboardRef t_pasteboard;
-	MCMacPlatformPasteboardCreate([sender draggingPasteboard], t_pasteboard);
-	
+    // Create a wrapper around the drag board for this operation if the drag
+    // source is outside this instance of LiveCode.
+    MCAutoRefcounted<MCMacRawClipboard> t_dragboard;
+    if ([sender draggingSource] == nil)
+        t_dragboard = new MCMacRawClipboard([sender draggingPasteboard]);
+    
 	NSDragOperation t_ns_operation;
 	
 	MCMacPlatformWindow *t_window;
@@ -1355,7 +1399,7 @@ static void map_key_event(NSEvent *event, MCPlatformKeyCode& r_key_code, codepoi
 	if (t_window != nil)
 	{
 		MCPlatformDragOperation t_operation;
-		t_window -> HandleDragEnter(t_pasteboard, t_operation);
+		t_window -> HandleDragEnter(t_dragboard, t_operation);
 		t_ns_operation = MCMacPlatformMapDragOperationToNSDragOperation(t_operation);
 	}
 	else
@@ -1600,9 +1644,29 @@ static void map_key_event(NSEvent *event, MCPlatformKeyCode& r_key_code, codepoi
 
 - (void)setFrameSize: (NSSize)size
 {
+	CGFloat t_height_diff = size.height - [self frame].size.height;
+	
     [super setFrameSize: size];
     
-    MCMacPlatformWindow *t_window = m_window;
+	// IM-2015-09-01: [[ BrowserWidget ]] Adjust subviews upward to retain same height from top of view
+	NSArray *t_subviews;
+	t_subviews = [self subviews];
+	for (uint32_t i = 0; i < [t_subviews count]; i++)
+	{
+		NSView *t_subview;
+		t_subview = [t_subviews objectAtIndex:i];
+		
+		// Don't adjust the app view, as it gets resized below.
+		if (t_subview != m_window->GetView())
+		{
+			NSPoint t_origin;
+			t_origin = [t_subview frame].origin;
+			t_origin.y += t_height_diff;
+			
+			[t_subview setFrameOrigin:t_origin];
+		}
+	}
+	MCMacPlatformWindow *t_window = m_window;
     if (t_window != nil)
         [t_window -> GetView() setFrameSize: size];
 }
@@ -1621,6 +1685,7 @@ MCMacPlatformWindow::MCMacPlatformWindow(void)
 	m_shadow_changed = false;
 	m_synchronizing = false;
 	m_has_sheet = false;
+	m_frame_locked = false;
 	
 	m_parent = nil;
 }
@@ -1652,6 +1717,9 @@ MCWindowContainerView *MCMacPlatformWindow::GetContainerView(void)
 
 id MCMacPlatformWindow::GetHandle(void)
 {
+	// IM-2016-06-13: [[ Bug 17815 ]] Ensure the handle has been created before returning.
+	if (m_handle == nil)
+		RealizeAndNotify();
 	return m_handle;
 }
 
@@ -1685,16 +1753,31 @@ void MCMacPlatformWindow::ProcessDidMove(void)
 	if (m_synchronizing)
 		return;
 	
+	// IM-2015-01-30: [[ Bug 14140 ]] Reset any rect changes while the frame is locked.
+	if (m_frame_locked)
+	{
+		m_changes.content_changed = true;
+		DoSynchronize();
+		return;
+	}
+	
 	// Get the window's new content rect.
 	NSRect t_new_cocoa_content;
-	t_new_cocoa_content = [m_window_handle contentRectForFrameRect: [m_window_handle frame]];
+	t_new_cocoa_content = [m_window_handle contentRectForFrameRect: [(NSWindow <com_runrev_livecode_MCMovingFrame>*)m_window_handle movingFrame]];
 	
 	// Map from cocoa coords.
 	MCRectangle t_content;
 	MCMacPlatformMapScreenNSRectToMCRectangle(t_new_cocoa_content, t_content);
 	
+	// Make sure we don't tickle the event queue whilst resizing, otherwise
+	// redraws can be done by the OS during the process resulting in tearing
+	// as the window resizes.
+	MCMacPlatformDisableEventChecking();
+	
 	// And get the super class to deal with it.
 	HandleReshape(t_content);
+	
+	MCMacPlatformEnableEventChecking();
 }
 
 void MCMacPlatformWindow::ProcessDidResize(void)
@@ -1756,6 +1839,13 @@ void MCMacPlatformWindow::ProcessKeyDown(MCPlatformKeyCode p_key_code, codepoint
 void MCMacPlatformWindow::ProcessKeyUp(MCPlatformKeyCode p_key_code, codepoint_t p_mapped_char, codepoint_t p_unmapped_char)
 {
 	HandleKeyUp(p_key_code, p_mapped_char, p_unmapped_char);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void MCMacPlatformWindow::SetFrameLocked(bool p_locked)
+{
+	m_frame_locked = p_locked;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1823,7 +1913,8 @@ void MCMacPlatformWindow::DoRealize(void)
     
     [m_window_handle setFrame: t_cocoa_frame display: YES];
     
-	m_delegate = [[com_runrev_livecode_MCWindowDelegate alloc] initWithPlatformWindow: this];
+    if (m_delegate == nil)
+        m_delegate = [[com_runrev_livecode_MCWindowDelegate alloc] initWithPlatformWindow: this];
 	[m_window_handle setDelegate: m_delegate];
 	
     m_container_view = [[MCWindowContainerView alloc] initWithPlatformWindow: this];
@@ -1840,7 +1931,7 @@ void MCMacPlatformWindow::DoRealize(void)
         [m_panel_handle setFloatingPanel: [NSApp isActive]];
     else
         [m_window_handle setLevel: t_window_level];
-	[m_window_handle setOpaque: m_mask == nil];
+	[m_window_handle setOpaque: m_is_opaque && m_mask == nil];
 	[m_window_handle setHasShadow: m_has_shadow];
 	if (!m_has_zoom_widget)
 		[[m_window_handle standardWindowButton: NSWindowZoomButton] setEnabled: NO];
@@ -1853,6 +1944,9 @@ void MCMacPlatformWindow::DoRealize(void)
     // MW-2014-04-08: [[ Bug 12080 ]] Make sure we turn off automatic 'hiding on deactivate'.
     //   The engine handles this itself.
     [m_window_handle setHidesOnDeactivate: m_hides_on_suspend];
+    
+    // MERG-2015-10-11: [[ DocumentFilename ]] Set documentFilename.
+    UpdateDocumentFilename();
 }
 
 void MCMacPlatformWindow::DoSynchronize(void)
@@ -1876,12 +1970,12 @@ void MCMacPlatformWindow::DoSynchronize(void)
     if (m_changes . has_shadow_changed)
         [m_window_handle setHasShadow: m_has_shadow];
     
-	if (m_changes . mask_changed)
+	if (m_changes . mask_changed || m_changes . is_opaque_changed)
 	{
         // MW-2014-07-29: [ Bug 12997 ]] Make sure we invalidate the whole window when
         //   the mask changes.
         [[m_window_handle contentView] setNeedsDisplay: YES];
-		[m_window_handle setOpaque: m_mask == nil];
+		[m_window_handle setOpaque: m_is_opaque && m_mask == nil];
 		if (m_has_shadow)
 			m_shadow_changed = true;
 	}
@@ -1923,7 +2017,12 @@ void MCMacPlatformWindow::DoSynchronize(void)
     if (m_changes . ignore_mouse_events_changed)
         [m_window_handle setIgnoresMouseEvents: m_ignore_mouse_events];
     
-	m_synchronizing = false;
+    if (m_changes . document_filename_changed)
+    {
+        UpdateDocumentFilename();
+    }
+    
+    m_synchronizing = false;
 }
 
 bool MCMacPlatformWindow::DoSetProperty(MCPlatformWindowProperty p_property, MCPlatformPropertyType p_type, const void *value)
@@ -1942,7 +2041,16 @@ bool MCMacPlatformWindow::DoGetProperty(MCPlatformWindowProperty p_property, MCP
                 RealizeAndNotify();
 			*(uint32_t *)r_value = m_window_handle != nil ? [m_window_handle windowNumber] : 0;
 			return true;
+			
+		case kMCPlatformWindowPropertySystemHandle:
+			assert(p_type == kMCPlatformPropertyTypePointer);
+			// MW-2014-04-30: [[ Bug 12328 ]] If we don't have a handle yet make sure we create one.
+			if (m_window_handle == nil)
+				RealizeAndNotify();
+			*(void**)r_value = m_window_handle;
+			return true;
 	}
+	
 	return false;
 }
 
@@ -2013,7 +2121,9 @@ void MCMacPlatformWindow::DoHide(void)
 		if ([m_window_handle parentWindow] != nil)
 			[[m_window_handle parentWindow] removeChildWindow: m_window_handle];
 	
-		[m_window_handle orderOut: nil];
+		// CW-2015-09-21: [[ Bug 15979 ]] Call close instead of orderOut here to properly close
+		// windows that have been iconified.
+		[m_window_handle close];
 	}
 	
 	MCMacPlatformHandleMouseAfterWindowHidden();
@@ -2044,7 +2154,11 @@ void MCMacPlatformWindow::DoUpdate(void)
 {	
 	// If the shadow has changed (due to the mask changing) we must disable
 	// screen updates otherwise we get a flicker.
-	if (m_shadow_changed && m_has_shadow)
+	// IM-2015-02-23: [[ WidgetPopup ]] Assume shadow changes when redrawing a non-opaque widget
+	bool t_shadow_changed;
+	t_shadow_changed = (m_shadow_changed || !m_is_opaque) && m_has_shadow;
+	
+	if (t_shadow_changed)
 		NSDisableScreenUpdates();
 	
 	// Mark the bounding box of the dirty region for needing display.
@@ -2057,7 +2171,7 @@ void MCMacPlatformWindow::DoUpdate(void)
 	[m_view displayIfNeeded];
 	
 	// Re-enable screen updates if needed.
-	if (m_shadow_changed && m_has_shadow)
+	if (t_shadow_changed)
     {
         // MW-2014-06-11: [[ Bug 12495 ]] Turn the shadow off and on to force recaching.
         [m_window_handle setHasShadow: NO];
@@ -2144,6 +2258,25 @@ void MCMacPlatformWindow::ComputeCocoaStyle(NSUInteger& r_cocoa_style)
 	r_cocoa_style = t_window_style;
 }
 
+// MERG-2015-10-11: [[ DocumentFilename ]] Set documentFilename.
+void MCMacPlatformWindow::UpdateDocumentFilename(void)
+{
+    MCStringRef t_native_filename;
+    
+    NSString * t_represented_filename;
+    t_represented_filename = nil;
+    
+    if (!MCStringIsEmpty(m_document_filename) && MCS_pathtonative(m_document_filename, t_native_filename))
+    {
+        t_represented_filename = [NSString stringWithMCStringRef: t_native_filename];
+    }
+    else
+        t_represented_filename = @"";
+    
+    // It appears setRepresentedFilename can't be set to nil
+    [m_window_handle setRepresentedFilename: t_represented_filename];
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 static bool MCAlphaToCGImageNoCopy(const MCGRaster &p_alpha, CGImageRef &r_image)
@@ -2228,7 +2361,8 @@ void MCPlatformWindowMaskRelease(MCPlatformWindowMaskRef p_mask)
 	
 	if (t_mask->references > 1)
 	{
-		t_mask->references++;
+        // PM-2015-02-13: [[ Bug 14588 ]] Decrease ref count
+		t_mask->references--;
 		return;
 	}
 	
@@ -2257,7 +2391,7 @@ static NSView *MCMacPlatformFindView(MCPlatformWindowRef p_window, uint32_t p_id
 			NSView *t_view;
 			t_view = (NSView *)[t_subviews objectAtIndex: i];
 			if ([t_view respondsToSelector:@selector(com_runrev_livecode_nativeViewId)])
-				if ((uint32_t)[t_view com_runrev_livecode_nativeViewId] == p_id)
+				if ((uintptr_t)[t_view com_runrev_livecode_nativeViewId] == p_id)
 					return t_view;
 		}
 	}

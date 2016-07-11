@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -78,7 +78,7 @@
 - (id)dvt_latestRuntime;
 - (id)dvt_supportedArchs;
 - (id)dvt_supportedArchStrings;
-- (_Bool)dvt_has64BitArch;
+- (bool)dvt_has64BitArch;
 @end
 
 @interface SimDeviceSet (DVTAdditions)

@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -580,7 +580,6 @@ bool MCImageIndexedBitmapAddTransparency(MCImageIndexedBitmap *p_bitmap)
 	p_bitmap->palette[p_bitmap->transparent_index].red = 0xFFFF;
 	p_bitmap->palette[p_bitmap->transparent_index].green = 0xFFFF;
 	p_bitmap->palette[p_bitmap->transparent_index].blue = 0xFFFF;
-	p_bitmap->palette[p_bitmap->transparent_index].pixel = MCGPixelPackNative(255, 255, 255, 0);
 
 	return true;
 }
@@ -680,7 +679,6 @@ bool MCImageConvertBitmapToIndexed(MCImageBitmap *p_bitmap, bool p_ignore_transp
 						if (t_success)
 						{
 							hashentry->pixel = t_pixel;
-							t_indexed->palette[t_indexed->palette_size].pixel = t_pixel;
 
 							uint16_t t_component;
 							t_component = t_r;
@@ -817,11 +815,10 @@ bool MCImageDataIsJPEG(MCDataRef p_input)
 	if (t_length < 9)
 		return false;
     
-	if (t_data[0] != 0xFF || t_data[1] != 0xE0)
-		return false;
-    
-	if (memcmp(t_data + 4, "JFIF", 5) != 0)
-		return false;
+	if (t_data[0] != 0xFF || t_data[1] != 0xD8 || t_data[2] != 0xFF)
+        return false;
+    if (t_data[3] != 0xDB && t_data[3] != 0xE0)
+        return false;
     
 	return true;
 }

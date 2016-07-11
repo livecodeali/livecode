@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -24,6 +24,8 @@
 #include "mac-internal.h"
 
 #include "graphics_util.h"
+
+#include "libscript/script.h"
 
 #include <objc/objc-runtime.h>
 
@@ -85,6 +87,11 @@ enum
     }
 }
 
+- (bool)windowIsMoving: (MCPlatformWindowRef)window
+{
+    return window == s_moving_window;
+}
+
 - (void)windowStartedMoving: (MCPlatformWindowRef)window
 {
     if (s_moving_window != nil)
@@ -109,11 +116,19 @@ enum
 
 - (void)becomePseudoModalFor: (NSWindow*)window
 {
+    // MERG-2016-03-04: ensure pseudo modals open above any calling modals
+    [window setLevel: kCGPopUpMenuWindowLevel];
     m_pseudo_modal_for = window;
 }
 
 - (NSWindow*)pseudoModalFor
 {
+    // MERG-2016-03-04: ensure pseudo modals remain above any calling modals
+    // If we need to check whether we're pseudo-modal, it means we're in a
+    // situation where that window needs to be forced to the front
+    if (m_pseudo_modal_for != nil)
+        [m_pseudo_modal_for orderFrontRegardless];
+    
     return m_pseudo_modal_for;
 }
 
@@ -204,6 +219,7 @@ enum
 
 - (NSError *)application:(NSApplication *)application willPresentError:(NSError *)error
 {
+    return error;
 }
 
 //////////
@@ -215,7 +231,7 @@ enum
 
 //////////
 
-static OSErr preDispatchAppleEvent(const AppleEvent *p_event, AppleEvent *p_reply, long p_context)
+static OSErr preDispatchAppleEvent(const AppleEvent *p_event, AppleEvent *p_reply, SRefCon p_context)
 {
     return [[NSApp delegate] preDispatchAppleEvent: p_event withReply: p_reply];
 }
@@ -377,7 +393,10 @@ static OSErr preDispatchAppleEvent(const AppleEvent *p_event, AppleEvent *p_repl
     if (m_explicit_quit)
         return NSTerminateNow;
     
-	// There is an NSApplicationTerminateReplyLater result code which will place
+    if ([NSApp pseudoModalFor] != nil)
+        return NSTerminateCancel;
+    
+    // There is an NSApplicationTerminateReplyLater result code which will place
 	// the runloop in a modal loop for exit dialogs. We'll try the simpler
 	// option for now of just sending the callback and seeing what AppKit does
 	// with the (eventual) event loop that will result...
@@ -549,12 +568,23 @@ void MCPlatformGetSystemProperty(MCPlatformSystemProperty p_property, MCPlatform
 	switch(p_property)
 	{
 		case kMCPlatformSystemPropertyDoubleClickInterval:
-			*(uint16_t *)r_value = GetDblTime() * 1000.0 / 60.0;
+            // Get the double-click interval, in milliseconds
+            *(uint16_t *)r_value = uint16_t([NSEvent doubleClickInterval] * 1000.0);
 			break;
 			
 		case kMCPlatformSystemPropertyCaretBlinkInterval:
-			*(uint16_t *)r_value = GetCaretTime() * 1000.0 / 60.0;
+        {
+            // Query the user's settings for the cursor blink rate
+            NSInteger t_rate_ms = [[NSUserDefaults standardUserDefaults] integerForKey:@"NSTextInsertionPointBlinkPeriod"];
+            
+            // If the query failed, use the standard value (this seems to be
+            // 567ms on OSX, not that this is documented anywhere).
+            if (t_rate_ms == 0)
+                t_rate_ms = 567;
+            
+            *(uint16_t *)r_value = uint16_t(t_rate_ms);
 			break;
+        }
 			
 		case kMCPlatformSystemPropertyHiliteColor:
 		{
@@ -668,21 +698,21 @@ static void runloop_observer(CFRunLoopObserverRef observer, CFRunLoopActivity ac
 		MCPlatformBreakWait();
 }
 
-static bool s_event_checking_enabled = true;
+static uindex_t s_event_checking_enabled = 0;
 
 void MCMacPlatformEnableEventChecking(void)
 {
-	s_event_checking_enabled = true;
+	s_event_checking_enabled += 1;
 }
 
 void MCMacPlatformDisableEventChecking(void)
 {
-	s_event_checking_enabled = false;
+	s_event_checking_enabled -= 1;
 }
 
 bool MCMacPlatformIsEventCheckingEnabled(void)
 {
-	return s_event_checking_enabled;
+	return s_event_checking_enabled == 0;
 }
 
 bool MCPlatformWaitForEvent(double p_duration, bool p_blocking)
@@ -736,7 +766,11 @@ bool MCPlatformWaitForEvent(double p_duration, bool p_blocking)
                                  untilDate: [NSDate dateWithTimeIntervalSinceNow: p_duration]
                                     inMode: p_blocking ? NSEventTrackingRunLoopMode : NSDefaultRunLoopMode
                                    dequeue: YES];
-	if (t_modal)
+    
+    // Run the modal session, if it has been created yet (it might not if this
+    // wait was triggered by reacting to an event caused as part of creating
+    // the modal session, e.g. when losing window focus).
+	if (t_modal && s_modal_sessions[s_modal_session_count - 1].session != nil)
 		[NSApp runModalSession: s_modal_sessions[s_modal_session_count - 1] . session];
     
 	s_in_blocking_wait = false;
@@ -779,7 +813,10 @@ void MCMacPlatformBeginModalSession(MCMacPlatformWindow *p_window)
 	s_modal_sessions[s_modal_session_count - 1] . is_done = false;
 	s_modal_sessions[s_modal_session_count - 1] . window = p_window;
 	p_window -> Retain();
+	// IM-2015-01-30: [[ Bug 14140 ]] lock the window frame to prevent it from being centered on the screen.
+	p_window->SetFrameLocked(true);
 	s_modal_sessions[s_modal_session_count - 1] . session = [NSApp beginModalSessionForWindow: (NSWindow *)(p_window -> GetHandle())];
+	p_window->SetFrameLocked(false);
 }
 
 void MCMacPlatformEndModalSession(MCMacPlatformWindow *p_window)
@@ -1031,11 +1068,15 @@ void MCPlatformGetWindowAtPoint(MCPoint p_loc, MCPlatformWindowRef& r_window)
 	
 	NSWindow *t_window;
 	t_window = [NSApp windowWithWindowNumber: t_number];
-	
+	NSRect t_content_rect;
+    if (t_window != nil && [t_window conformsToProtocol:NSProtocolFromString(@"com_runrev_livecode_MCMovingFrame")])
+        t_content_rect = [(NSWindow <com_runrev_livecode_MCMovingFrame>*)t_window movingFrame];
+    else
+        t_content_rect = [t_window frame];
+    
     // MW-2014-05-28: [[ Bug 12437 ]] Seems the window at point uses inclusive co-ords
     //   in the in-rect calculation - so adjust the rect appropriately.
-    NSRect t_content_rect;
-    t_content_rect = [t_window contentRectForFrameRect: [t_window frame]];
+    t_content_rect = [t_window contentRectForFrameRect: t_content_rect];
     
     bool t_is_in_frame;
     t_content_rect . size . width += 1, t_content_rect . size . height += 1;
@@ -1147,7 +1188,7 @@ void MCPlatformGetScreenPixelScale(uindex_t p_index, MCGFloat& r_scale)
 	NSScreen *t_screen;
 	t_screen = [[NSScreen screens] objectAtIndex: p_index];
 	if ([t_screen respondsToSelector: @selector(backingScaleFactor)])
-		r_scale = objc_msgSend_fpret(t_screen, @selector(backingScaleFactor));
+		r_scale = objc_msgSend_fpret_type<CGFloat>(t_screen, @selector(backingScaleFactor));
 	else
 		r_scale = 1.0f;
 }
@@ -1674,7 +1715,7 @@ void MCMacPlatformHandleMouseCursorChange(MCPlatformWindowRef p_window)
         
         // PM-2014-04-02: [[ Bug 12082 ]] IDE no longer crashes when changing an applied pattern
         if (t_cursor != nil)
-            MCPlatformShowCursor(t_cursor);
+            MCPlatformSetCursor(t_cursor);
         // SN-2014-10-01: [[ Bug 13516 ]] Hiding a cursor here is not what we want to happen if a cursor hasn't been found
         else
             MCMacPlatformResetCursor();
@@ -1846,8 +1887,13 @@ void MCMacPlatformSyncMouseBeforeDragging(void)
 			MCPlatformCallbackSendMouseRelease(s_mouse_window, t_button_to_release, false);
 		MCPlatformCallbackSendMouseLeave(s_mouse_window);
 		
-		MCPlatformReleaseWindow(s_mouse_window);
-		s_mouse_window = nil;
+        // SN-2015-01-13: [[ Bug 14350 ]] The user can close the stack in
+        //  a mouseLeave handler
+        if (s_mouse_window != nil)
+        {
+            MCPlatformReleaseWindow(s_mouse_window);
+            s_mouse_window = nil;
+        }
 	}
 }
 
@@ -1950,6 +1996,19 @@ void MCMacPlatformMapScreenNSRectToMCRectangle(NSRect r, MCRectangle& r_rect)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void MCMacPlatformShowMessageDialog(MCStringRef p_title,
+                                    MCStringRef p_message)
+{
+    NSAlert *t_alert = [[NSAlert alloc] init];
+    [t_alert addButtonWithTitle:@"OK"];
+    [t_alert setMessageText: [NSString stringWithMCStringRef: p_title]];
+    [t_alert setInformativeText: [NSString stringWithMCStringRef: p_message]];
+    [t_alert setAlertStyle:NSInformationalAlertStyle];
+    [t_alert runModal];
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 static void display_reconfiguration_callback(CGDirectDisplayID display, CGDisplayChangeSummaryFlags flags, void *userInfo)
 {
 	// COCOA-TODO: Make this is a little more discerning (only need to reset if
@@ -1959,7 +2018,10 @@ static void display_reconfiguration_callback(CGDirectDisplayID display, CGDispla
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int main(int argc, char *argv[], char *envp[])
+extern "C" bool MCModulesInitialize(void);
+extern "C" void MCModulesFinalize(void);
+
+int platform_main(int argc, char *argv[], char *envp[])
 {
 	extern bool MCS_mac_elevation_bootstrap_main(int argc, char* argv[]);
 	if (argc == 2 && strcmp(argv[1], "-elevated-slave") == 0)
@@ -1978,10 +2040,10 @@ int main(int argc, char *argv[], char *envp[])
 	// Register for reconfigurations.
 	CGDisplayRegisterReconfigurationCallback(display_reconfiguration_callback, nil);
     
-	
-	if (!MCInitialize())
+	if (!MCInitialize() || !MCSInitialize() ||
+	    !MCModulesInitialize() || !MCScriptInitialize())
 		exit(-1);
-	
+    
 	// On OSX, argv and envp are encoded as UTF8
 	MCStringRef *t_new_argv;
 	/* UNCHECKED */ MCMemoryNewArray(argc, t_new_argv);
@@ -2030,6 +2092,8 @@ int main(int argc, char *argv[], char *envp[])
 	// Drain the autorelease pool.
 	[t_pool release];
 	
+    MCScriptFinalize();
+    MCModulesFinalize();
 	MCFinalize();
 	
 	return 0;

@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -23,7 +23,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "mcio.h"
 
 #include "mcerror.h"
-//#include "execpt.h"
+
 #include "exec.h"
 #include "player.h"
 #include "osspec.h"
@@ -144,20 +144,14 @@ real8 IO_cleansockets(real8 ctime)
 	while (i < MCnsockets)
 		if (!MCsockets[i]->waiting && MCsockets[i]->fd == 0
 			&& MCsockets[i]->nread == 0 && MCsockets[i]->resolve_state != kMCSocketStateResolving)
-		{
-			delete MCsockets[i];
-			uint2 j = i;
-			while (++j < MCnsockets)
-				MCsockets[j - 1] = MCsockets[j];
-			MCnsockets--;
-		}
+            MCSocketsRemoveFromSocketList(i);
 		else
 		{
 			MCSocket *s = MCsockets[i++];
 			if (!s->waiting && !s->accepting
-			        && (!s->connected && ctime > s->timeout
-			            || s->wevents != NULL && ctime > s->wevents->timeout
-			            || s->revents != NULL && ctime > s->revents->timeout))
+			    && ((!s->connected && ctime > s->timeout)
+			        || (s->wevents != NULL && ctime > s->wevents->timeout)
+			        || (s->revents != NULL && ctime > s->revents->timeout)))
 			{
 				if (!s->connected)
 					s->timeout = ctime  + MCsockettimeout;
@@ -197,13 +191,7 @@ void IO_freeobject(MCObject *o)
 	}
 #else
 		if (MCsockets[i]->object == o)
-		{
-			delete MCsockets[i];
-			uint2 j = i;
-			while (++j < MCnsockets)
-				MCsockets[j - 1] = MCsockets[j];
-			MCnsockets--;
-		}
+            MCSocketsRemoveFromSocketList(i);
 		else
 			i++;
 #endif
@@ -451,7 +439,8 @@ IO_stat IO_read_string_legacy_full(char *&r_string, uint32_t &r_length, IO_handl
 	if (t_bytes != 0)
 	{
 		t_length = p_includes_null ? t_bytes - 1 : t_bytes;
-		/* UNCHECKED */ t_string = new char[t_bytes];
+		if (!MCMemoryAllocate(t_bytes, t_string))
+			return IO_ERROR;
 		stat = MCStackSecurityRead(t_string, t_length, p_stream);
 		if (stat == IO_NORMAL && p_includes_null)
 			stat = IO_read_uint1((uint1*)t_string + t_length, p_stream);
@@ -686,7 +675,7 @@ IO_stat IO_read_stringref_legacy(MCStringRef& r_string, IO_handle p_stream, bool
 	
 	if (!MCStringCreateWithBytesAndRelease((byte_t *)t_bytes, t_length, t_encoding, false, r_string))
 	{
-		delete t_bytes;
+		MCMemoryDeallocate(t_bytes);
 		return IO_ERROR;
 	}
 	
@@ -704,14 +693,15 @@ IO_stat IO_read_stringref_new(MCStringRef& r_string, IO_handle p_stream, bool p_
 	if (IO_read_uint2or4(&t_length, p_stream) != IO_NORMAL)
 		return IO_ERROR;
 	
-	MCAutoPointer<char> t_utf8_string;
-	if (!MCMemoryNewArray(t_length, &t_utf8_string))
+	MCAutoArray<byte_t> t_utf8_string;
+	if (!t_utf8_string.New(t_length))
 		return IO_ERROR;
 	
-	if (MCStackSecurityRead(*t_utf8_string, t_length, p_stream) != IO_NORMAL)
+	if (MCStackSecurityRead(reinterpret_cast<char *>(t_utf8_string.Ptr()),
+	                        t_length, p_stream) != IO_NORMAL)
 		return IO_ERROR;
 	
-	if (!MCStringCreateWithBytes((byte_t *)*t_utf8_string, t_length, kMCStringEncodingUTF8, false, r_string))
+	if (!MCStringCreateWithBytes(t_utf8_string.Ptr(), t_length, kMCStringEncodingUTF8, false, r_string))
 		return IO_ERROR;
 	
 	return IO_NORMAL;
@@ -738,15 +728,14 @@ IO_stat IO_write_stringref_new(MCStringRef p_string, IO_handle p_stream, bool p_
 	if (!p_supports_unicode)
 		return IO_write_stringref_legacy(p_string, p_stream, false, p_size);
 	
-	MCAutoPointer<char> t_utf8_string;
-	uindex_t t_utf8_string_length;
-	if (!MCStringConvertToUTF8(p_string, &t_utf8_string, t_utf8_string_length))
+	MCAutoStringRefAsUTF8String t_utf8_string;
+	if (!t_utf8_string.Lock(p_string))
 		return IO_ERROR;
 	
-	if (IO_write_uint2or4(t_utf8_string_length, p_stream) != IO_NORMAL)
+	if (IO_write_uint2or4(t_utf8_string.Size(), p_stream) != IO_NORMAL)
 		return IO_ERROR;
 	
-	if (MCStackSecurityWrite(*t_utf8_string, t_utf8_string_length, p_stream) != IO_NORMAL)
+	if (MCStackSecurityWrite(*t_utf8_string, t_utf8_string.Size(), p_stream) != IO_NORMAL)
 		return IO_ERROR;
 		
 	return IO_NORMAL;
@@ -836,6 +825,8 @@ enum
 	IO_VALUEREF_ARRAY_EMPTY,
 	IO_VALUEREF_ARRAY_SEQUENCE,
 	IO_VALUEREF_ARRAY_MAP,
+    IO_VALUEREF_LIST_EMPTY,
+    IO_VALUEREF_LIST_ANY,
 };
 
 IO_stat IO_write_valueref_new(MCValueRef p_value, IO_handle p_stream)
@@ -933,6 +924,23 @@ IO_stat IO_write_valueref_new(MCValueRef p_value, IO_handle p_stream)
 			}
 		}	
 		break;
+        case kMCValueTypeCodeProperList:
+        {
+            if (MCProperListIsEmpty((MCProperListRef)p_value))
+                t_stat = IO_write_uint1(IO_VALUEREF_LIST_EMPTY, p_stream);
+            else
+            {
+				t_stat = IO_write_uint1(IO_VALUEREF_LIST_ANY, p_stream);
+				if (t_stat == IO_NORMAL)
+					t_stat = IO_write_uint4(MCProperListGetLength((MCProperListRef)p_value), p_stream);
+				for(uindex_t i = 0; t_stat == IO_NORMAL && i < MCProperListGetLength((MCProperListRef)p_value); i++)
+				{
+					if (t_stat == IO_NORMAL)
+						t_stat = IO_write_valueref_new(MCProperListFetchElementAtIndex((MCProperListRef)p_value, i), p_stream);
+				}
+            }
+        }
+        break;
 		default:
             MCAssert(false);
 			return IO_ERROR;
@@ -1090,7 +1098,43 @@ IO_stat IO_read_valueref_new(MCValueRef& r_value, IO_handle p_stream)
 					t_mutable_array != nil)
 					MCValueRelease(t_mutable_array);
 			}
-			break;
+            break;
+			case IO_VALUEREF_LIST_EMPTY:
+				r_value = MCValueRetain(kMCEmptyProperList);
+				break;
+			case IO_VALUEREF_LIST_ANY:
+			{
+				MCProperListRef t_mutable_list;
+				t_mutable_list = nil;
+				if (!MCProperListCreateMutable(t_mutable_list))
+					t_stat = IO_ERROR;
+                
+				uint4 t_length;
+				if (t_stat == IO_NORMAL)
+					t_stat = IO_read_uint4(&t_length, p_stream);
+				for(uindex_t i = 0; t_stat == IO_NORMAL && i < t_length; i++)
+				{
+					MCValueRef t_element;
+					t_element = nil;
+					
+					t_stat = IO_read_valueref_new(t_element, p_stream);
+					if (t_stat == IO_NORMAL &&
+						!MCProperListPushElementOntoBack(t_mutable_list, t_element))
+						t_stat = IO_ERROR;
+					
+					if (t_element != nil)
+						MCValueRelease(t_element);
+				}
+				
+				if (t_stat == IO_NORMAL &&
+					!MCProperListCopyAndRelease(t_mutable_list, (MCProperListRef&)r_value))
+					t_stat = IO_ERROR;
+				
+				if (t_stat == IO_ERROR &&
+					t_mutable_list != nil)
+					MCValueRelease(t_mutable_list);
+			}
+            break;
             // AL-2014-08-04: [[ Bug 13056 ]] Return IO_ERROR if we don't read a valid type
             default:
                 return IO_ERROR;

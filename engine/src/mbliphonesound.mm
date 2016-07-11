@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -22,7 +22,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "parsedef.h"
 
 #include "mcerror.h"
-//#include "execpt.h"
+
 #include "printer.h"
 #include "globals.h"
 #include "dispatch.h"
@@ -62,10 +62,7 @@ public:
         m_media = MCValueRetain(p_media);
 	}
     
-    ~MCFinishedPlayingSound()
-    {
-        MCValueRelease(m_media);
-    }
+    // PM-2015-01-29 [[ Bug 14463 ]] Removed ~MCFinishedPlayingSound() code, since it caused over-releasing of m_media and crash
     
 	void Destroy(void)
 	{
@@ -85,7 +82,7 @@ void MCIHandleFinishedPlayingSound(MCStringRef p_payload)
 }
 
 // HC-2011-10-20 [[ Media Picker ]] Added functionality to access iPod by accessing the AVFoundation.
-@interface MCSoundPlayerDelegate: NSObject
+@interface com_runrev_livecode_MCSoundPlayerDelegate: NSObject
 {
     AVAsset *m_asset;
 	AVPlayer *m_player;
@@ -102,7 +99,7 @@ void MCIHandleFinishedPlayingSound(MCStringRef p_payload)
 - (void)dealloc;
 @end
 
-static MCSoundPlayerDelegate *s_sound_player_delegate = nil;
+static com_runrev_livecode_MCSoundPlayerDelegate *s_sound_player_delegate = nil;
 static float s_sound_loudness = 1.0;
 static MCStringRef s_sound_file = nil;
 
@@ -118,14 +115,19 @@ bool MCSystemSoundFinalize()
 	return true;
 }
 
-@implementation MCSoundPlayerDelegate
+@implementation com_runrev_livecode_MCSoundPlayerDelegate
 
 -(id)init
 {
-    m_asset = nil;
-	m_player = nil;
-	m_player_item = nil;
-    m_looping = false;
+    if (self = [super init])
+    {
+        m_asset = nil;
+        m_player = nil;
+        m_player_item = nil;
+        m_looping = false;
+    }
+    
+    return self;
 }
 
 -(void)cleanUp
@@ -332,7 +334,7 @@ bool MCSystemPlaySound(MCStringRef p_sound, bool p_looping)
     if (t_success)
     { 
 		MCIPhoneRunBlockOnMainFiber(^(void) {
-			s_sound_player_delegate = [MCSoundPlayerDelegate alloc];
+			s_sound_player_delegate = [com_runrev_livecode_MCSoundPlayerDelegate alloc];
 			[s_sound_player_delegate init];
 			*t_success_ptr = [s_sound_player_delegate playSound:t_url looping: p_looping];
 		});
@@ -359,7 +361,7 @@ void MCSystemGetPlayingSound(MCStringRef &r_sound)
 
 struct MCSystemSoundChannel;
 
-@interface MCSystemSoundChannelDelegate : NSObject <AVAudioPlayerDelegate>
+@interface com_runrev_livecode_MCSystemSoundChannelDelegate : NSObject <AVAudioPlayerDelegate>
 {
 	MCSystemSoundChannel *m_channel;
 }
@@ -373,14 +375,14 @@ struct MCSystemSoundPlayer
 {
 	MCStringRef sound;
 	AVAudioPlayer *player;
-	MCObjectHandle *object;
+	MCObjectHandle object;
 };
 
 struct MCSystemSoundChannel
 {
 	MCSystemSoundChannel *next;
 	MCStringRef name;
-	MCSystemSoundChannelDelegate *delegate;
+	com_runrev_livecode_MCSystemSoundChannelDelegate *delegate;
 	MCSystemSoundPlayer current_player;
 	MCSystemSoundPlayer next_player;
 	bool paused;
@@ -396,7 +398,6 @@ static void delete_player_on_channel(MCSystemSoundChannel *p_channel, MCSystemSo
 	[x_player . player release];
 	x_player . player = nil;
 	MCValueRelease(x_player.sound);
-	x_player . object -> Release();
 	x_player . object = nil;
 }
 
@@ -412,7 +413,7 @@ static void delete_sound_channel(MCSystemSoundChannel *p_channel)
 	
 	[p_channel -> delegate release];
 	MCValueRelease(p_channel -> name);
-	MCMemoryDelete(p_channel);
+	MCMemoryDestroy(p_channel);
 }
 
 static bool new_sound_channel(MCStringRef p_channel, MCSystemSoundChannel*& r_channel)
@@ -423,14 +424,14 @@ static bool new_sound_channel(MCStringRef p_channel, MCSystemSoundChannel*& r_ch
 	MCSystemSoundChannel *t_channel;
 	t_channel = nil;
 	if (t_success)
-		t_success = MCMemoryNew(t_channel);
+		t_success = MCMemoryCreate(t_channel);
 	
 	if (t_success)
 		t_channel->name = MCValueRetain(p_channel);
 	
 	if (t_success)
 	{
-		t_channel -> delegate = [[MCSystemSoundChannelDelegate alloc] initWithSoundChannel: t_channel];
+		t_channel -> delegate = [[com_runrev_livecode_MCSystemSoundChannelDelegate alloc] initWithSoundChannel: t_channel];
 		if (t_channel -> delegate == nil)
 			t_success = false;
 	}
@@ -465,7 +466,7 @@ static bool find_sound_channel(MCStringRef p_channel, bool p_create, MCSystemSou
 	return false;
 }
 
-static bool new_player_for_channel(MCSystemSoundChannel *p_channel, MCStringRef p_file, bool p_looping, MCObjectHandle *p_object, MCSystemSoundPlayer& x_player)
+static bool new_player_for_channel(MCSystemSoundChannel *p_channel, MCStringRef p_file, bool p_looping, MCObjectHandle p_object, MCSystemSoundPlayer& x_player)
 {
 	MCStringRef t_resolved_file = nil;
 	/* UNCHECKED */ MCS_resolvepath(p_file, t_resolved_file);
@@ -498,8 +499,7 @@ static bool new_player_for_channel(MCSystemSoundChannel *p_channel, MCStringRef 
 	return true;
 }
 
-// MM-2012-02-11: Refactored to take a MCObjectHandle * rather than MCObject.
-bool MCSystemPlaySoundOnChannel(MCStringRef p_channel, MCStringRef p_file, MCSoundChannelPlayType p_type, MCObjectHandle *p_object)
+bool MCSystemPlaySoundOnChannel(MCStringRef p_channel, MCStringRef p_file, MCSoundChannelPlayType p_type, MCObjectHandle p_object)
 {
 	MCSystemSoundChannel *t_channel;
 	if (!find_sound_channel(p_channel, true, t_channel))
@@ -717,9 +717,9 @@ bool MCSystemListSoundChannels(MCStringRef& r_channels)
 	return t_elementsfound;
 }
 
-extern void MCSoundPostSoundFinishedOnChannelMessage(MCStringRef p_channel, MCStringRef p_sound, MCObjectHandle *p_object);
+extern void MCSoundPostSoundFinishedOnChannelMessage(MCStringRef p_channel, MCStringRef p_sound, MCObjectHandle p_object);
 
-@implementation MCSystemSoundChannelDelegate
+@implementation com_runrev_livecode_MCSystemSoundChannelDelegate
 
 - (id)initWithSoundChannel: (MCSystemSoundChannel *)channel
 {
@@ -739,7 +739,9 @@ extern void MCSoundPostSoundFinishedOnChannelMessage(MCStringRef p_channel, MCSt
 	if (m_channel -> next_player . player != nil)
 	{
 		m_channel -> current_player = m_channel -> next_player;
-		MCMemoryClear(&m_channel -> next_player, sizeof(MCSystemSoundPlayer));
+        
+        // Re-initialise the sound player struct
+        MCMemoryReinit(m_channel->next_player);
 	}
 }
 

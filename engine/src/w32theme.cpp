@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -26,13 +26,12 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "util.h"
 #include "globals.h"
 #include "osspec.h"
-//#include "execpt.h"
+
 #include "context.h"
 #include "button.h"
 
 #include "w32dc.h"
 #include "w32theme.h"
-#include "w32context.h"
 
 #include "exec.h"
 #include "graphics_util.h"
@@ -278,9 +277,10 @@ Boolean MCNativeTheme::load()
 
         MCAutoStringRef t_type, t_error, t_string_value;
         MCAutoValueRef t_value;
-        if (MCS_query_registry(MCSTR(menucolorsregs[i]), &t_value, &t_type, &t_error) &&
-            ctxt . ConvertToMutableString(*t_value, &t_string_value) &&
-            MCStringFindAndReplaceChar(*t_string_value, ' ', ',', kMCCompareExact))
+        if (MCS_query_registry(MCSTR(menucolorsregs[i]), &t_value, &t_type, &t_error)
+            && *t_value != nil
+            && ctxt . ConvertToMutableString(*t_value, &t_string_value)
+            && MCStringFindAndReplaceChar(*t_string_value, ' ', ',', kMCCompareExact))
 		{
 			/* UNCHECKED */ MCStringCopy(*t_string_value, menucolors[i]);
 		}
@@ -1610,9 +1610,6 @@ bool MCNativeTheme::settooltiptextcolor(MCContext *p_context)
 	t_color . red = 64;
 	t_color . green = 64;
 	t_color . blue = 64;
-	t_color . pad = 0;
-	t_color . pixel = (64 << 16) | (64 << 8) | (64);
-	t_color . flags = 8;
 	p_context -> setforeground(t_color);
 
 	return true;

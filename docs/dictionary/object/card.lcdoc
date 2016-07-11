@@ -1,0 +1,35 @@
+Name: card
+
+Type: object
+
+Syntax: card
+
+Summary: An <object type> that is a single page of a <stack>.
+
+Synonyms: cd
+
+Introduced: 1.0
+
+OS: mac,windows,linux,ios,android
+
+Platforms: desktop,server,web,mobile
+
+Example:
+go to first card
+
+Example:
+set the marked of this card to true
+
+Description:
+Use the <card> <object type> to display different sets of 
+<control|controls> in the same <stack window>.
+
+A card corresponds to a single page of a stack: one card of each stack 
+can be seen at a time. Each stack contains one or more cards.
+
+Cards are contained in stacks, and may contain any kind of control.
+
+References: templateCard (keyword), stack window (glossary), 
+object type (glossary), stack (object), control (object)
+
+Tags: objects

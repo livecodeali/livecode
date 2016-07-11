@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -33,6 +33,7 @@ class MCGraphic;
 class MCEditTool
 {
 public:
+	virtual ~MCEditTool(void) {};
 	virtual bool mdown(int2 x, int2 y, uint2 which) = 0;
 	virtual bool mfocus(int2 x, int2 y) = 0;
 	virtual bool mup(int2 x, int2 y, uint2 which) = 0;

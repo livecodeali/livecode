@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -19,7 +19,7 @@
 #include "objdefs.h"
 #include "parsedef.h"
 
-#include "execpt.h"
+
 #include "player.h"
 #include "util.h"
 #include "osspec.h"
@@ -29,7 +29,6 @@
 #include "platform.h"
 #include "platform-internal.h"
 
-#include "mac-player.h"
 #include "variable.h"
 
 ////////////////////////////////////////////////////////////////////////////////

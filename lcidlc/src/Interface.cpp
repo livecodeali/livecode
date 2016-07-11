@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -67,6 +67,7 @@ static const char *s_interface_native_types[] =
 	"boolean",
 	"c-string",
 	"c-data",
+	"lc-array",
 	"utf8-c-string",
 	"utf8-c-data",
     "utf16-c-string",
@@ -87,6 +88,17 @@ static const char *s_interface_native_types[] =
 	"cf-dictionary",*/
 	
 	nil
+};
+
+static const char *s_interface_mapped_types[] =
+{
+    "string",
+    "number",
+    "data",
+    "array",
+    "dictionary",
+    
+    nil
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -152,6 +164,7 @@ static bool InterfaceReport(InterfaceRef self, Position p_where, InterfaceError 
 		break;
 	case kInterfaceErrorJavaImpliesInParam:
 		fprintf(stderr, "Java mapped methods can only have 'in' parameters\n");
+        break;
 	case kInterfaceErrorUnknownHandlerMapping:
 		fprintf(stderr, "Unknown handler mapping type '%s'\n", StringGetCStringPtr(NameGetString((NameRef)p_hint)));
 		break;
@@ -179,8 +192,12 @@ static void InterfaceCheckType(InterfaceRef self, Position p_where, NameRef p_ty
 	for(uint32_t i = 0; s_interface_native_types[i] != nil; i++)
 		if (NameEqualToCString(p_type, s_interface_native_types[i]))
 			return;
-			
-	for(uint32_t i = 0; i < self -> enum_count; i++)
+    
+    for(uint32_t i = 0; s_interface_mapped_types[i] != nil; i++)
+        if (NameEqualToCString(p_type, s_interface_mapped_types[i]))
+            return;
+    
+    for(uint32_t i = 0; i < self -> enum_count; i++)
 		if (NameEqual(self -> enums[i] . name, p_type))
 			return;
 			
@@ -533,6 +550,7 @@ bool InterfaceDefineHandlerParameter(InterfaceRef self, Position p_where, Parame
 	// RULE: default values not supported for c-data, objc-data, objc-dictionary, objc-array types
 	if (p_optional && p_default != nil &&
 		(t_native_type == kNativeTypeCData ||
+         t_native_type == kNativeTypeLCArray ||
          t_native_type == kNativeTypeObjcData ||
          t_native_type == kNativeTypeObjcArray ||
          t_native_type == kNativeTypeObjcDictionary))

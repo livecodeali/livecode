@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -162,6 +162,7 @@ void hcstat_append(const char *msg, ...)
 	va_start(t_args, msg);
 	MCAutoStringRef t_new_line;
 	/* UNCHECKED */ MCStringFormatV(&t_new_line, msg, t_args);
+	va_end(t_args);
 	
 	// Turn the current MChcstat stringref into a mutable stringref
 	MCAutoStringRef t_mutable_hcstat;
@@ -272,7 +273,7 @@ static bool convert_hcbitmap_data(uint1 *sptr, uint2 width, uint2 height, uint8_
 					while (hrepcount--)
 						*dptr++ = patbytes[patindex];
 					hrepcount = bpl;
-					patindex = patindex + 1 & 0x7;
+					patindex = (patindex + 1) & 0x7;
 				}
 				break;
 			case 0x5:
@@ -548,23 +549,22 @@ static MCHcbutton *findbutton(MCHcbutton *blist, uint2 bid)
 
 MCHcsnd::MCHcsnd()
 {
-	name = NULL;
+    m_name = MCValueRetain(kMCEmptyName);
 	data = NULL;
 }
 
 MCHcsnd::~MCHcsnd()
 {
-	if (name != NULL)
-		delete name;
+    MCValueRelease(m_name);
 	if (data != NULL)
 		delete data;
 }
 
-Boolean MCHcsnd::import(uint4 inid, char *inname, char *sptr)
+Boolean MCHcsnd::import(uint4 inid, MCNameRef inname, char *sptr)
 {
 	id = inid;
 	maxid = MCU_max((uint4)id, maxid);
-	name = inname;
+    MCValueAssign(m_name, inname);
 	uint2 type = get_uint2(sptr);
 	uint2 hsize;
 	real8 baserate;
@@ -600,9 +600,7 @@ MCAudioClip *MCHcsnd::build()
 {
 	MCAudioClip *aptr = new MCAudioClip;
 	aptr->size = size;
-	aptr->setname_cstring(name);
-	delete name;
-	name = NULL;
+    aptr->setname(m_name);
 	aptr->samples = (int1 *)data;
 	data = NULL;
 	aptr->nchannels = 1;
@@ -1144,7 +1142,7 @@ MCControl *MCHcbutton::build(MCHcstak *hcsptr, MCStack *sptr)
 
 MCHcbmap::MCHcbmap()
 {
-	name = NULL;
+    m_name = MCValueRetain(kMCEmptyName);
 	mask = nil;
 	data = nil;
 	visible = True;
@@ -1153,7 +1151,7 @@ MCHcbmap::MCHcbmap()
 
 MCHcbmap::~MCHcbmap()
 {
-	delete name;
+    MCValueRelease(m_name);
 	if (data != nil)
 		MCMemoryDeleteArray(data);
 	if (mask != nil)
@@ -1165,10 +1163,10 @@ void MCHcbmap::setvisible(Boolean newvis)
 	visible = newvis;
 }
 
-void MCHcbmap::icon(uint4 inid, char *inname, char *sptr)
+void MCHcbmap::icon(uint4 inid, MCNameRef inname, char *sptr)
 {
 	id = inid;
-	name = inname;
+    MCValueAssign(m_name, inname);
 	rect.x = iconx;
 	rect.y = icony;
 	iconx += 32;
@@ -1182,10 +1180,10 @@ void MCHcbmap::icon(uint4 inid, char *inname, char *sptr)
 	/* UNCHECKED */ MCMemoryAllocateCopy((uint8_t*)sptr, 128, data);
 }
 
-void MCHcbmap::cursor(uint4 inid, char *inname, char *sptr)
+void MCHcbmap::cursor(uint4 inid, MCNameRef inname, char *sptr)
 {
 	id = inid;
-	name = inname;
+    MCValueAssign(m_name, inname);
 	rect.x = cursorx;
 	rect.y = cursory;
 	cursorx += 16;
@@ -1366,9 +1364,7 @@ MCControl *MCHcbmap::build()
 
 	mask = data = data2 = nil;
 
-	iptr->setname_cstring(name);
-	delete name;
-	name = NULL;
+	iptr->setname(m_name);
 	iptr->xhot = xhot;
 	iptr->yhot = yhot;
 	return iptr;
@@ -1480,7 +1476,7 @@ IO_stat MCHccard::parse(char *sptr)
 			else
 				offset += 3;
 		else
-			offset += (uint2ptr[(offset >> 1) + 1] + 1 & ~0x01) + 4;
+			offset += ((uint2ptr[(offset >> 1) + 1] + 1) & ~0x01) + 4;
 	}
 
 	if (sptr[offset])
@@ -1694,7 +1690,7 @@ IO_stat MCHcbkgd::parse(char *sptr)
 			else
 				offset += 3;
 		else
-			offset += (uint2ptr[(offset >> 1) + 1] + 1 & ~0x01) + 4;
+			offset += ((uint2ptr[(offset >> 1) + 1] + 1) & ~0x01) + 4;
 	}
 
 	if (sptr[offset])
@@ -2068,7 +2064,7 @@ IO_stat MCHcstak::read(IO_handle stream)
 
 				toffset += 10;
 				roffset = uint1ptr[toffset] << 24 | uint1ptr[toffset + 1] << 16
-				          | uint1ptr[toffset + 2] << 8 | uint1ptr[toffset + 3] + 2;
+					| uint1ptr[toffset + 2] << 8 | (uint1ptr[toffset + 3] + 2);
 				toffset += 4;
 				rsize = uint1ptr[toffset] << 24 | uint1ptr[toffset + 1] << 16
 				        | uint1ptr[toffset + 2] << 8 | uint1ptr[toffset + 3];
@@ -2245,16 +2241,17 @@ IO_stat MCHcstak::read(IO_handle stream)
 		{
 			uint2 id = get_uint2(objects);
 			uint2 soffset = get_uint2(&objects[2]);
-			char *tname;
-			if (soffset == MAXUINT2)
-				tname = MCU_empty();
-			else
-			{
-				uint2 length = strings[soffset];
-				tname = new char[length + 1];
-				strncpy(tname, &strings[soffset + 1], length);
-				tname[length] = '\0';
-			}
+            
+            MCNewAutoNameRef t_name;
+            if (soffset == UINT16_MAX)
+                t_name = kMCEmptyName;
+            else
+            {
+                MCAutoStringRef t_name_string;
+                /* UNCHECKED */ MCStringCreateWithPascalString((unsigned char*)&strings[soffset], &t_name_string);
+                /* UNCHECKED */ MCNameCreate(*t_name_string, &t_name);
+            }
+            
 			uint4 offset = get_uint4(&objects[4]);
 			offset &= 0xFFFFFF;
 			switch (type)
@@ -2263,20 +2260,20 @@ IO_stat MCHcstak::read(IO_handle stream)
 				{
 					MCHcbmap *newicon = new MCHcbmap;
 					newicon->appendto(icons);
-					newicon->icon(id, tname, &rdata[offset + 4]);
+					newicon->icon(id, *t_name, &rdata[offset + 4]);
 				}
 				break;
 			case HC_CURS:
 				{
 					MCHcbmap *newcurs = new MCHcbmap;
 					newcurs->appendto(cursors);
-					newcurs->cursor(id, tname, &rdata[offset + 4]);
+					newcurs->cursor(id, *t_name, &rdata[offset + 4]);
 				}
 				break;
 			case HC_SND:
 				{
 					MCHcsnd *newsnd = new MCHcsnd;
-					if (newsnd->import(id, tname, &rdata[offset + 4]))
+					if (newsnd->import(id, *t_name, &rdata[offset + 4]))
 						newsnd->appendto(snds);
 					else
 						delete newsnd;
@@ -2284,8 +2281,7 @@ IO_stat MCHcstak::read(IO_handle stream)
 				break;
 			default:
 				hcstat_append("Not converting %4.4s id %5d \"%s\"",
-				        (char *)&type, id, tname);
-				delete tname;
+				        (char *)&type, id, MCNameGetCString(*t_name));
 				break;
 			}
 			objects += 12;

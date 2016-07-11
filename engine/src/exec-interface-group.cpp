@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -40,6 +40,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "scrolbar.h"
 
 #include "exec-interface.h"
+
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -162,6 +163,8 @@ void MCGroup::GetHilitedButton(MCExecContext& ctxt, uint32_t part, integer_t& r_
 {
 	if (controls != NULL)
 	{
+        bool t_found;
+        t_found = false;
 		MCControl *cptr = controls;
 		uint2 which = 1;
 		do
@@ -171,13 +174,17 @@ void MCGroup::GetHilitedButton(MCExecContext& ctxt, uint32_t part, integer_t& r_
 				MCButton *bptr = (MCButton *)cptr;
 				if (!(mgrabbed == True && cptr == mfocused)
 				        && bptr->gethilite(part))
+                {
+                    t_found = true;
 					break;
+                }
 				which++;
 			}
 			cptr = cptr->next();
 		}
 		while (cptr != controls);
-		r_button = (integer_t)which;
+        // PM-2014-12-08: [[ Bug 14170 ]] Return 0 in case there is no hilitedButton
+		r_button = (t_found ? (integer_t)which : 0);
 	}
 	else
 		r_button = 0;
@@ -221,7 +228,7 @@ void MCGroup::SetHilitedButtonId(MCExecContext& ctxt, uint32_t part, integer_t p
 			if (cptr->gettype() == CT_BUTTON)
 			{
 				MCButton *bptr = (MCButton *)cptr;
-				bptr->resethilite(part, p_id == bptr->getid());
+				bptr->resethilite(part, p_id == (integer_t) bptr->getid());
 			}
 			cptr = (MCControl *)cptr->next();
 		}
@@ -726,7 +733,10 @@ void MCGroup::GetPropList(MCExecContext& ctxt, Properties which, uint32_t part_i
                     static_cast<MCGroup *>(t_object) -> GetControlIds(ctxt, part_id, &t_group_props);
                 else
                     static_cast<MCGroup *>(t_object) -> GetControlNames(ctxt, part_id, &t_group_props);
-                t_success = MCListAppend(*t_prop_list, *t_group_props);
+                
+                // MERG-2013-11-03: [[ ChildControlProps ]] Handle empty groups
+                if (!MCStringIsEmpty(*t_group_props))
+                    t_success = MCListAppend(*t_prop_list, *t_group_props);
             }
             
             t_object = t_object -> next();
@@ -789,4 +799,23 @@ void MCGroup::SetClipsToRect(MCExecContext& ctxt, bool p_clips_to_rect)
 void MCGroup::GetClipsToRect(MCExecContext& ctxt, bool& r_clips_to_rect)
 {
     r_clips_to_rect = m_clips_to_rect;
+}
+
+// PM-2015-07-02: [[ Bug 13262 ]] Make sure we attach/detach the player when
+//  showing/hiding a group that has a player
+void MCGroup::SetVisible(MCExecContext &ctxt, uinteger_t part, bool setting)
+{
+	MCControl::SetVisible(ctxt, part, setting);
+#ifdef PLATFORM_PLAYER
+	for(MCPlayer *t_player = MCplayers; t_player != nil; t_player = t_player -> getnextplayer())
+	{
+		if (t_player -> getparent() == this)
+		{
+			if (setting)
+				t_player -> attachplayer();
+			else
+				t_player -> detachplayer();
+		}
+	}
+#endif
 }

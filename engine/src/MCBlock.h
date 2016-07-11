@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -80,7 +80,7 @@ public:
 	MCBlock(const MCBlock &bref);
 	~MCBlock();
 
-	bool visit(MCVisitStyle p_style, uint32_t p_part, MCObjectVisitor *p_visitor);
+	bool visit(MCObjectVisitorOptions p_options, uint32_t p_part, MCObjectVisitor* p_visitor);
 
 	// MCBlock functions
 	void copy(MCBlock *bptr);
@@ -88,7 +88,7 @@ public:
 	// MW-2012-03-04: [[ StackFile5500 ]] If 'is_ext' is true then this block has
 	//   an extension style attribute section.
 	IO_stat load(IO_handle stream, uint32_t version, bool is_ext);
-	IO_stat save(IO_handle stream, uint4 p_part);
+	IO_stat save(IO_handle stream, uint4 p_part, uint32_t p_version);
 
 	// MW-2012-02-14: [[ FontRefs ]] To open a block, we need the parent's fontref.
 	void open(MCFontRef parent_font);
@@ -146,11 +146,8 @@ public:
 	void importattrs(const MCFieldCharacterStyle& x_style);
 	
 	// MW-2012-03-04: [[ StackFile5500 ]] Measure the size of the serialized attributes.
-	uint32_t measureattrs(void);
+	uint32_t measureattrs(uint32_t p_version);
 
-#ifdef LEGACY_EXEC
-	void setatts(Properties which, void *value);
-#endif
 	Boolean getshift(int2 &out);
 	void setshift(int2 in);
 	Boolean getcolor(const MCColor *&color);
@@ -169,8 +166,9 @@ public:
 	coord_t getsubwidth(MCDC *dc, coord_t x, findex_t i, findex_t l);
 	coord_t getwidth(MCDC *dc, coord_t x);
 	void reset();
-	uint2 getascent(void);
-	uint2 getdescent(void);
+    coord_t GetAscent() const;
+    coord_t GetDescent() const;
+    coord_t GetLeading() const;
 	void freeatts();
 	void freerefs();
 	void openimage();
@@ -380,6 +378,12 @@ public:
 		return flags & F_HAS_UNICODE;
 	}
     
+    // Returns true if the block has a trailing tab character.
+    bool HasTrailingTab(void) const
+    {
+        return m_size != 0 && GetCodepointAtIndex(m_size - 1) == '\t';
+    }
+    
     //////////
 
     void GetLinkText(MCExecContext& ctxt, MCStringRef& r_linktext);
@@ -389,6 +393,8 @@ public:
     void GetImageSource(MCExecContext& ctxt, MCStringRef &r_image_source);
     void SetImageSource(MCExecContext& ctxt, MCStringRef p_image_source);
     void GetVisited(MCExecContext& ctxt, bool& r_value);
+	// PM-2015-07-06: [[ Bug 15577 ]] "visited" property should be RW
+	void SetVisited(MCExecContext& ctxt, bool p_value);
     void GetFlagged(MCExecContext& ctxt, bool &r_value);
     void SetFlagged(MCExecContext& ctxt, bool p_value);
 
@@ -412,5 +418,11 @@ public:
     void SetTextStyleElement(MCExecContext& ctxt, MCNameRef p_index, bool p_value);
 
     //////////
+
+    // FG-2014-11-11: [[ Better theming ]]
+    // Sets up the colours on the DC for the given type of drawing
+    void setcolorfornormaltext(MCDC*, MCColor*);
+    void setcolorforhilite(MCDC*);
+    void setcolorforselectedtext(MCDC*, MCColor*);
 };
 #endif

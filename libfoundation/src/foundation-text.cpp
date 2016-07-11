@@ -1,4 +1,4 @@
-/* Copyright (C) 2014 Runtime Revolution Ltd.
+/* Copyright (C) 2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -191,7 +191,7 @@ uindex_t MCTextFilter_DecodeNative::GetMarkedLength() const
 }
 
 MCTextFilter_DecodeNative::MCTextFilter_DecodeNative(const char_t *p_text, uindex_t p_length, bool p_from_end)
-: m_AcceptedIndex(-1), m_ReadIndex(0), m_Data(p_text), m_DataLength(p_length), m_Reverse(p_from_end)
+: m_Data(p_text), m_DataLength(p_length), m_AcceptedIndex(-1), m_ReadIndex(0), m_Reverse(p_from_end)
 {
     ;
 }
@@ -309,7 +309,7 @@ codepoint_t MCTextFilter_NormalizeNFC::GetNextCodepoint()
     MCMemoryCopy(m_State, t_norm, t_norm_length * sizeof(unichar_t));
     m_StateLength = t_norm_length;
     m_ReadIndex = 0;
-    delete[] t_norm;
+	free (t_norm);
     
     // All done
     if (m_State[0] > 0xD800 && m_State[0] < 0xDBFF)
@@ -397,7 +397,7 @@ codepoint_t MCTextFilter_NormalizeNFC::GetNextCodepointReverse()
         m_State[kMCTextFilterMaxNormLength - t_norm_length--] = t_norm[i++];
     m_StateLength = i;
     m_ReadIndex = 0;
-    delete[] t_norm;
+	free (t_norm);
     
     // All done
     if (m_StateLength > 1 && m_State[kMCTextFilterMaxNormLength - 2] > 0xD800 && m_State[kMCTextFilterMaxNormLength - 2] < 0xDBFF)

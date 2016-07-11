@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -22,7 +22,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "objdefs.h"
 #include "mcio.h"
 
-//#include "execpt.h"
+
 #include "mcerror.h"
 #include "ans.h"
 #include "stack.h"
@@ -40,6 +40,13 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "malloc.h"
 
 #include <strsafe.h>
+
+// We need the Vista versions of the shell headers
+#undef NTDDI_VERSION
+#define NTDDI_VERSION NTDDI_VISTA
+#include <shobjidl.h>
+#include <shlobj.h>
+#include <shlwapi.h>
 
 extern void MCRemoteFileDialog(MCStringRef p_title, MCStringRef p_prompt, MCStringRef *p_types, uint32_t p_type_count, MCStringRef p_initial_folder, MCStringRef p_initial_file, bool p_save, bool p_files, MCStringRef &r_value);
 extern void MCRemoteFolderDialog(MCStringRef p_title, MCStringRef p_prompt, MCStringRef p_initial, MCStringRef &r_value);
@@ -312,16 +319,18 @@ typedef HRESULT (WINAPI *SHCreateItemFromParsingNamePtr)(PCWSTR pszPath, IBindCt
 // In the case of an open dialog <p_initial> is a folder
 //
 
-void MCU_w32path2std(char *p_path)
+// SN-2015-03-13: [[ Bug 14611 ]] Update funtion to StringRefs
+bool MCU_w32path2std(MCStringRef p_path, MCStringRef &r_std_path)
 {
-	if (p_path == NULL || !*p_path)
-		return;
+	MCAutoStringRef t_std_path;
 
-	do 
-	{
-		if (*p_path == '\\')
-			*p_path = '/';
-	} while (*++p_path);
+	if (!MCStringMutableCopy(p_path, &t_std_path))
+		return false;
+
+	if (!MCStringFindAndReplaceChar(*t_std_path, '\\', '/', kMCStringOptionCompareExact))
+		return false;
+
+	return MCStringCopy(*t_std_path, r_std_path);
 }
 
 static int MCA_do_file_dialog(MCStringRef p_title, MCStringRef p_prompt, MCStringRef p_filter, MCStringRef p_initial, unsigned int p_options, MCStringRef &r_value, MCStringRef &r_result)
@@ -335,7 +344,14 @@ static int MCA_do_file_dialog(MCStringRef p_title, MCStringRef p_prompt, MCStrin
 	if (p_initial != nil && !MCStringIsEmpty(p_initial))
 	{
 		MCAutoStringRef t_fixed_path;
-		/* UNCHECKED */ MCU_fix_path(p_initial, &t_fixed_path);
+		MCAutoStringRef t_std_path;
+
+		// SN-2015-03-13: [[ Bug 14611 ]] Reinstate former behaviour, that is to 
+		//  fix backslash-delimited paths
+		if (!MCU_w32path2std(p_initial, &t_std_path))
+			return ERROR_OUTOFMEMORY;
+
+		/* UNCHECKED */ MCU_fix_path(*t_std_path, &t_fixed_path);
 
 		if (MCS_exists(*t_fixed_path, False))
 			t_initial_folder = *t_fixed_path;
@@ -905,7 +921,7 @@ int MCA_folder(MCStringRef p_title, MCStringRef p_prompt, MCStringRef p_initial,
 			MCValueRelease(s_last_folder);
 
 		size_t t_length;
-		/* UNCHECKED */ StringCchLength(t_buffer.Ptr(), t_buffer.Size(), &t_length);
+		/* UNCHECKED */ StringCchLengthW(t_buffer.Ptr(), t_buffer.Size(), &t_length);
 		/* UNCHECKED */ MCStringCreateWithChars(t_buffer.Ptr(), t_length, s_last_folder);
 
 		MCAutoStringRef t_std_path;
@@ -991,66 +1007,10 @@ bool MCA_color(MCStringRef p_title, MCColor p_initial_color, bool p_as_sheet, bo
 	return t_success;
 }
 
-#ifdef /* MCA_setdialogcolors */ LEGACY_EXEC
-void MCA_setcolordialogcolors(MCExecPoint& p_ep)
-{
-	const char * t_color_list;
-	t_color_list = p_ep.getcstring();
-    
-	if (t_color_list != NULL)
-	{
-		MCColor t_colors[16];
-		char *t_colornames[16];
-		int i;
-        
-		for (i = 0 ; i < 16 ; i++)
-			t_colornames[i] = NULL;
-        
-		MCscreen->parsecolors(t_color_list, t_colors, t_colornames, 16);
-        
-		for(i=0;i < 16;i++)
-		{
-			if (t_colors[i] . flags != 0)
-				s_colordialogcolors[i] = RGB(t_colors[i].red >> 8, t_colors[i].green >> 8,
-                                             t_colors[i].blue >> 8);
-			else
-				s_colordialogcolors[i] = NULL;
-            
-            delete t_colornames[i];
-		}
-        
-	}
-}
-#endif /* MCA_setdialogcolors */
-
-#ifdef /* MCA_getdialogcolors */ LEGACY_EXEC
-void MCA_getcolordialogcolors(MCExecPoint& p_ep)
-{
-	p_ep.clear();
-	MCExecPoint t_ep(p_ep);
-    
-	for(int i=0;i < 16;i++)
-	{
-		if (s_colordialogcolors[i] != 0)
-			t_ep.setcolor(GetRValue(s_colordialogcolors[i]), GetGValue(s_colordialogcolors[i]), GetBValue(s_colordialogcolors[i]));
-		else
-			t_ep.clear();
-        
-		p_ep.concatmcstring(t_ep.getsvalue(), EC_RETURN, i==0);
-	}
-}
-#endif /* MCA_getdialogcolors */
-
 void MCA_setcolordialogcolors(MCColor* p_colors, uindex_t p_count)
 {
     for(int i = 0; i < 16; i++)
-    {
-        if (p_colors[i] . flags != 0)
-            s_colordialogcolors[i] = RGB(p_colors[i] . red >> 8, p_colors[i] . green >> 8,
-                                             p_colors[i] . blue >> 8);
-        else
-            s_colordialogcolors[i] = NULL;
-	}
+		s_colordialogcolors[i] = RGB(p_colors[i] . red >> 8, p_colors[i] . green >> 8, p_colors[i] . blue >> 8);
 }
 
 void MCA_getcolordialogcolors(MCColor*& r_colors, uindex_t& r_count)
@@ -1059,20 +1019,11 @@ void MCA_getcolordialogcolors(MCColor*& r_colors, uindex_t& r_count)
     
 	for(int i = 0; i < 16; i++)
 	{
-        MCColor t_color;
-        if (s_colordialogcolors[i] != 0)
-        {
-            t_color . red = GetRValue(s_colordialogcolors[i]);
-            t_color . green = GetGValue(s_colordialogcolors[i]);
-            t_color . blue = GetBValue(s_colordialogcolors[i]);
-            t_color . flags = DoRed | DoGreen | DoBlue;
-            t_list . Push(t_color);
-        }
-		else
-        {
-            t_color . flags = 0;
-			t_list . Push(t_color);
-        }
+		MCColor t_color;
+		t_color . red = GetRValue(s_colordialogcolors[i]);
+		t_color . green = GetGValue(s_colordialogcolors[i]);
+		t_color . blue = GetBValue(s_colordialogcolors[i]);
+		t_list . Push(t_color);
 	}
     
     t_list . Take(r_colors, r_count);

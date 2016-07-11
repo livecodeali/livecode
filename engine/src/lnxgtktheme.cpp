@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -34,7 +34,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "lnxgtkthemedrawing.h"
 #include "lnxtheme.h"
 #include "lnximagecache.h"
-#include "systhreads.h"
 
 #include <gdk/gdkx.h>
 #include <gtk/gtk.h>
@@ -275,9 +274,6 @@ static int4 getscrollbarmintracksize()
 	minrect.width = troughBorder * 2 + sliderWidth;
 	minrect.height = stepperSize * n_steppers + stepperSpacing * 2 + troughBorder * 2 + slider_length;
 	int stepper_width = minrect.width;
-	int stepper_height = 0;
-	if(n_steppers > 0)
-		stepper_height = MIN(stepperSize, (minrect.height / n_steppers));
 	if(stepper_width < 1)
 		stepper_width = minrect.width;
 	return stepper_width;
@@ -310,13 +306,11 @@ Boolean MCNativeTheme::load()
 		MCColor tbackcolor;
 		moz_gtk_get_widget_color(GTK_STATE_NORMAL,
 		                         tbackcolor.red,tbackcolor.green,tbackcolor.blue) ;
-		MCscreen->alloccolor(tbackcolor);
 		MCscreen->background_pixel = tbackcolor;//tcolor = zcolor;
 		
 		// MW-2012-01-27: [[ Bug 9511 ]] Set the hilite color based on the current GTK theme.
 		MCColor thilitecolor;
 		moz_gtk_get_widget_color(GTK_STATE_SELECTED, thilitecolor.red, thilitecolor.green, thilitecolor.blue);
-		MCscreen -> alloccolor(thilitecolor);
 		MChilitecolor = thilitecolor;
 	}
 
@@ -659,7 +653,7 @@ void MCNativeTheme::getwidgetrect(const MCWidgetInfo &winfo,
 			gint xthickness,ythickness;
 			GtkThemeWidgetType  moztype;
 			gint flags = 0 ;
-			GtkWidgetState state = getpartandstate(winfo, moztype, flags);
+			getpartandstate(winfo, moztype, flags);
 			if (moz_gtk_get_widget_border(moztype, &xthickness,
 			                              &ythickness) == MOZ_GTK_SUCCESS)
 			{
@@ -822,13 +816,13 @@ Widget_Part MCNativeTheme::hittestcombobutton(const MCWidgetInfo &winfo,
 	const int btnWidth = getmetric(WTHEME_METRIC_COMBOSIZE);
 
 
-	MCRectangle btnRect = {	drect.x + (drect.width - btnWidth),
+	MCRectangle btnRect = {	int2(drect.x + (drect.width - btnWidth)),
 	                        drect.y,
-	                        btnWidth,
+	                        int2(btnWidth),
 	                        drect.height };
 	MCRectangle txtRect = { drect.x,
 	                        drect.y,
-	                        drect.width - btnWidth,
+	                        int2(drect.width - btnWidth),
 	                        drect.height };
 
 	if(MCU_point_in_rect(btnRect, mx, my))
@@ -992,7 +986,7 @@ int4 MCNativeTheme::getmetric(Widget_Metric wmetric)
 		return 0; //offset from x to tab pane to x of first tab
 		break;
 	case WTHEME_METRIC_TABNONSELECTEDOFFSET:
-		ret = 2;
+		ret = 1;
 		break;
 	case WTHEME_METRIC_TABOVERLAP:
 		ret = -1; // hardcoded
@@ -1010,32 +1004,22 @@ int4 MCNativeTheme::getmetric(Widget_Metric wmetric)
 	case WTHEME_METRIC_TRACKSIZE:
 		if ( gtktracksize == 0 )
         {
-            MCThreadMutexLock(MCthememutex);
             if (gtktracksize == 0)
                 gtktracksize = getscrollbarmintracksize();
-            MCThreadMutexUnlock(MCthememutex);
         }
 		return gtktracksize;
 		break;
 	case WTHEME_METRIC_CHECKBUTTON_INDICATORSIZE:
-        MCThreadMutexLock(MCthememutex);
         moz_gtk_checkbox_get_metrics(&ret, 0);
-        MCThreadMutexUnlock(MCthememutex);
 		break;
         case WTHEME_METRIC_CHECKBUTTON_INDICATORSPACING:
-        MCThreadMutexLock(MCthememutex);
         moz_gtk_checkbox_get_metrics(0, &ret);
-        MCThreadMutexUnlock(MCthememutex);
 		break;
         case WTHEME_METRIC_RADIOBUTTON_INDICATORSIZE:
-        MCThreadMutexLock(MCthememutex);
         moz_gtk_radiobutton_get_metrics(&ret, 0);
-        MCThreadMutexUnlock(MCthememutex);
 		break;
         case WTHEME_METRIC_RADIOBUTTON_INDICATORSPACING:
-        MCThreadMutexLock(MCthememutex);
         moz_gtk_radiobutton_get_metrics(0, &ret);
-        MCThreadMutexUnlock(MCthememutex);
 		break;
 	default:
 		break;
@@ -1565,9 +1549,6 @@ static GdkPixbuf* calc_alpha_from_pixbufs(GdkPixbuf *p_pb_black, GdkPixbuf *p_pb
 	uint8_t na;
 	int x, y;
 	
-	bool t_bad;
-	t_bad = false;
-	
 	for ( y = 0 ; y < t_h; y ++ )
 	{
 		for ( x = 0 ; x < t_w ; x++ )
@@ -1673,8 +1654,6 @@ bool MCThemeDraw(MCGContextRef p_context, MCThemeDrawType p_type, MCThemeDrawInf
 	MCXImageCacheNode *cache_node = NULL ;
 	GdkPixbuf* t_argb_image ;
 	bool t_cached ;
-	
-    MCThreadMutexLock(MCthememutex);
     
 	if ( ( p_info -> moztype != MOZ_GTK_CHECKBUTTON ) && ( p_info -> moztype != MOZ_GTK_RADIOBUTTON ) )
 		cache_node = MCimagecache -> find_cached_image ( p_info -> drect.width, p_info -> drect.height, p_info -> moztype, &p_info -> state, p_info -> flags ) ;
@@ -1708,10 +1687,8 @@ bool MCThemeDraw(MCGContextRef p_context, MCThemeDrawType p_type, MCThemeDrawInf
     // MM-2014-01-27: [[ UpdateImageFilters ]] Updated to use new libgraphics image filter types (was bilinear).
 	MCGContextDrawPixels(p_context, t_raster, t_dest, kMCGImageFilterMedium);
 	
-	if (!t_cached)
-		g_object_unref(t_argb_image);
-	
-    MCThreadMutexUnlock(MCthememutex);
+    if (!t_cached)
+        g_object_unref(t_argb_image);
     
 	return true;
 }

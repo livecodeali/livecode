@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -22,7 +22,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "parsedef.h"
 #include "mcio.h"
 
-//#include "execpt.h"
+
 #include "stack.h"
 #include "tooltip.h"
 #include "dispatch.h"
@@ -30,7 +30,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "vclip.h"
 #include "card.h"
 #include "objptr.h"
-#include "control.h"
+#include "mccontrol.h"
 #include "image.h"
 #include "player.h"
 #include "field.h"
@@ -112,8 +112,8 @@ void MCStack::checkdestroy()
 					}
 					while (sptr != substacks);
 				}
-				MCtodestroy->remove(this); // prevent duplicates
-				MCtodestroy->add(this);
+                MCtodestroy -> remove(this);
+                MCtodestroy -> add(this);
 			}
 	}
 	else if (!MCdispatcher -> is_transient_stack(this))
@@ -148,11 +148,6 @@ void MCStack::resize(uint2 oldw, uint2 oldh)
 		curcard->message_with_args(MCM_resize_stack, rect.width, rect.height + newy, oldw, oldh);
 	}
 	MCRedrawUnlockScreen();
-
-	// MW-2011-08-18: [[ Redraw ]] For now, update the screen here. This should
-	//   really be done 'in general' after event dispatch, but things don't work
-	//   in a suitable way for that... Yet...
-	MCRedrawUpdateScreen();
 }
 
 static bool _MCStackConfigureCallback(MCStack *p_stack, void *p_context)
@@ -210,13 +205,26 @@ void MCStack::configure(Boolean user)
 		foreachchildstack(_MCStackConfigureCallback, nil);
 }
 
+void MCStack::seticonic(Boolean on)
+{
+	if (on && !(state & CS_ICONIC))
+	{
+		MCiconicstacks++;
+		state |= CS_ICONIC;
+	}
+	else if (!on && (state & CS_ICONIC))
+		{
+			MCiconicstacks--;
+			state &= ~CS_ICONIC;
+		}
+}
+
 void MCStack::iconify()
 {
 	if (!(state & CS_ICONIC))
-	{
-		MCtooltip->cleartip();
-		MCiconicstacks++;
-		state |= CS_ICONIC;
+    {
+        MCtooltip->cleartip();
+        seticonic(true);
 		MCstacks->top(NULL);
 		redrawicon();
 		curcard->message(MCM_iconify_stack);
@@ -227,8 +235,7 @@ void MCStack::uniconify()
 {
 	if (state & CS_ICONIC)
 	{
-		MCiconicstacks--;
-		state &= ~CS_ICONIC;
+		seticonic(false);
 		MCstacks->top(this);
 		curcard->message(MCM_uniconify_stack);
 		// MW-2011-08-17: [[ Redraw ]] Tell the stack to dirty all of itself.
@@ -424,12 +431,6 @@ void MCStack::extraopen(bool p_force)
 	{
 		setextendedstate(true, ECS_ISEXTRAOPENED);
 		MCObject::open();
-		if (linkatts != NULL)
-		{
-			MCscreen->alloccolor(linkatts->color);
-			MCscreen->alloccolor(linkatts->hilitecolor);
-			MCscreen->alloccolor(linkatts->visitedcolor);
-		}
 		opened--;
 	}
 }
@@ -473,35 +474,29 @@ Window MCStack::getparentwindow()
 
 void MCStack::setparentstack(MCStack *p_parent)
 {
-	MCStack *t_parent;
-	t_parent = getparentstack();
+	MCStack *t_parent = getparentstack();
 	
 	if (t_parent == p_parent)
 		return;
 	
-	if (m_parent_stack != nil)
-	{
-		m_parent_stack->Release();
-		m_parent_stack = nil;
-	}
-	
 	if (p_parent != nil)
-		m_parent_stack = p_parent->gethandle();
+		m_parent_stack = p_parent->GetHandle();
+    else
+        m_parent_stack = nil;
 }
 
 MCStack *MCStack::getparentstack()
 {
-	if (m_parent_stack == nil)
+	if (!m_parent_stack.IsBound())
 		return nil;
 	
-	if (!m_parent_stack->Exists())
+	if (!m_parent_stack.IsValid())
 	{
-		m_parent_stack->Release();
 		m_parent_stack = nil;
 		return nil;
 	}
 	
-	return (MCStack*)m_parent_stack->Get();
+	return m_parent_stack.GetAs<MCStack>();
 }
 
 static bool _MCStackTakeWindowCallback(MCStack *p_stack, void *p_context)
@@ -694,7 +689,7 @@ Boolean MCStack::checkid(uint4 cardid, uint4 controlid)
 	return False;
 }
 
-IO_stat MCStack::saveas(const MCStringRef p_fname)
+IO_stat MCStack::saveas(const MCStringRef p_fname, uint32_t p_version)
 {
 	Exec_stat stat = curcard->message(MCM_save_stack_request);
 	if (stat == ES_NOT_HANDLED || stat == ES_PASS)
@@ -702,7 +697,7 @@ IO_stat MCStack::saveas(const MCStringRef p_fname)
 		MCStack *sptr = this;
 		if (!MCdispatcher->ismainstack(sptr))
 			sptr = (MCStack *)sptr->parent;
-		MCdispatcher->savestack(sptr, p_fname);
+		return MCdispatcher->savestack(sptr, p_fname, p_version);
 	}
 	return IO_NORMAL;
 }
@@ -1389,151 +1384,6 @@ MCCard *MCStack::getchild(Chunk_term etype, MCStringRef p_expression, Chunk_term
 	return NULL;
 }
 
-#ifdef OLD_EXEC
-MCCard *MCStack::getchild(Chunk_term etype, const MCString &s, Chunk_term otype)
-{
-	if (otype != CT_CARD)
-		return NULL;
-
-	uint2 num = 0;
-
-	if (cards == NULL)
-	{
-		curcard = cards = MCtemplatecard->clone(False, False);
-		cards->setparent(this);
-	}
-
-	// OK-2007-04-09 : Allow cards to be found by ID when in edit group mode.
-	MCCard *cptr;
-	if (editing != NULL && savecards != NULL)
-		cptr = savecards;
-	else
-		cptr = cards;
-
-	MCCard *found = NULL;
-	if (etype == CT_EXPRESSION && s == "window")
-		etype = CT_THIS;
-	switch (etype)
-	{
-	case CT_THIS:
-		if (curcard != NULL)
-			return curcard;
-		return cards;
-	case CT_FIRST:
-	case CT_SECOND:
-	case CT_THIRD:
-	case CT_FOURTH:
-	case CT_FIFTH:
-	case CT_SIXTH:
-	case CT_SEVENTH:
-	case CT_EIGHTH:
-	case CT_NINTH:
-	case CT_TENTH:
-		num = etype - CT_FIRST;
-		break;
-	case CT_NEXT:
-		cptr = curcard;
-		do
-		{
-			cptr = cptr->next();
-			if (cptr->countme(backgroundid, (state & CS_MARKED) != 0))
-				return cptr;
-		}
-		while (cptr != curcard);
-		return NULL;
-	case CT_PREV:
-		cptr = curcard;
-		do
-		{
-			cptr = cptr->prev();
-			if (cptr->countme(backgroundid, (state & CS_MARKED) != 0))
-				return cptr;
-		}
-		while (cptr != curcard);
-		return NULL;
-	case CT_LAST:
-	case CT_MIDDLE:
-	case CT_ANY:
-		count(otype, CT_UNDEFINED, NULL, num);
-		switch (etype)
-		{
-		case CT_LAST:
-			num--;
-			break;
-		case CT_MIDDLE:
-			num >>= 1;
-			break;
-		case CT_ANY:
-			num = MCU_any(num);
-			break;
-		default:
-			break;
-		}
-		break;
-	case CT_ID:
-		uint4 inid;
-		if (MCU_stoui4(s, inid))
-		{
-			// OK-2008-06-27: <Bug where looking up a card by id when in edit group mode could cause an infinite loop>
-			MCCard *t_cards;
-			if (editing != NULL && savecards != NULL)
-				t_cards = savecards;
-			else
-				t_cards = cards;
-		
-			// OK-2007-04-09 : Allow cards to be found by ID when in edit group mode.
-			if (editing == NULL)
-				found = curcard -> findid(CT_CARD, inid, True);
-			else
-				found = NULL;
-
-			if (found == NULL)
-				do
-				{
-					found = cptr->findid(CT_CARD, inid, True);
-					if (found != NULL
-							&& found->countme(backgroundid, (state & CS_MARKED) != 0))
-						break;
-					cptr = cptr->next();
-				}
-				while (cptr != t_cards);
-		}
-		return found;
-	case CT_EXPRESSION:
-		if (MCU_stoui2(s, num))
-		{
-			if (num < 1)
-				return NULL;
-			num--;
-			break;
-		}
-		else
-		{
-			do
-			{
-				found = cptr->findname(otype, s);
-				if (found != NULL
-				        && found->countme(backgroundid, (state & CS_MARKED) != 0))
-					break;
-				cptr = cptr->next();
-			}
-			while (cptr != cards);
-		}
-		return found;
-	default:
-		return NULL;
-	}
-	do
-	{
-		if (cptr->countme(backgroundid, (state & CS_MARKED) != 0) && num-- == 0)
-			return cptr;
-		cptr = cptr->next();
-	}
-	while (cptr != cards);
-	return NULL;
-}
-#endif
-
 MCCard *MCStack::getchildbyordinal(Chunk_term p_ordinal)
 {
 	uint2 num = 0;
@@ -2069,7 +1919,8 @@ void MCStack::setwindowname()
 
 void MCStack::reopenwindow()
 {
-	if (state & CS_FOREIGN_WINDOW)
+	// PM-2016-02-09: [[ Bug 16889 ]] Exit if window is NULL
+	if (state & CS_FOREIGN_WINDOW || window == NULL)
 		return;
 
 	stop_externals();
@@ -2115,8 +1966,8 @@ Exec_stat MCStack::openrect(const MCRectangle &rel, Window_mode wm, MCStack *par
 	MCRectangle myoldrect = rect;
 	if (state & (CS_IGNORE_CLOSE | CS_NO_FOCUS | CS_DELETE_STACK))
 		return ES_NORMAL;
-
-	MCtodestroy->remove(this); // prevent delete
+    
+    MCtodestroy -> remove(this);
 	if (wm == WM_LAST)
 		if (opened)
 			wm = mode;
@@ -2139,8 +1990,6 @@ Exec_stat MCStack::openrect(const MCRectangle &rel, Window_mode wm, MCStack *par
 		if (window == NULL && !MCModeMakeLocalWindows() && (wm != WM_MODAL && wm != WM_SHEET || wm == mode))
 			return ES_NORMAL;
 
-		if (window == NULL && wm == mode)
-			fprintf(stderr, "*** ASSERTION FAILURE: MCStack::openrect() - window == NULL\n");
 		if (wm == mode && parentptr == NULL)
 		{
 			bool t_topped;
@@ -2231,12 +2080,6 @@ Exec_stat MCStack::openrect(const MCRectangle &rel, Window_mode wm, MCStack *par
 	else
 	{
 		MCObject::open();
-		if (linkatts != NULL)
-		{
-			MCscreen->alloccolor(linkatts->color);
-			MCscreen->alloccolor(linkatts->hilitecolor);
-			MCscreen->alloccolor(linkatts->visitedcolor);
-		}
 	}
 
 	MCRectangle trect;
@@ -2401,7 +2244,7 @@ Exec_stat MCStack::openrect(const MCRectangle &rel, Window_mode wm, MCStack *par
 	// "bind" the stack's rect... Or in other words, make sure its within the 
 	// screens (well viewports) working area.
 	if (!(flags & F_FORMAT_FOR_PRINTING) && !(state & CS_BEEN_MOVED))
-		MCscreen->boundrect(rect, (!(flags & F_DECORATIONS) || decorations & WD_TITLE), mode);
+		MCscreen->boundrect(rect, (!(flags & F_DECORATIONS) || decorations & WD_TITLE), mode, getflag(F_RESIZABLE));
 	
 	state |= CS_NO_FOCUS;
 	if (flags & F_DYNAMIC_PATHS)
@@ -3075,69 +2918,12 @@ void MCStack::view_surface_redrawwindow(MCStackSurface *p_surface, MCGRegionRef 
 	{
         MCGIntegerRectangle t_bounds;
         t_bounds = MCGRegionGetBounds(p_region);
-        
-        uint32_t t_cores;
-        t_cores = MCThreadGetNumberOfCores();
-        
-        // MM-2014-07-31: [[ ThreadedRendering ]] If the region is suitably large and the machine supports simultaneous execution,
-        //  split the stack surface into multiple regions and render each in an individual thread. The collect all function waits until all pending tiles have been rendered.
-        //  For dual core machines, we just split things into top and bottom half.
-        //  For machines with 4 or more cores, we split into 4 tiles -  top left, top right, bottom left, bottom right.
-        if (t_cores > 1 && t_bounds . size . width > 32 && t_bounds . size . height > 32)
+    
+        MCGContextStackTile t_tile(this, p_surface, t_bounds);
+        if (t_tile . Lock())
         {
-            if (t_cores >= 4)
-            {
-                MCGContextStackTile t_tile1(this, p_surface,
-                                            MCGIntegerRectangleMake(t_bounds . origin . x,
-                                                                    t_bounds . origin . y,
-                                                                    t_bounds . size . width / 2,
-                                                                    t_bounds . size . height / 2));
-                MCGContextStackTile t_tile2(this, p_surface,
-                                            MCGIntegerRectangleMake(t_bounds . origin . x + t_bounds . size . width / 2,
-                                                                    t_bounds . origin . y,
-                                                                    t_bounds . size . width - t_bounds . size . width / 2,
-                                                                    t_bounds . size . height / 2));
-                MCGContextStackTile t_tile3(this, p_surface,
-                                            MCGIntegerRectangleMake(t_bounds . origin . x,
-                                                                    t_bounds . origin . y + t_bounds . size . height / 2,
-                                                                    t_bounds . size . width / 2,
-                                                                    t_bounds . size . height - t_bounds . size . height / 2));
-                MCGContextStackTile t_tile4(this, p_surface,
-                                            MCGIntegerRectangleMake(t_bounds . origin . x + t_bounds . size . width / 2,
-                                                                    t_bounds . origin . y + t_bounds . size . height / 2,
-                                                                    t_bounds . size . width - t_bounds . size . width / 2,
-                                                                    t_bounds . size . height - t_bounds . size . height / 2));
-                MCStackTilePush(&t_tile1);
-                MCStackTilePush(&t_tile2);
-                MCStackTilePush(&t_tile3);
-                MCStackTilePush(&t_tile4);
-                MCStackTileCollectAll();
-            }
-            else
-            {
-                MCGContextStackTile t_tile1(this, p_surface,
-                                            MCGIntegerRectangleMake(t_bounds . origin . x,
-                                                                    t_bounds . origin . y,
-                                                                    t_bounds . size . width,
-                                                                    t_bounds . size . height / 2));
-                MCGContextStackTile t_tile2(this, p_surface,
-                                            MCGIntegerRectangleMake(t_bounds . origin . x,
-                                                                    t_bounds . origin . y + t_bounds . size . height / 2,
-                                                                    t_bounds . size . width,
-                                                                    t_bounds . size . height - t_bounds . size . height / 2));
-                MCStackTilePush(&t_tile1);
-                MCStackTilePush(&t_tile2);
-                MCStackTileCollectAll();
-            }
-        }
-        else
-        {
-            MCGContextStackTile t_tile(this, p_surface, t_bounds);
-            if (t_tile . Lock())
-            {
-                t_tile . Render();
-                t_tile . Unlock();
-            }
+            t_tile . Render();
+            t_tile . Unlock();
         }
 	}
 	else
@@ -3384,6 +3170,51 @@ MCRectangle MCStack::getvisiblerect(void)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+bool
+MCStack::haswidgets()
+{
+	return MCObject::haswidgets() || substackhaswidgets();
+}
+
+bool MCStack::substackhaswidgets(void)
+{
+	if (substacks != NULL)
+	{
+		MCStack *t_stack = substacks;
+		do
+		{
+			if (t_stack -> haswidgets())
+				return true;
+			t_stack = (MCStack*)t_stack->next();
+		}
+		while (t_stack != substacks);
+	}
+
+	return false;
+}
+
+bool MCStack::foreachstack(MCStackForEachCallback p_callback, void *p_context)
+{
+    if (!p_callback(this, p_context))
+        return false;
+    
+	bool t_continue;
+	t_continue = true;
+    
+	if (substacks != NULL)
+	{
+		MCStack *t_stack = substacks;
+		do
+		{
+            		t_continue = p_callback(t_stack, p_context);
+			t_stack = (MCStack *)t_stack->next();
+		}
+		while (t_continue && t_stack != substacks);
+	}
+	
+	return t_continue;
+}
 
 bool MCStack::foreachchildstack(MCStackForEachCallback p_callback, void *p_context)
 {

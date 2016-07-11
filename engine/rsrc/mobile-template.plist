@@ -21,6 +21,7 @@
 	<array>
 		${BUNDLE_ICONS}
 	</array>
+	${DISABLE_ATS}
 	<key>CFBundleDisplayName</key>
 		${BUNDLE_DISPLAY_NAME_SUPPORT}
 	<key>MinimumOSVersion</key>
@@ -53,6 +54,10 @@
 	<array>
 		${IPAD_SUPPORTED_ORIENTATIONS}
 	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		${PLAY_AUDIO_WHEN_IN_BACKGROUND}
+	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
 	${LOCATION_AUTH_TYPE}
@@ -62,6 +67,10 @@
 		${IPAD_STATUS_BAR_HIDDEN}
 	<key>UIStatusBarStyle</key>
 		${STATUS_BAR_STYLE}
+	<key>com_livecode_StatusBarSolid</key>
+		${STATUS_BAR_SOLID}
+	<key>com_livecode_UsesLocalNotifications</key>
+		${USES_LOCAL_NOTIFICATIONS}
 	<key>UIFileSharingEnabled</key>
 		${FILE_SHARING}
 	<key>UIPrerenderedIcon</key>

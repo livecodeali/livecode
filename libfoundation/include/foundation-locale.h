@@ -1,4 +1,4 @@
-/* Copyright (C) 2013 Runtime Revolution Ltd.
+/* Copyright (C) 2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -37,6 +37,9 @@ enum MCLocaleTextLayout
 
 // Opaque pointer type to a locale
 typedef struct __MCLocale* MCLocaleRef;
+
+// The basic (POSIX-compatible) locale
+extern MCLocaleRef kMCBasicLocale;
 
 // Gets a reference to the named locale or returns false
 bool    MCLocaleCreateWithName(MCStringRef p_locale_name, MCLocaleRef &r_locale);

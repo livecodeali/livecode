@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -33,12 +33,6 @@ public:
     // overridden methods
     virtual bool Create(void);
     virtual void Delete(void);
-#ifdef LEGACY_EXEC
-    virtual Exec_stat Set(MCNativeControlProperty p_property, MCExecPoint &ep);
-    virtual Exec_stat Get(MCNativeControlProperty p_property, MCExecPoint &ep);
-    virtual Exec_stat Do(MCNativeControlAction p_action, MCParameter *_parameters);
-#endif
-
     virtual const MCObjectPropertyTable *getpropertytable(void) const { return &kPropertyTable; }
     virtual const MCNativeControlActionTable *getactiontable(void) const { return &kActionTable; }
     

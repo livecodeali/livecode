@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -21,7 +21,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "objdefs.h"
 #include "parsedef.h"
 
-//#include "execpt.h"
+
 #include "exec.h"
 #include "dispatch.h"
 #include "stack.h"
@@ -37,7 +37,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "osspec.h"
 
 #include "w32dc.h"
-#include "w32context.h"
 #include "resource.h"
 #include "meta.h"
 #include "mode.h"
@@ -62,14 +61,22 @@ uint4 MCScreenDC::image_inks[] =
 
 static MCColor vgapalette[16] =
     {
-        {0, 0x0000, 0x0000, 0x0000, 0, 0}, {1, 0x8080, 0x0000, 0x0000, 0, 0},
-        {2, 0x0000, 0x8080, 0x0000, 0, 0}, {3, 0x0000, 0x0000, 0x8080, 0, 0},
-        {4, 0x8080, 0x8080, 0x0000, 0, 0}, {5, 0x8080, 0x0000, 0x8080, 0, 0},
-        {6, 0x0000, 0x8080, 0x8080, 0, 0}, {7, 0x8080, 0x8080, 0x8080, 0, 0},
-        {8, 0xC0C0, 0xC0C0, 0xC0C0, 0, 0}, {9, 0xFFFF, 0x0000, 0x0000, 0, 0},
-        {10, 0x0000, 0xFFFF, 0x0000, 0, 0}, {11, 0x0000, 0x0000, 0xFFFF, 0, 0},
-        {12, 0xFFFF, 0xFFFF, 0x0000, 0, 0}, {13, 0xFFFF, 0x0000, 0xFFFF, 0, 0},
-        {14, 0x0000, 0xFFFF, 0xFFFF, 0, 0}, {15, 0xFFFF, 0xFFFF, 0xFFFF, 0, 0},
+        {0x0000, 0x0000, 0x0000},
+		{0x8080, 0x0000, 0x0000},
+        {0x0000, 0x8080, 0x0000},
+		{0x0000, 0x0000, 0x8080},
+        {0x8080, 0x8080, 0x0000},
+		{0x8080, 0x0000, 0x8080},
+        {0x0000, 0x8080, 0x8080},
+		{0x8080, 0x8080, 0x8080},
+        {0xC0C0, 0xC0C0, 0xC0C0},
+		{0xFFFF, 0x0000, 0x0000},
+        {0x0000, 0xFFFF, 0x0000},
+		{0x0000, 0x0000, 0xFFFF},
+        {0xFFFF, 0xFFFF, 0x0000},
+		{0xFFFF, 0x0000, 0xFFFF},
+        {0x0000, 0xFFFF, 0xFFFF},
+		{0xFFFF, 0xFFFF, 0xFFFF},
     };
 
 void MCScreenDC::setstatus(MCStringRef status)
@@ -136,12 +143,6 @@ Boolean MCScreenDC::open()
 	if (RegisterClassA(&wc) == 0)
 		return FALSE;
 
-	// Define the QT VIDEO CLIP window
-	wc.style         = 0/*CS_OWNDC | CS_VREDRAW | CS_HREDRAW*/;
-	wc.lpfnWndProc   = (WNDPROC)MCQTPlayerWindowProc;
-	wc.lpszClassName = MC_QTVIDEO_WIN_CLASS_NAME;  //video class
-	if (RegisterClassA(&wc) == 0)
-		return FALSE;
 
 	// Define Snapshot window. Has its own window proc
 	wc.style         = CS_DBLCLKS | CS_CLASSDC;
@@ -173,18 +174,12 @@ Boolean MCScreenDC::open()
 
 	black_pixel.red = black_pixel.green = black_pixel.blue = 0;
 	white_pixel.red = white_pixel.green = white_pixel.blue = 0xFFFF;
-		black_pixel.pixel = 0;
-		white_pixel.pixel = 0xFFFFFF;
 
 	MCselectioncolor = MCpencolor = black_pixel;
-	alloccolor(MCselectioncolor);
-	alloccolor(MCpencolor);
 	
 	MConecolor = MCbrushcolor = white_pixel;
-	alloccolor(MCbrushcolor);
 	
 	gray_pixel.red = gray_pixel.green = gray_pixel.blue = 0x8080;
-	alloccolor(gray_pixel);
 	
 	MChilitecolor.red = MChilitecolor.green = 0x0000;
 	MChilitecolor.blue = 0x8080;
@@ -196,7 +191,7 @@ Boolean MCScreenDC::open()
     MCAutoStringRef t_type, t_error;
     /* UNCHECKED */ MCS_query_registry(t_key, &t_value, &t_type, &t_error);
 
-	if (!MCValueIsEmpty(*t_value))
+	if (*t_value != nil && !MCValueIsEmpty(*t_value))
 	{
 		MCAutoStringRef t_string;
 		/* UNCHECKED */ ctxt . ConvertToString(*t_value, &t_string);
@@ -205,10 +200,8 @@ Boolean MCScreenDC::open()
 		/* UNCHECKED */ MCStringFindAndReplaceChar(*t_string_mutable, ' ', ',', kMCCompareExact);
 		/* UNCHECKED */ parsecolor(*t_string_mutable, MChilitecolor);
 	}
-	alloccolor(MChilitecolor);
 	
 	MCaccentcolor = MChilitecolor;
-	alloccolor(MCaccentcolor);
 	
 	background_pixel.red = background_pixel.green = background_pixel.blue = 0xC0C0;
     MCStringRef t_key2;
@@ -222,7 +215,7 @@ Boolean MCScreenDC::open()
     MCAutoStringRef t_type2, t_error2;
     /* UNCHECKED */ MCS_query_registry(t_key2, &t_value2, &t_type2, &t_error2);
 
-	if (!MCValueIsEmpty(*t_value2))
+	if (*t_value != nil && !MCValueIsEmpty(*t_value2))
 	{
 		MCAutoStringRef t_string;
 		/* UNCHECKED */ ctxt . ConvertToString(*t_value2, &t_string);
@@ -231,14 +224,13 @@ Boolean MCScreenDC::open()
 		/* UNCHECKED */ MCStringFindAndReplaceChar(*t_string_mutable, ' ', ',', kMCCompareExact);
 		/* UNCHECKED */ parsecolor(*t_string_mutable, background_pixel);
 	}
-	alloccolor(background_pixel);
 
 	SetBkMode(f_dst_dc, OPAQUE);
-	SetBkColor(f_dst_dc, black_pixel . pixel);
-	SetTextColor(f_dst_dc, white_pixel . pixel);
+	SetBkColor(f_dst_dc, MCColorGetPixel(black_pixel));
+	SetTextColor(f_dst_dc, MCColorGetPixel(white_pixel));
 	SetBkMode(f_src_dc, OPAQUE);
-	SetBkColor(f_src_dc, black_pixel . pixel);
-	SetTextColor(f_src_dc, white_pixel . pixel);
+	SetBkColor(f_src_dc, MCColorGetPixel(black_pixel));
+	SetTextColor(f_src_dc, MCColorGetPixel(white_pixel));
 
 	mousetimer = 0;
 	grabbed = False;
@@ -263,7 +255,7 @@ Boolean MCScreenDC::open()
 
 	// The System and Input codepages are used to translate input characters.
 	// A keyboard layout will present characters via WM_CHAR in the
-	// input_codepage, while Revolution is running in the system_codepage.
+	// input_codepage, while LiveCode is running in the system_codepage.
 	//
 	system_codepage = GetACP();
 
@@ -319,11 +311,7 @@ Boolean MCScreenDC::close(Boolean force)
 			timeKillEvent(mousetimer);
 	timeEndPeriod(1);
 	opened = 0;
-	if (dnddata != NULL)
-	{
-		dnddata->Release();
-		dnddata = NULL;
-	}
+
 	return True;
 }
 
@@ -420,13 +408,20 @@ void MCScreenDC::openwindow(Window w, Boolean override)
 	if (w == NULL)
 		return;
 
+	MCStack *t_stack;
+	t_stack = MCdispatcher -> findstackd(w);
+
 	if (override)
 		ShowWindow((HWND)w->handle.window, SW_SHOWNA);
 	else
-		ShowWindow((HWND)w->handle.window, SW_SHOW);
+		// CW-2015-09-28: [[ Bug 15873 ]] If the stack state is iconic, restore the window minimised.
+		if (t_stack != NULL && t_stack -> getstate(CS_ICONIC))
+			ShowWindow((HWND)w->handle.window, SW_SHOWMINIMIZED);
+		else if (IsIconic((HWND)w->handle.window))
+			ShowWindow((HWND)w->handle.window, SW_RESTORE);
+		else 
+			ShowWindow((HWND)w->handle.window, SW_SHOW);
 
-	MCStack *t_stack;
-	t_stack = MCdispatcher -> findstackd(w);
 	if (t_stack != NULL)
 	{
 		if (t_stack -> getmode() == WM_SHEET || t_stack -> getmode() == WM_MODAL)
@@ -715,18 +710,18 @@ static void fixdata(uint4 *bits, uint2 width, uint2 height)
 		*bits++ |= mask;
 }
 
-uint4 MCScreenDC::dtouint4(Drawable d)
+uintptr_t MCScreenDC::dtouint(Drawable d)
 {
 	if (d == DNULL)
 		return 0;
 	else
 		if (d->type == DC_WINDOW)
-			return (uint4)(d->handle.window);
+			return (uintptr_t)(d->handle.window);
 		else
-			return (uint4)(d->handle.pixmap);
+			return (uintptr_t)(d->handle.pixmap);
 }
 
-Boolean MCScreenDC::uint4towindow(uint4 id, Window &w)
+Boolean MCScreenDC::uinttowindow(uintptr_t id, Window &w)
 {
 	w = new _Drawable;
 	w->type = DC_WINDOW;
@@ -1106,6 +1101,10 @@ void MCScreenDC::processdesktopchanged(bool p_notify)
 		SetWindowPos(backdrop_window, NULL, t_displays[0] . workarea . x, t_displays[0] . workarea . y, t_displays[0] . workarea . width, t_displays[0] . workarea . height, 0);
 	}
 
+    // Force a recompute of fonts as they may have changed
+    MCdispatcher->recomputefonts(NULL, true);
+    //MCRedrawDirtyScreen();
+    
 	if (p_notify && t_changed)
 		MCscreen -> delaymessage(MCdefaultstackptr -> getcurcard(), MCM_desktop_changed);
 }
@@ -1318,8 +1317,6 @@ void MCScreenDC::configurebackdrop(const MCColor& p_colour, MCPatternRef p_patte
 		backdrop_badge = p_badge;
 		backdrop_pattern = p_pattern;
 		backdrop_colour = p_colour;
-	
-		alloccolor(backdrop_colour);
 	
 		if (backdrop_active || backdrop_hard)
 			InvalidateRect(backdrop_window, NULL, TRUE);

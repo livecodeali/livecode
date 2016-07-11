@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -110,9 +110,6 @@ MCScreenDC::MCScreenDC(void)
 	
 	// Initialize the list of active touches.
 	m_active_touches = nil;
-	
-	// MW-2013-06-18: [[ XPlatNotify ]] Initialize the notify module.
-	MCNotifyInitialize();
 }
 
 MCScreenDC::~MCScreenDC(void)
@@ -122,9 +119,6 @@ MCScreenDC::~MCScreenDC(void)
 	
 	// Delete the main windows stack.
 	delete m_main_windows;
-	
-	// MW-2013-06-18: [[ XPlatNotify ]] Finalize the notify module.
-	MCNotifyFinalize();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -139,28 +133,19 @@ void MCScreenDC::common_open(void)
 	
 	black_pixel.red = black_pixel.green = black_pixel.blue = 0;
 	white_pixel.red = white_pixel.green = white_pixel.blue = 0xFFFF;
-	black_pixel.pixel = 0;
-	white_pixel.pixel = 0xFFFFFF;
 	
 	MCselectioncolor = MCpencolor = black_pixel;
-	alloccolor(MCselectioncolor);
-	alloccolor(MCpencolor);
 	
 	MConecolor = MCbrushcolor = white_pixel;
-	alloccolor(MCbrushcolor);
 	
 	gray_pixel.red = gray_pixel.green = gray_pixel.blue = 0x8080;
-	alloccolor(gray_pixel);
 	
 	MChilitecolor.red = MChilitecolor.green = 0x0000;
 	MChilitecolor.blue = 0x8080;
-	alloccolor(MChilitecolor);
 	
 	MCaccentcolor = MChilitecolor;
-	alloccolor(MCaccentcolor);
 	
 	background_pixel.red = background_pixel.green = background_pixel.blue = 0xC0C0;
-	alloccolor(background_pixel);
 	
 	// Initialize the common vars.
 	m_window_left = 0;
@@ -686,15 +671,15 @@ void MCScreenDC::freecursor(MCCursorRef c)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-uint4 MCScreenDC::dtouint4(Drawable d)
+uintptr_t MCScreenDC::dtouint(Drawable d)
 {
 	if (d == DNULL)
 		return 0;
 	
-	return (uint4)d -> handle . pixmap;
+	return (uintptr_t)d -> handle . pixmap;
 }
 
-Boolean MCScreenDC::uint4towindow(uint4, Window &w)
+Boolean MCScreenDC::uinttowindow(uintptr_t, Window &w)
 {
 	return False;
 }
@@ -858,12 +843,6 @@ MCPrinter *MCScreenDC::createprinter(void)
 	return new MCDummyPrinter;
 }
 
-#ifdef LEGACY_EXEC
-void MCScreenDC::listprinters(MCExecPoint& ep)
-{
-}
-#endif
-
 ////////////////////////////////////////////////////////////////////////////////
 
 bool MCScreenDC::ownsselection(void)
@@ -900,14 +879,6 @@ bool MCScreenDC::setclipboard(MCPasteboard *p_pasteboard)
 MCPasteboard *MCScreenDC::getclipboard(void)
 {
 	return NULL;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-// SN-2014-07-11: [[ Bug 12769 ]] Update the signature - the non-implemented UIDC dodragdrop was called otherwise
-MCDragAction MCScreenDC::dodragdrop(Window w, MCPasteboard *p_pasteboard, MCDragActionSet p_allowed_actions, MCImage *p_image, const MCPoint* p_image_offset)
-{
-	return DRAG_ACTION_NONE;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -949,7 +920,7 @@ void MCScreenDC::platform_setmouse(int16_t p_x, int16_t p_y)
 	device_setmouse(t_loc.x, t_loc.y);
 }
 
-void MCScreenDC::platform_boundrect(MCRectangle &rect, Boolean title, Window_mode m)
+void MCScreenDC::platform_boundrect(MCRectangle &rect, Boolean title, Window_mode m, Boolean resizable)
 {
 	MCRectangle t_rect;
 	t_rect = rect;

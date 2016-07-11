@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -20,7 +20,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "filedefs.h"
 #include "objdefs.h"
 #include "parsedef.h"
-//#include "execpt.h"
+
 
 #include "dispatch.h"
 #include "image.h"
@@ -203,26 +203,19 @@ bool MCBitmapEffectsScale(MCBitmapEffectsRef& self, int32_t p_scale)
 	return true;
 }
 
+static void MCBitmapEffectColorToMCColor(uint32_t, MCColor &) ATTRIBUTE_UNUSED;
+static void MCBitmapEffectColorFromMCColor(MCColor &, uint32_t &) ATTRIBUTE_UNUSED;
+
 // MM-2013-12-10: [[ Bug  11568 ]] Store colors as BGRA instead of native since never directly rasterized.
 static void MCBitmapEffectColorToMCColor(uint32_t p_color, MCColor &r_color)
 {
-	uint8_t r, g, b, a;
-	MCGPixelUnpack(kMCGPixelFormatBGRA, p_color, r, g, b, a);
-	r_color . pixel = MCGPixelPackNative(r, g, b, a);
-	r_color . red = r;
-	r_color . green = g;
-	r_color . blue = b;
-	r_color . red |= r_color . red << 8;
-	r_color . green |= r_color . green << 8;
-	r_color . blue |= r_color . blue << 8;	
+	MCColorSetPixel(r_color, p_color, kMCGPixelFormatBGRA);
 }
 
 // MM-2013-12-10: [[ Bug  11568 ]] Store colors as BGRA instead of native since never directly rasterized.
 static void MCBitmapEffectColorFromMCColor(MCColor &p_color, uint32_t &r_color)
 {
-	uint8_t r, g, b, a;
-	MCGPixelUnpackNative(p_color . pixel, r, g, b, a);
-	r_color = MCGPixelPack(kMCGPixelFormatBGRA, r, g, b, a);
+	r_color = MCColorGetPixel(p_color, kMCGPixelFormatBGRA);
 }
 
 // Set the given effect to default values for its type.
@@ -266,41 +259,6 @@ static void MCBitmapEffectDefault(MCBitmapEffect *p_effect, MCBitmapEffectType p
 			p_effect -> glow . source = kMCBitmapEffectSourceEdge;
 		}
 	}
-}
-
-static Exec_stat MCBitmapEffectSetCardinalProperty(uint4 p_bound, MCStringRef p_data, uint4 p_current_value, uint4& r_new_value, Boolean& r_dirty)
-{
-	uint4 t_value;
-	if (!MCU_stoui4(p_data, t_value))
-	{
-		MCeerror -> add(EE_BITMAPEFFECT_BADNUMBER, 0, 0, p_data);
-		return ES_ERROR;
-	}
-
-	t_value = MCU_min(t_value, p_bound);
-	if (t_value != p_current_value)
-		r_dirty = True;
-
-	r_new_value = t_value;
-
-	return ES_NORMAL;
-}
-
-static Exec_stat MCBitmapEffectSetBooleanProperty(MCStringRef p_data, bool p_current_value, bool& r_new_value, Boolean& r_dirty)
-{
-	bool t_value;
-	if (!MCU_stob(p_data, t_value))
-	{
-		MCeerror -> add(EE_BITMAPEFFECT_BADBOOLEAN, 0, 0, p_data);
-		return ES_ERROR;
-	}
-
-	if (t_value != p_current_value)
-		r_dirty = True;
-
-	r_new_value = t_value;
-
-	return ES_NORMAL;
 }
 
 uint32_t MCBitmapEffectsWeigh(MCBitmapEffectsRef self)
@@ -908,6 +866,38 @@ static void MCBitmapEffectsSetUIntProperty(MCBitmapEffect& x_effect, MCBitmapEff
             }
         }
             break;
+            
+        // AL-2014-11-25: [[ Bug 14092 ]] Can't set glow range property
+        case kMCBitmapEffectPropertyRange:
+        {
+            p_uint = MCU_min(p_uint, (uint4)255);
+            if (p_uint != x_effect . glow . range)
+            {
+                x_effect . glow . range = p_uint;
+                x_dirty = true;
+            }
+        }
+            break;
+    }
+}
+
+static void MCBitmapEffectsSetBooleanProperty(MCBitmapEffect& x_effect, MCBitmapEffectProperty p_prop, bool p_setting, bool& x_dirty)
+{
+    switch (p_prop)
+    {
+        // AL-2014-11-25: [[ Bug 14092 ]] Can't set shadow knockout property
+        case kMCBitmapEffectPropertyKnockOut:
+        {
+            if (p_setting != x_effect . shadow . knockout)
+            {
+                x_effect . shadow . knockout = p_setting;
+                x_dirty = true;
+            }
+        }
+            break;
+            
+        default:
+            break;
     }
 }
 
@@ -932,13 +922,22 @@ static void MCBitmapEffectStoreProperty(MCExecContext& ctxt, MCBitmapEffect& x_e
         case kMCBitmapEffectPropertySpread:
         case kMCBitmapEffectPropertyDistance:
         case kMCBitmapEffectPropertyAngle:
+        // AL-2014-11-25: [[ Bug 14092 ]] Can't set glow range property
+        case kMCBitmapEffectPropertyRange:
         {
             uinteger_t t_value;
             MCExecTypeConvertAndReleaseAlways(ctxt, p_value . type, &p_value , kMCExecValueTypeUInt, &t_value);
             MCBitmapEffectsSetUIntProperty(x_effect, p_prop, t_value, r_dirty);
         }
             break;
-            
+        // AL-2014-11-25: [[ Bug 14092 ]] Can't set shadow knockout property
+        case kMCBitmapEffectPropertyKnockOut:
+        {
+            bool t_value;
+            MCExecTypeConvertAndReleaseAlways(ctxt, p_value . type, &p_value, kMCExecValueTypeBool, &t_value);
+            MCBitmapEffectsSetBooleanProperty(x_effect, p_prop, t_value, r_dirty);
+        }
+            break;
         default:
             break;
     }

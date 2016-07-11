@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -38,6 +38,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "redraw.h"
 #include "font.h"
 #include "stacksecurity.h"
+#include "system.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -139,7 +140,9 @@ bool X_init(int argc, MCStringRef argv[], MCStringRef envp[])
 	delete MCresult;
 #endif
 	
-	MCcmd = MCValueRetain(argv[0]);
+    // ST-2014-12-18: [[ Bug 14259 ]] Update to get the executable file from the system
+    // since ResolvePath must behave differently on Linux
+	MCsystem -> GetExecutablePath(MCcmd);
 
     // Create the basic locale and the system locale
     if (!MCLocaleCreateWithName(MCSTR("en_US"), kMCBasicLocale))
@@ -148,16 +151,15 @@ bool X_init(int argc, MCStringRef argv[], MCStringRef envp[])
     if (kMCSystemLocale == nil)
         return false;
 		
-#if defined(_LINUX_DESKTOP) || defined(_MAC_DESKTOP)   //get fullpath
-	{
-      MCStringRef t_resolved_cmd;
-      MCS_resolvepath(MCcmd, t_resolved_cmd);
-      MCValueAssign(MCcmd, t_resolved_cmd);
-	}
-#endif
+	MCSCommandLineSetName (argv[0]);
 
 	if (MCModeIsExecutableFirstArgument())
 		create_var(argv[0]);
+
+	/* This list will be used to set the argument list returned by
+	 * MCSCommandLineGetArguments(). */
+	MCAutoProperListRef t_arguments;
+	/* UNCHECKED */ MCProperListCreateMutable (&t_arguments);
 
     MCAutoStringRefAsUTF8String t_mccmd_utf8;
     /* UNCHECKED */ t_mccmd_utf8 . Lock(MCcmd);
@@ -265,7 +267,7 @@ bool X_init(int argc, MCStringRef argv[], MCStringRef envp[])
 		{
             MCAutoPointer<char> t_MCN_version;
             /* UNCHECKED */ MCStringConvertToCString(MCNameGetString(MCN_version_string), &t_MCN_version);
-			fprintf(stderr, "LiveCode %s Copyright 2003-2014 Runtime Revolution Ltd\n\
+			fprintf(stderr, "LiveCode %s Copyright 2003-2015 LiveCode Ltd\n\
 			        Usage: %s [-d[isplay] displayname] \n\
 			        [-f[iles] (disable access to files and processes)\n\
 			        [-g[eometry] ={+-}<xoffset>{+-}<yoffset>]\n\
@@ -284,8 +286,10 @@ bool X_init(int argc, MCStringRef argv[], MCStringRef envp[])
 		}
 		
 		create_var(argv[i]);
+		/* UNCHECKED */ MCProperListPushElementOntoBack (*t_arguments, argv[i]);
 	}
 	create_var(nvars);
+	/* UNCHECKED */ MCSCommandLineSetArguments (*t_arguments);
 
 	if (!X_open(argc, argv, envp))
 		return false;
@@ -333,16 +337,11 @@ void X_main_loop_iteration()
 		MCtracedobject->message(MCM_trace_done);
 		MCtracedobject = NULL;
 	}
-	if (!MCtodestroy->isempty() || MCtodelete != NULL)
-	{
-		MCtooltip->cleartip();
-		while (MCtodelete != NULL)
-		{
-			MCObject *optr = MCtodelete->remove(MCtodelete);
-			delete optr;
-		}
-		MCtodestroy->destroy();
-	}
+    if (!MCtodestroy -> isempty())
+    {
+        MCtooltip -> cleartip();
+        MCtodestroy -> destroy();
+    }
 	MCU_cleaninserted();
 	MCscreen->siguser();
 	MCdefaultstackptr = MCstaticdefaultstackptr;

@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -48,9 +48,6 @@ public:
 	void add(uint2 id, uint2 line, uint2 pos, const char *);
 	void add(uint2 id, uint2 line, uint2 pos, MCValueRef);
 	void append(MCError& string);
-#ifdef LEGACY_EXEC
-    const MCString &getsvalue();
-#endif
 	void copystringref(MCStringRef s, Boolean t);
 	bool copyasstringref(MCStringRef &r_string);
 	void clear();

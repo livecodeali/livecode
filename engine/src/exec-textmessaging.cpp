@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -36,17 +36,11 @@ MC_EXEC_DEFINE_GET_METHOD(TextMessaging, CanComposeTextMessage, 1)
 
 void MCTextMessagingGetCanComposeTextMessage(MCExecContext& ctxt, bool& r_result)
 {
-#ifdef /* MCCanSendTextMessageExec */ LEGACY_EXEC
-    r_can_send = MCSystemCanSendTextMessage();
-#endif /* MCCanSendTextMessageExec */
     r_result = MCSystemCanSendTextMessage();
 }
 
 void MCTextMessagingExecComposeTextMessage(MCExecContext& ctxt, MCStringRef p_recipients, MCStringRef p_body)
 {
-#ifdef /* MCComposeTextMessageExec */ LEGACY_EXEC
-	MCSystemComposeTextMessage(p_recipients, p_body);
-#endif /* MCComposeTextMessageExec */
     if (!MCSystemCanSendTextMessage())
         ctxt . SetTheResultToValue(kMCFalse);
     else

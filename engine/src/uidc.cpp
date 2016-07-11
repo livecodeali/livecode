@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -16,6 +16,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "prefix.h"
 
+#include "sysdefs.h"
 #include "globdefs.h"
 #include "filedefs.h"
 #include "objdefs.h"
@@ -27,7 +28,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "util.h"
 #include "param.h"
 #include "globals.h"
-//#include "execpt.h"
+
 #include "object.h"
 #include "stack.h"
 #include "card.h"
@@ -41,6 +42,9 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "redraw.h"
 #include "notify.h"
 #include "dispatch.h"
+#include "notify.h"
+#include "mode.h"
+#include "eventqueue.h"
 
 #include "graphicscontext.h"
 
@@ -201,6 +205,10 @@ MCMovingList::~MCMovingList()
 
 MCUIDC::MCUIDC()
 {
+#if defined(FEATURE_NOTIFY)
+	MCNotifyInitialize();
+#endif
+    
 	messageid = 0;
 	nmessages = maxmessages = 0;
 	messages = NULL;
@@ -212,18 +220,45 @@ MCUIDC::MCUIDC()
 	allocs = NULL;
 	colornames = nil;
 	lockmods = False;
+    
+	redbits = greenbits = bluebits = 8;
+	redshift = 16;
+	greenshift = 8;
+	blueshift = 0;
+	
+	black_pixel.red = black_pixel.green = black_pixel.blue = 0;
+	white_pixel.red = white_pixel.green = white_pixel.blue = 0xFFFF;
+	
+	MCselectioncolor = MCpencolor = black_pixel;
+	
+	MConecolor = MCbrushcolor = white_pixel;
+	
+	gray_pixel.red = gray_pixel.green = gray_pixel.blue = 0x8080;
+	
+	MChilitecolor.red = MChilitecolor.green = 0x0000;
+	MChilitecolor.blue = 0x8080;
+	
+	MCaccentcolor = MChilitecolor;
+	
+	background_pixel.red = background_pixel.green = background_pixel.blue = 0xC0C0;
 
 	m_sound_internal = NULL ;
 
 	// IM-2014-03-06: [[ revBrowserCEF ]] List of callback functions to call during wait()
 	m_runloop_actions = nil;
+    
+    m_modal_loops = NULL;
 }
 
 MCUIDC::~MCUIDC()
 {
 	while (nmessages != 0)
 		cancelmessageindex(0, True);
-	delete messages;
+	delete[] messages; /* Allocated with new[] */
+
+#if defined(FEATURE_NOTIFY)
+	MCNotifyFinalize();
+#endif
 }
 
 
@@ -478,6 +513,7 @@ const MCDisplay *MCUIDC::getnearestdisplay(const MCRectangle& p_rectangle)
 
 	t_max_area = 0;
 	t_max_distance = MAXUINT4;
+    t_max_distance_index = 0;
 	for(uint4 t_display = 0; t_display < t_display_count; ++t_display)
 	{
 		MCRectangle t_workarea;
@@ -564,14 +600,14 @@ bool MCUIDC::platform_getwindowgeometry(Window p_window, MCRectangle &r_rect)
 ////////////////////////////////////////////////////////////////////////////////
 
 // IM-2014-01-24: [[ HiDPI ]] Change to use logical coordinates - device coordinate conversion no longer needed
-void MCUIDC::boundrect(MCRectangle &x_rect, Boolean p_title, Window_mode p_mode)
+void MCUIDC::boundrect(MCRectangle &x_rect, Boolean p_title, Window_mode p_mode, Boolean p_resizable)
 {
-	platform_boundrect(x_rect, p_title, p_mode);
+	platform_boundrect(x_rect, p_title, p_mode, p_resizable);
 }
 
 //////////
 
-void MCUIDC::platform_boundrect(MCRectangle &rect, Boolean title, Window_mode m)
+void MCUIDC::platform_boundrect(MCRectangle &rect, Boolean title, Window_mode m, Boolean resizable)
 { }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -585,7 +621,9 @@ void MCUIDC::querymouse(int2 &x, int2 &y)
 //////////
 
 void MCUIDC::platform_querymouse(int2 &x, int2 &y)
-{ }
+{
+    x = y = 0;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -683,17 +721,23 @@ MCCursorRef MCUIDC::createcursor(MCImageBitmap *p_image, int2 p_xhot, int2 p_yho
 void MCUIDC::freecursor(MCCursorRef c)
 { }
 
-uint4 MCUIDC::dtouint4(Drawable d)
+uintptr_t MCUIDC::dtouint(Drawable d)
 {
 	return 1;
 }
 
 
-Boolean MCUIDC::uint4towindow(uint4, Window &w)
+Boolean MCUIDC::uinttowindow(uintptr_t, Window &w)
 {
 	w = (Window)1;
 	return True;
 }
+
+void *MCUIDC::GetNativeWindowHandle(Window p_window)
+{
+	return nil;
+}
+
 
 void MCUIDC::getbeep(uint4 property, int4& r_value)
 {
@@ -751,32 +795,12 @@ void MCUIDC::showtaskbar()
 
 void MCUIDC::getpaletteentry(uint4 n, MCColor &c)
 {
+	uint32_t t_pixel;
 	if (n < 256)
-		c.pixel = stdcmap[n];
+		t_pixel = stdcmap[n];
 	else
-		c.pixel = 0;
-	querycolor(c);
-}
-
-void MCUIDC::alloccolor(MCColor &color)
-{
-	color.pixel = MCGPixelPackNative(
-							   color.red >> 8,
-							   color.green >> 8,
-							   color.blue >> 8,
-							   255);
-}
-
-void MCUIDC::querycolor(MCColor &color)
-{
-	uint8_t t_r, t_g, t_b, t_a;
-	MCGPixelUnpackNative(color.pixel, t_r, t_g, t_b, t_a);
-	color.red = t_r;
-	color.green = t_g;
-	color.blue = t_b;
-	color.red |= color.red << 8;
-	color.green |= color.green << 8;
-	color.blue |= color.blue << 8;
+		t_pixel = 0;
+	MCColorSetPixel(c, t_pixel);
 }
 
 MCColor *MCUIDC::getaccentcolors()
@@ -814,10 +838,14 @@ Boolean MCUIDC::getmouseclick(uint2 button, Boolean& r_abort)
 
 Boolean MCUIDC::wait(real8 duration, Boolean dispatch, Boolean anyevent)
 {
+	MCwaitdepth++;
+    MCDeletedObjectsEnterWait(dispatch);
+    
 	real8 curtime = MCS_time();
 	if (duration < 0.0)
 		duration = 0.0;
 	real8 exittime = curtime + duration;
+    Boolean abort = False;
 	Boolean done = False;
 	Boolean donepending = False;
 	do
@@ -828,8 +856,18 @@ Boolean MCUIDC::wait(real8 duration, Boolean dispatch, Boolean anyevent)
 		real8 eventtime = exittime;
 		donepending = handlepending(curtime, eventtime, dispatch);
 		siguser();
+        
+		MCModeQueueEvents();
+
+#if defined(FEATURE_NOTIFY)
+		if ((MCNotifyDispatch(dispatch == True) || donepending) && anyevent)
+			break;
+#endif
+		if (abort)
+			break;
 		if (MCquit)
-			return True;
+            break;
+        
 		if (curtime < eventtime)
 		{
 			done = MCS_poll(donepending ? 0 : eventtime - curtime, 0);
@@ -837,16 +875,37 @@ Boolean MCUIDC::wait(real8 duration, Boolean dispatch, Boolean anyevent)
 		}
 	}
 	while (curtime < exittime  && !(anyevent && (done || donepending)));
-	return False;
+    
+    if (MCquit)
+        abort = True;
+    
+    MCDeletedObjectsLeaveWait(dispatch);
+    MCwaitdepth--;
+    
+	return abort;
 }
 
 void MCUIDC::pingwait(void)
 {
-#ifdef _DESKTOP
+#if defined(_DESKTOP) && defined(FEATURE_NOTIFY)
 	// MW-2013-06-14: [[ DesktopPingWait ]] Use the notify mechanism to wake up
 	//   any running wait.
 	MCNotifyPing(false);
 #endif
+}
+
+bool MCUIDC::FindRunloopAction(MCRunloopActionCallback p_callback, void *p_context, MCRunloopActionRef &r_action)
+{
+	for (MCRunloopAction *t_action = m_runloop_actions; t_action != nil; t_action = t_action->next)
+	{
+		if (t_action->callback == p_callback && t_action->context == p_context)
+		{
+			r_action = t_action;
+			return true;
+		}
+	}
+	
+	return false;
 }
 
 // IM-2014-03-06: [[ revBrowserCEF ]] Add callback & context to runloop action list
@@ -855,13 +914,23 @@ bool MCUIDC::AddRunloopAction(MCRunloopActionCallback p_callback, void *p_contex
 	MCRunloopAction *t_action;
 	t_action = nil;
 
+	if (FindRunloopAction(p_callback, p_context, t_action))
+	{
+		r_action = t_action;
+		r_action->references++;
+		
+		return true;
+	}
+	
 	if (!MCMemoryNew(t_action))
 		return false;
 
 	t_action->callback = p_callback;
 	t_action->context = p_context;
 
+	t_action->references = 1;
 	t_action->next = m_runloop_actions;
+	
 	m_runloop_actions = t_action;
 
 	r_action = t_action;
@@ -875,6 +944,12 @@ void MCUIDC::RemoveRunloopAction(MCRunloopActionRef p_action)
 	if (p_action == nil)
 		return;
 
+	if (p_action->references > 1)
+	{
+		p_action->references--;
+		return;
+	}
+	
 	MCRunloopAction *t_remove_action;
 	t_remove_action = nil;
 
@@ -1075,7 +1150,22 @@ void MCUIDC::addtimer(MCObject *optr, MCNameRef mptr, uint4 delay)
     // Remove existing message from the queue.
     cancelmessageobject(optr, mptr);
     
-    doaddmessage(optr, mptr, MCS_time() + delay / 1000.0, 0, NULL);
+    doaddmessage(optr, mptr, MCS_time() + delay / 1000.0, 0);
+}
+
+void MCUIDC::addsubtimer(MCObject *optr, MCValueRef suboptr, MCNameRef mptr, uint4 delay)
+{
+    cancelmessageobject(optr, mptr, suboptr);
+    
+    MCParameter *t_param;
+    t_param = new MCParameter;
+    t_param -> setvalueref_argument(suboptr);
+    doaddmessage(optr, mptr, MCS_time() + delay / 1000.0, 0, t_param);
+}
+
+void MCUIDC::cancelsubtimer(MCObject *optr, MCNameRef mptr, MCValueRef suboptr)
+{
+    cancelmessageobject(optr, mptr, suboptr);
 }
 
 void MCUIDC::cancelmessageindex(uint2 i, Boolean dodelete)
@@ -1107,12 +1197,14 @@ void MCUIDC::cancelmessageid(uint4 id)
 		}
 }
 
-void MCUIDC::cancelmessageobject(MCObject *optr, MCNameRef mptr)
+void MCUIDC::cancelmessageobject(MCObject *optr, MCNameRef mptr, MCValueRef subobject)
 {
     // MW-2014-05-14: [[ Bug 12294 ]] Cancel list in reverse order to minimize movement.
 	for (uindex_t i = nmessages ; i > 0 ; i--)
 		if (messages[i - 1].object == optr
-		        && (mptr == NULL || MCNameIsEqualTo(messages[i - 1].message, mptr, kMCCompareCaseless)))
+		        && (mptr == NULL || MCNameIsEqualTo(messages[i - 1].message, mptr, kMCCompareCaseless))
+                && (subobject == NULL || (messages[i - 1] . params != nil &&
+                                          messages[i - 1] . params -> getvalueref_argument() == subobject)))
 			cancelmessageindex(i - 1, True);
 }
 
@@ -1224,7 +1316,10 @@ Boolean MCUIDC::handlepending(real8& curtime, real8& eventtime, Boolean dispatch
     if (stime < eventtime)
         eventtime = stime;
     
-    if (nmessages > 0 && messages[0] . time < eventtime)
+    // SN-2014-12-12: [[ Bug 13360 ]] We don't want to change the eventtime if the message is not forced to be dispatched nor internal
+    if (nmessages > 0
+            && (dispatch || messages[0] . id == 0)
+            && messages[0] . time < eventtime)
         eventtime = messages[0] . time;
     
     return t_handled;
@@ -1480,12 +1575,20 @@ void MCUIDC::siguser()
 
 Boolean MCUIDC::lookupcolor(MCStringRef s, MCColor *color)
 {
-	uint4 slength = MCStringGetLength(s);
-	MCAutoPointer<char> startptr;
+	MCAutoStringRefAsCString t_cstring;
+	if (!t_cstring.Lock(s))
+		return false;
+
+    uint4 slength = strlen(*t_cstring);
+    MCAutoPointer<char[]> startptr;
     startptr = new char[slength + 1];
-	char *sptr = *startptr;
-	MCU_lower(sptr, MCStringGetOldString(s));
-	sptr[slength] = '\0';
+
+    MCU_lower(*startptr, *t_cstring);
+
+    (*startptr)[slength] = '\0';
+
+    char* sptr = *startptr;
+
 	if (*sptr == '#')
 	{
 		uint2 r, g, b;
@@ -1534,13 +1637,12 @@ Boolean MCUIDC::lookupcolor(MCStringRef s, MCColor *color)
 			}
 			shiftbits -= goodbits;
 		}
-		color->flags = DoRed | DoGreen | DoBlue;
 		return True;
 	}
 	char *tptr = sptr;
 	while (*tptr)
 		if (isspace((uint1)*tptr))
-			strcpy(tptr, tptr + 1);
+            memmove(tptr, tptr + 1, strlen(tptr));
 		else
 			tptr++;
 	uint2 high = ELEMENTS(color_table);
@@ -1560,7 +1662,6 @@ Boolean MCUIDC::lookupcolor(MCStringRef s, MCColor *color)
 				color->red = (color_table[mid].red << 8) + color_table[mid].red;
 				color->green = (color_table[mid].green << 8) + color_table[mid].green;
 				color->blue = (color_table[mid].blue << 8) + color_table[mid].blue;
-				color->flags = DoRed | DoGreen | DoBlue;
 				return True;
 			}
 	}
@@ -1598,14 +1699,12 @@ void MCUIDC::dropper(Window w, int2 mx, int2 my, MCColor *cptr)
 		return;
 	}
 
-	newcolor.pixel = MCImageBitmapGetPixel(image, 0, 0);
+	MCColorSetPixel(newcolor, MCImageBitmapGetPixel(image, 0, 0));
 	MCImageFreeBitmap(image);
-	querycolor(newcolor);
 	if (cptr != NULL)
 		*cptr = newcolor;
 	else
 	{
-		alloccolor(newcolor);
 		if (MCmodifierstate & MS_CONTROL)
 		{
 			if (MCbrushpattern != nil)
@@ -1638,9 +1737,10 @@ Boolean MCUIDC::parsecolor(MCStringRef s, MCColor& color, MCStringRef *cname)
 	
 	int2 i1, i2, i3;
     Boolean done;
-    MCAutoPointer<char> temp;
-    /* UNCHECKED */ MCStringConvertToCString(s, &temp);
-    const char *sptr = *temp;
+	MCAutoStringRefAsCString t_cstring;
+	if (!t_cstring.Lock(s))
+		return false;
+	const char *sptr = *t_cstring;
     uint4 l = strlen(sptr);
 	
 	// check for numeric first argument
@@ -1686,67 +1786,6 @@ Boolean MCUIDC::parsecolor(MCStringRef s, MCColor& color, MCStringRef *cname)
 	return True;
 }
 
-
-#ifdef LEGACY_EXEC
-Boolean MCUIDC::parsecolors(const MCString &s, MCColor *colors,
-                            char *cnames[], uint2 ncolors)
-{
-	uint2 offset = 0;
-	char *data = s.clone();
-	char *sptr = data;
-
-	while (*sptr && offset < ncolors)
-	{
-		char *tptr;
-		if ((tptr = strchr(sptr, '\n')) != NULL)
-			*tptr++ = '\0';
-		else
-			tptr = &sptr[strlen(sptr)];
-		if (strlen(sptr) != 0)
-		{
-			if (!parsecolor(sptr, &colors[offset], &cnames[offset]))
-			{
-				while (offset--)
-					if (cnames[offset] != NULL)
-						delete cnames[offset];
-				delete data;
-				return False;
-			}
-			colors[offset].flags = DoRed | DoGreen | DoBlue;
-		}
-		else
-		{
-			colors[offset].flags = 0;
-			cnames[offset] = NULL;
-		}
-		sptr = tptr;
-		offset++;
-	}
-	while (offset < ncolors)
-	{
-		colors[offset].flags = 0;
-		cnames[offset] = NULL;
-		offset++;
-	}
-	delete data;
-	return True;
-}
-#endif
-
-#ifdef LEGACY_EXEC
-Boolean MCUIDC::getcolors(MCExecPoint &ep)
-{
-		ep.setstaticcstring("fixed");
-		return True;
-}
-#endif
-
-#ifdef LEGACY_EXEC
-Boolean MCUIDC::setcolors(const MCString &values)
-{
-		return False;
-}
-#endif
 
 bool MCUIDC::getcolornames(MCStringRef& r_string)
 {
@@ -1809,41 +1848,6 @@ void MCUIDC::stopplayingsound(void)
 
 //
 
-bool MCUIDC::ownsselection(void)
-{
-	return false;
-}
-
-MCPasteboard *MCUIDC::getselection(void)
-{
-	return NULL;
-}
-
-bool MCUIDC::setselection(MCPasteboard *p_pasteboard)
-{
-	return false;
-}
-
-void MCUIDC::flushclipboard(void)
-{
-}
-
-bool MCUIDC::ownsclipboard(void)
-{
-	return false;
-}
-
-MCPasteboard *MCUIDC::getclipboard(void)
-{
-	return NULL;
-}
-
-bool MCUIDC::setclipboard(MCPasteboard *p_pasteboard)
-{
-	return false;
-}
-
-
 // TD-2013-07-01: [[ DynamicFonts ]]
 bool MCUIDC::loadfont(MCStringRef p_path, bool p_globally, void*& r_loaded_font_handle)
 {
@@ -1857,7 +1861,7 @@ bool MCUIDC::unloadfont(MCStringRef p_path, bool p_globally, void *r_loaded_font
 
 //
 
-MCDragAction MCUIDC::dodragdrop(Window w, MCPasteboard* p_pasteboard, MCDragActionSet p_allowed_actions, MCImage *p_image, const MCPoint *p_image_offset)
+MCDragAction MCUIDC::dodragdrop(Window w, MCDragActionSet p_allowed_actions, MCImage *p_image, const MCPoint *p_image_offset)
 {
 	return DRAG_ACTION_NONE;
 }
@@ -1875,7 +1879,7 @@ void MCUIDC::enactraisewindows(void)
 }
 //
 
-int32_t MCUIDC::popupanswerdialog(MCStringRef *p_buttons, uint32_t p_button_count, uint32_t p_type, MCStringRef p_title, MCStringRef p_message)
+int32_t MCUIDC::popupanswerdialog(MCStringRef *p_buttons, uint32_t p_button_count, uint32_t p_type, MCStringRef p_title, MCStringRef p_message, bool p_blocking)
 {
 	return 0;
 }
@@ -1902,3 +1906,36 @@ void MCUIDC::hidecursoruntilmousemoves(void)
     // Default action is to do nothing - Mac overrides and performs the
     // appropriate function.
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool MCUIDC::platform_get_display_handle(void *&r_display)
+{
+	return nil;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void MCUIDC::breakModalLoops()
+{
+    modal_loop* loop = m_modal_loops;
+    while (loop != NULL)
+    {
+        loop->break_function(loop->context);
+        loop->broken = true;
+        loop = loop->chain;
+    }
+}
+
+void MCUIDC::modalLoopStart(modal_loop& info)
+{
+    info.chain = m_modal_loops;
+    info.broken = false;
+    m_modal_loops = &info;
+}
+
+void MCUIDC::modalLoopEnd()
+{
+    m_modal_loops = m_modal_loops->chain;
+}
+

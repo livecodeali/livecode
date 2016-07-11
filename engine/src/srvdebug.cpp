@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -22,7 +22,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "parsedef.h"
 #include "mcio.h"
 
-//#include "execpt.h"
+
 #include "globals.h"
 #include "debug.h"
 #include "mcerror.h"
@@ -443,8 +443,10 @@ void MCServerDebugGet(MCStringRef p_property, MCStringRef& r_result)
         /* UNCHECKED */ MCeerror -> copyasstringref(t_error);
 	else if (MCStringIsEqualToCString(p_property, "parse error", kMCCompareExact))
         MCperror -> copyasstringref(t_error);
-	else if (MCStringIsEqualToCString(p_property, "files", kMCCompareExact))
+    else if (MCStringIsEqualToCString(p_property, "files", kMCCompareExact))
         t_error = MCValueRetain(kMCEmptyString);
+	else
+		t_error = MCValueRetain(kMCEmptyString);
 
     r_result = t_error;
 }

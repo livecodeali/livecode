@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -95,6 +95,16 @@ extern bool MCStackFullscreenModeFromString(const char *p_string, MCStackFullscr
 
 ////////////////////////////////////////////////////////////////////////////////
 
+enum MCStackObjectVisibility
+{
+	kMCStackObjectVisibilityDefault,
+	
+	kMCStackObjectVisibilityShow,
+	kMCStackObjectVisibilityHide,
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 // MM-2014-07-31: [[ ThreadedRendering ]] Updated the API so you can now lock multiple areas of the surface.
 //  The context and raster for the locked area must now be stored locally rather than directly in the surface.
 class MCStackSurface
@@ -130,6 +140,21 @@ public:
 typedef bool (*MCStackUpdateCallback)(MCStackSurface *p_surface, MCRegionRef p_region, void *p_context);
 
 typedef bool (*MCStackForEachCallback)(MCStack *p_stack, void *p_context);
+
+enum MCStackAttachmentEvent
+{
+    kMCStackAttachmentEventDeleting,
+    kMCStackAttachmentEventRealizing,
+    kMCStackAttachmentEventUnrealizing,
+    kMCStackAttachmentEventToolChanged,
+};
+typedef void (*MCStackAttachmentCallback)(void *context, MCStack *stack, MCStackAttachmentEvent event);
+struct MCStackAttachment
+{
+    MCStackAttachment *next;
+    void *context;
+    MCStackAttachmentCallback callback;
+};
 
 class MCStack : public MCObject
 {
@@ -191,7 +216,7 @@ protected:
 #endif
 
 	// IM-2014-07-23: [[ Bug 12930 ]] The stack whose window is parent to this stack
-	MCObjectHandle *m_parent_stack;
+	MCObjectHandle m_parent_stack;
 	
 	MCExternalHandlerList *m_externals;
 
@@ -204,6 +229,7 @@ protected:
 	
 	// MW-2011-09-13: [[ Masks ]] The window mask for the stack.
 	MCWindowShape *m_window_shape;
+	MCSysBitmapHandle m_window_buffer;
 
 	static MCPropertyInfo kProperties[];
 	static MCObjectPropertyTable kPropertyTable;
@@ -213,9 +239,6 @@ protected:
 	
 	// MW-2012-10-10: [[ IdCache ]]
 	MCStackIdCache *m_id_cache;
-    
-    // MM-2014-07-31: [[ ThreadedRendering ]] Used to ensure only a single thread mutates the ID cache at a time.
-    MCThreadMutexRef m_id_cache_lock;
 	
 	// MW-2011-11-24: [[ UpdateScreen ]] If true, then updates to this stack should only
 	//   be flushed at the next updateScreen point.
@@ -273,8 +296,22 @@ protected:
 	
 	// IM-2014-05-27: [[ Bug 12321 ]] Indicate if we need to purge fonts when reopening the window
 	bool m_purge_fonts;
+    
+    // MERG-2015-10-11: [[ DocumentFilename ]] The filename the stack represnts
+    MCStringRef m_document_filename;
+    
+    virtual MCPlatformControlType getcontroltype();
+    virtual MCPlatformControlPart getcontrolsubpart();
 
+    MCStackAttachment *m_attachments;
+	
+	// IM-2016-02-26: [[ Bug 16244 ]] Determines whether or not to show hidden objects.
+	MCStackObjectVisibility m_hidden_object_visibility;
+    
 public:
+    
+    enum { kObjectType = CT_STACK };
+    
 	Boolean menuwindow;
 
 	MCStack(void);
@@ -287,7 +324,8 @@ public:
 	virtual const MCObjectPropertyTable *getpropertytable(void) const { return &kPropertyTable; }
     virtual const MCObjectPropertyTable *getmodepropertytable(void) const { return &kModePropertyTable; }
 	
-	virtual bool visit(MCVisitStyle p_style, uint32_t p_part, MCObjectVisitor* p_visitor);
+	virtual bool visit_self(MCObjectVisitor *p_visitor);
+	virtual bool visit_children(MCObjectVisitorOptions p_options, uint32_t p_part, MCObjectVisitor* p_visitor);
 	
 	virtual void open();
 	virtual void close();
@@ -306,22 +344,26 @@ public:
 	virtual Boolean doubledown(uint2 which);
 	virtual Boolean doubleup(uint2 which);
 	virtual void timer(MCNameRef mptr, MCParameter *params);
-	virtual void setrect(const MCRectangle &nrect);
-#ifdef LEGACY_EXEC
-	virtual Exec_stat getprop_legacy(uint4 parid, Properties which, MCExecPoint &, Boolean effective);
-	virtual Exec_stat setprop_legacy(uint4 parid, Properties which, MCExecPoint &, Boolean effective);
-#endif
+	virtual void applyrect(const MCRectangle &nrect);
 
-	virtual Boolean del();
+	virtual Boolean del(bool p_check_flag);
+    virtual bool isdeletable(bool p_check_flag);
+    
 	virtual void paste(void);
 
 	virtual MCStack *getstack();
 	virtual Exec_stat handle(Handler_type, MCNameRef, MCParameter *, MCObject *pass_from);
 	virtual void recompute();
 	
+    virtual void toolchanged(Tool p_new_tool);
+    
 	// MW-2011-09-20: [[ Collision ]] Compute shape of stack.
 	virtual bool lockshape(MCObjectShape& r_shape);
 	virtual void unlockshape(MCObjectShape& shape);
+	
+	// IM-2015-02-23: [[ WidgetPopup ]] Return true if the contents of this stack are competely opaque.
+	// By default, stacks are opaque.
+	virtual bool isopaque(void) { return true; }
 	
 	// MW-2011-08-17: [[ Redraw ]] Render the stack into the given context 'dirty' is the
 	//   hull of the clipping region.
@@ -329,7 +371,14 @@ public:
 	void render(MCGContextRef p_context, const MCRectangle &p_dirty);
 
 	// MW-2012-02-14: [[ FontRefs ]] Recompute the font inheritence hierarchy.
-	virtual bool recomputefonts(MCFontRef parent_font);
+	virtual bool recomputefonts(MCFontRef parent_font, bool force);
+	
+	// IM-2016-02-26: [[ Bug 16244 ]] Return visibility of hidden objects - show, hide, or inherited from MCshowinvisibles.
+	MCStackObjectVisibility gethiddenobjectvisibility();
+	void sethiddenobjectvisibility(MCStackObjectVisibility p_visibility);
+
+	// IM-2016-03-01: [[ Bug 16244 ]] Return true if invisible objects on this stack should be drawn.
+	bool geteffectiveshowinvisibleobjects();
 	
 	//////////
 	// view interface
@@ -377,7 +426,7 @@ public:
 	
 	// IM-2014-01-16: [[ StackScale ]] Ensure the view rect & transform are in sync with the configured view properties
 	// (stack viewport, fullscreen mode, fullscreen, scale factor)
-	void view_update_transform(void);
+	void view_update_transform(bool p_ensure_onscreen = false);
 	
 	// IM-2014-01-16: [[ StackScale ]] Calculate the new view rect, transform, and adjusted stack rect for the given stack rect
 	void view_calculate_viewports(const MCRectangle &p_stack_rect, MCRectangle &r_adjusted_stack_rect, MCRectangle &r_view_rect, MCGAffineTransform &r_transform);
@@ -535,6 +584,14 @@ public:
     
 	//////////
 	
+    // MW-2014-12-17: [[ Widgets ]] Returns true if one of the stacks substacks have widgets.
+    bool substackhaswidgets();
+
+    /* Return true iff the stack or one of its substacks has widgets. */
+    virtual bool haswidgets();
+    
+	//////////
+    
 	void setgeom();
 	
 	//////////
@@ -551,6 +608,8 @@ public:
 	              const MCRectangle *srect, const MCRectangle *drect);
 	void resize(uint2 oldw, uint2 oldh);
 	void configure(Boolean user);
+	// CW-2015-09-28: [[ Bug 15873 ]] Separate the application of stack iconic properties from the (un)iconify actions.
+	void seticonic(Boolean on);
 	void iconify();
 	void uniconify();
 	Window_mode getmode();
@@ -562,6 +621,7 @@ public:
 	Boolean hcaddress();
 	Boolean hcstack();
 	
+	virtual bool haspassword() { return false; }
 	virtual bool iskeyed() { return true; }
 	virtual void securescript(MCObject *) { }
 	virtual void unsecurescript(MCObject *) { }
@@ -583,8 +643,11 @@ public:
 	bool resolve_filename(MCStringRef filename, MCStringRef& r_resolved);
 	
 	// IM-2013-10-30: [[ FullscreenMode ]] Resolve the given path relative to the location of the stack file
-	// - Will return a path regardless of whether or not the file exists.
-	bool resolve_relative_path(MCStringRef p_path, MCStringRef& r_resolved);
+    // - Will return a path regardless of whether or not the file exists.
+    bool resolve_relative_path(MCStringRef p_path, MCStringRef& r_resolved);
+    
+    // PM-2015-01-26: [[ Bug 14435 ]] Make possible to set the filename using a relative path to the default folder
+    bool resolve_relative_path_to_default_folder(MCStringRef p_path, MCStringRef &r_resolved);
 
 	void setopacity(uint1 p_value);
 	
@@ -609,6 +672,7 @@ public:
 
 	Window getwindow();
 	Window getparentwindow();
+    Window getwindowalways() { return window; }
 	
 	// IM-2014-07-23: [[ Bug 12930 ]] Set the stack whose window is parent to this stack
 	void setparentstack(MCStack *p_parent);
@@ -633,7 +697,7 @@ public:
 	MCStack *clone();
 	void compact();
 	Boolean checkid(uint4 cardid, uint4 controlid);
-	IO_stat saveas(const MCStringRef);
+	IO_stat saveas(const MCStringRef, uint32_t p_version = UINT32_MAX);
 	MCStack *findname(Chunk_term type, MCNameRef);
 	MCStack *findid(Chunk_term type, uint4 inid, Boolean alt);
 	void setmark();
@@ -667,9 +731,6 @@ public:
 	void renumber(MCCard *card, uint4 newnumber);
 	MCObject *getAV(Chunk_term etype, MCStringRef, Chunk_term otype);
 	MCCard *getchild(Chunk_term etype, MCStringRef p_expression, Chunk_term otype);
-#ifdef OLD_EXEC
-	MCCard *getchild(Chunk_term etype, const MCString &, Chunk_term otype);
-#endif  
     MCCard *getchildbyordinal(Chunk_term p_ordinal);
     MCCard *getchildbyid(uinteger_t p_id);
     MCCard *getchildbyname(MCNameRef p_name);
@@ -702,14 +763,15 @@ public:
 	void getstackfile(MCStringRef p_name, MCStringRef &r_name);
 	void setfilename(MCStringRef f);
 
+	virtual IO_stat load(IO_handle stream, uint32_t version); /* Don't use this */
 	virtual IO_stat load(IO_handle stream, uint32_t version, uint1 type);
 	IO_stat load_stack(IO_handle stream, uint32_t version);
 	IO_stat extendedload(MCObjectInputStream& p_stream, uint32_t version, uint4 p_length);
 	virtual IO_stat load_substacks(IO_handle stream, uint32_t version);
 	
-	virtual IO_stat save(IO_handle stream, uint4 p_part, bool p_force_ext);
-	IO_stat save_stack(IO_handle stream, uint4 p_part, bool p_force_ext);
-	IO_stat extendedsave(MCObjectOutputStream& p_stream, uint4 p_part);
+	virtual IO_stat save(IO_handle stream, uint4 p_part, bool p_force_ext, uint32_t p_version);
+	IO_stat save_stack(IO_handle stream, uint4 p_part, bool p_force_ext, uint32_t p_version);
+	IO_stat extendedsave(MCObjectOutputStream& p_stream, uint4 p_part, uint32_t p_version);
 
 	Exec_stat resubstack(MCStringRef p_data);
 	MCCard *getcardid(uint4 inid);
@@ -754,15 +816,9 @@ public:
 	                 Find_mode fmode);
 	Boolean findone(MCExecContext &ctxt, Find_mode mode, MCStringRef *strings,
 	                uint2 nstrings, MCChunk *field, Boolean firstcard);
-#ifdef LEGACY_EXEC
-	void find(MCExecPoint &ep, int p_mode, MCStringRef p_needle, MCChunk *p_target);
-#endif
 	void find(MCExecContext &ctxt, Find_mode mode, MCStringRef, MCChunk *field);
 	void markfind(MCExecContext &ctxt, Find_mode mode, MCStringRef,
 	              MCChunk *, Boolean mark);
-#ifdef LEGACY_EXEC
-	void mark(MCExecPoint &ep, MCExpression *where, Boolean mark);
-#endif
     void mark(MCExecContext& ctxt, MCExpression *p_where, bool p_mark);
 	Linkatts *getlinkatts();
 	Boolean cantabort()
@@ -814,11 +870,13 @@ public:
 	void effectrect(const MCRectangle &drect, Boolean &abort);
 	
 	// IM-2014-07-09: [[ Bug 12225 ]] Find the stack by window ID
-	MCStack *findstackwindowid(uint32_t p_win_id);
+	MCStack *findstackwindowid(uintptr_t p_win_id);
 	MCStack *findstackd(Window w);
 	
 	// IM-2014-07-23: [[ Bug 12930 ]] Replace findchildstack method with iterating method
 	bool foreachchildstack(MCStackForEachCallback p_callback, void *p_context);
+    
+	bool foreachstack(MCStackForEachCallback p_callback, void *p_context);
 	
 	void realize();
 	void sethints();
@@ -843,6 +901,9 @@ public:
 	//   invoked.
 	void updatewindow(MCRegionRef region);
 	
+	bool configure_window_buffer();
+	void release_window_buffer();
+
 	// MW-2012-08-06: [[ Fibers ]] Ensure the tilecache is updated to reflect the current
 	//   frame.
 	void updatetilecache(void);
@@ -923,6 +984,7 @@ public:
 	
 	void getstyle(uint32_t &wstyle, uint32_t &exstyle);
 	void constrain(intptr_t lp);
+
 #endif // _WINDOWS_DESKTOP specific
 #elif defined(_MAC_DESKTOP)
 #elif defined(_LINUX_DESKTOP)
@@ -995,13 +1057,17 @@ public:
 	void enablewindow(bool p_enable);
 	bool haswindow(void);
 
+    bool attach(void *ctxt, MCStackAttachmentCallback callback);
+    void detach(void *ctxt, MCStackAttachmentCallback callback);
+    void notifyattachments(MCStackAttachmentEvent event);
+    
 	void mode_openasmenu(MCStack *grab);
 	void mode_closeasmenu(void);
 
 	void mode_constrain(MCRectangle& rect);
 	bool mode_needstoopen(void);
-
-	////////// PROPERTY SUPPORT METHODS
+    
+    ////////// PROPERTY SUPPORT METHODS
 
 	void SetDecoration(Properties which, bool setting);
 	void GetGroupProps(MCExecContext& ctxt, Properties which, MCStringRef& r_props);
@@ -1062,8 +1128,8 @@ public:
 	void SetSystemWindow(MCExecContext& ctxt, bool setting);
 	void GetMetal(MCExecContext& ctxt, bool& r_setting);
 	void SetMetal(MCExecContext& ctxt, bool setting);
-	void GetShadow(MCExecContext& ctxt, bool& r_setting);
-	void SetShadow(MCExecContext& ctxt, bool setting);
+	void GetWindowShadow(MCExecContext& ctxt, bool& r_setting);
+	void SetWindowShadow(MCExecContext& ctxt, bool setting);
 	void GetResizable(MCExecContext& ctxt, bool& r_setting);
 	void SetResizable(MCExecContext& ctxt, bool setting);
 	void GetMinWidth(MCExecContext& ctxt, uinteger_t& r_width);
@@ -1164,6 +1230,19 @@ public:
     void SetIgnoreMouseEvents(MCExecContext &ctxt, bool p_ignore);
     void GetIgnoreMouseEvents(MCExecContext &ctxt, bool &r_ignored);
     
+    // MERG-2015-08-31: [[ ScriptOnly ]] Setter and getter added
+    void GetScriptOnly(MCExecContext &ctxt, bool &r_script_only);
+    void SetScriptOnly(MCExecContext &ctxt, bool p_script_only);
+    
+    // MERG-2015-10-11: [[ DocumentFilename ]] Add stack documentFilename property
+    void GetDocumentFilename(MCExecContext &ctxt, MCStringRef& r_document_filename);
+    void SetDocumentFilename(MCExecContext &ctxt, MCStringRef p_document_filename);
+	
+	// IM-2016-02-26: [[ Bug 16244 ]] Add stack showInvisibles property
+	void GetShowInvisibleObjects(MCExecContext &ctxt, bool *&r_show_invisibles);
+	void SetShowInvisibleObjects(MCExecContext &ctxt, bool *p_show_invisibles);
+	void GetEffectiveShowInvisibleObjects(MCExecContext &ctxt, bool &r_show_invisibles);
+    
     virtual void SetForePixel(MCExecContext& ctxt, uinteger_t* pixel);
 	virtual void SetBackPixel(MCExecContext& ctxt, uinteger_t* pixel);
 	virtual void SetHilitePixel(MCExecContext& ctxt, uinteger_t* pixel);
@@ -1192,6 +1271,7 @@ public:
     virtual void SetTextFont(MCExecContext& ctxt, MCStringRef font);
     virtual void SetTextSize(MCExecContext& ctxt, uinteger_t* size);
     virtual void SetTextStyle(MCExecContext& ctxt, const MCInterfaceTextStyle& p_style);
+    virtual void SetTheme(MCExecContext& ctxt, intenum_t p_theme);
     
 #ifdef MODE_DEVELOPMENT
     void GetReferringStack(MCExecContext& ctxt, MCStringRef& r_id);
@@ -1201,15 +1281,16 @@ public:
 #endif
     
 private:
+    /* Explicitly forbid use of the base class's load() method */
+	using MCObject::load;
+
 	void loadexternals(void);
 	void unloadexternals(void);
+    
+    // MERG-2015-10-12: [[ DocumentFilename ]] documentFilename property
+    void updatedocumentfilename(void);
 
 	void mode_load(void);
-
-#ifdef LEGACY_EXEC
-	Exec_stat mode_getprop(uint4 parid, Properties which, MCExecPoint &, MCStringRef carray, Boolean effective);
-	Exec_stat mode_setprop(uint4 parid, Properties which, MCExecPoint &, MCStringRef cprop, MCStringRef carray, Boolean effective);
-#endif
 
 	void mode_getrealrect(MCRectangle& r_rect);
 	void mode_takewindow(MCStack *other);

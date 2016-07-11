@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -20,7 +20,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "filedefs.h"
 #include "objdefs.h"
 #include "parsedef.h"
-//#include "execpt.h"
+
 
 #include "dispatch.h"
 #include "image.h"
@@ -39,12 +39,18 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "edittool.h"
 
 
-MCGradientEditTool::MCGradientEditTool(MCGraphic *p_graphic, MCGradientFill *p_gradient, MCEditMode p_mode)
+MCGradientEditTool::MCGradientEditTool(MCGraphic *p_graphic,
+                                       MCGradientFill *p_gradient,
+                                       MCEditMode p_mode) :
+    mode(p_mode),
+    graphic(p_graphic),
+    gradient(p_gradient),
+    m_gradient_edit_point(-1),
+    xoffset(0),
+    yoffset(0)
+
 {
-	graphic = p_graphic;
-	mode = p_mode;
-	gradient = p_gradient;
-	m_gradient_edit_point = -1;
+    ;
 }
 
 MCEditMode MCGradientEditTool::type()
@@ -252,12 +258,10 @@ void MCGradientEditTool::gradient_rects(MCRectangle *rects)
 
 MCRectangle MCGradientEditTool::drawrect()
 {
-	MCRectangle drect; 
+    MCRectangle drect = {0,0,0,0};
 	if (gradient == NULL)
-	{
-		drect.width = 0;
-		drect.height = 0;
-		return drect;
+    {
+        return drect;
 	}
 
 	MCRectangle rects[3];
@@ -299,10 +303,14 @@ MCRectangle MCGradientEditTool::minrect()
 	return rect;
 }
 
-MCPolygonEditTool::MCPolygonEditTool(MCGraphic *p_graphic)
+MCPolygonEditTool::MCPolygonEditTool(MCGraphic *p_graphic) :
+    graphic(p_graphic),
+    m_polygon_edit_point(-1),
+    m_path_start_point(0),
+    xoffset(0),
+    yoffset(0)
 {
-	graphic = p_graphic;
-	m_polygon_edit_point = -1;
+    ;
 }
 
 MCEditMode MCPolygonEditTool::type()
@@ -314,17 +322,16 @@ uint4 MCPolygonEditTool::handle_under_point(int2 x, int2 y)
 {
 	uint4 npts = graphic->getnumpoints();
 
-	MCRectangle *rects = new MCRectangle[npts];
-	point_rects(rects);
+    MCAutoArray<MCRectangle> t_rects;
+    if (!t_rects . New(npts))
+        return -1;
+    
+	point_rects(t_rects . Ptr());
 
 	for (uint4 i=0; i<npts; i++)
-		if (MCU_point_in_rect(rects[i], x, y))
-		{
-			delete rects;
+		if (MCU_point_in_rect(t_rects[i], x, y))
 			return i;
-		}
 
-	delete rects;
 	return -1;
 }
 
@@ -333,9 +340,11 @@ bool MCPolygonEditTool::mdown(int2 x, int2 y, uint2 which)
 	uint4 npts = graphic->getnumpoints();
 	MCPoint *pts = graphic->getpoints();
 
-	MCRectangle *rects = new MCRectangle[npts];
+    MCAutoArray<MCRectangle> t_rects;
+    if (!t_rects . New(npts))
+        return false;
 
-	point_rects(rects);
+	point_rects(t_rects . Ptr());
 
 	m_path_start_point = -1;
 
@@ -347,12 +356,12 @@ bool MCPolygonEditTool::mdown(int2 x, int2 y, uint2 which)
 
 	for (; i < npts; i++)
 	{
-		if (MCU_point_in_rect(rects[i], x, y))
+		if (MCU_point_in_rect(t_rects[i], x, y))
 		{
 			m_polygon_edit_point = i;
 			xoffset = x - pts[i].x;
 			yoffset = y - pts[i].y;
-			if (i == 0 ||  rects[i - 1].x == MININT2)
+			if (i == 0 ||  t_rects[i - 1].x == MININT2)
 			{
 				for (; i < npts && pts[i].x != MININT2; i++);
 				if (pts[i - 1].x == pts[m_polygon_edit_point].x && pts[i - 1].y == pts[m_polygon_edit_point].y)
@@ -377,9 +386,11 @@ bool MCPolygonEditTool::mfocus(int2 x, int2 y)
 
 		if (t_npts > 0)
 		{
-			MCRectangle *t_rects;
-			t_rects = new MCRectangle[t_npts];
-			point_rects(t_rects);
+            MCAutoArray<MCRectangle> t_rects;
+            if (!t_rects . New(t_npts))
+                return false;
+            
+			point_rects(t_rects . Ptr());
 			for (int i=0; i<t_npts; i++)
 			{
 				if (MCU_point_in_rect(t_rects[i], x, y))
@@ -388,7 +399,6 @@ bool MCPolygonEditTool::mfocus(int2 x, int2 y)
 					break;
 				}
 			}
-			delete [] t_rects;
 		}
 		return t_focus;
 	}
@@ -418,12 +428,14 @@ void MCPolygonEditTool::drawhandles(MCDC *dc)
 
 	if (npts > 0)
 	{
+        MCAutoArray<MCRectangle> t_rects;
+        if (!t_rects . New(npts))
+            return;
+        
+		point_rects(t_rects . Ptr());
+        
 		dc -> setopacity(255);
 		dc -> setfunction(GXcopy);
-
-		MCRectangle *rects = new MCRectangle[npts];
-
-		point_rects(rects);
 
 		dc->setfillstyle(FillSolid, nil, 0, 0);
 		dc->setlineatts(1, LineSolid, CapButt, JoinBevel);
@@ -433,11 +445,10 @@ void MCPolygonEditTool::drawhandles(MCDC *dc)
 
 		for (uint4 i=0; i<npts; i++)
 		{
-			if (rects[i].x != MININT2)
-				dc->fillarc(rects[i], 0, 360);
+			if (t_rects[i].x != MININT2)
+				dc->fillarc(t_rects[i], 0, 360);
 		}
 		dc->setquality(QUALITY_DEFAULT);
-		delete rects;
 	}
 }
 
@@ -465,14 +476,18 @@ void MCPolygonEditTool::point_rects(MCRectangle *rects)
 MCRectangle MCPolygonEditTool::drawrect()
 {
 	uint4 npts = graphic->getnumpoints();
-	MCRectangle *rects = new MCRectangle[npts];
-	point_rects(rects);
 
 	MCRectangle drect = {0,0,0,0};
 
+    MCAutoArray<MCRectangle> t_rects;
+    if (!t_rects . New(npts))
+        return drect;
+    
+    point_rects(t_rects . Ptr());
+    
 	for (uint4 i = 0; i < npts; i++)
 	{
-		drect = MCU_union_rect(drect, rects[i]);
+		drect = MCU_union_rect(drect, t_rects[i]);
 	}
 	return drect;
 }

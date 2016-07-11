@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -23,7 +23,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "card.h"
 #include "globals.h"
-//#include "execpt.h"
+
 #include "stack.h"
 #include "mcerror.h"
 #include "util.h"
@@ -220,7 +220,8 @@ void MCPrinter::SetDeviceOutput(MCPrinterOutputType p_type, MCStringRef p_locati
 	if (p_location != NULL)
     {
         char *t_loc;
-        /* UNCHECKED */ MCStringConvertToCString(p_location, t_loc);
+        // SN-2014-12-22: [[ Bug 14278 ]] Now store the string as a UTF-8 string.
+        /* UNCHECKED */ MCStringConvertToUTF8String(p_location, t_loc);
 		m_device_output_location = t_loc;
     }
 }

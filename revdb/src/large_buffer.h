@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -55,7 +55,7 @@ public:
 		
 		m_data = NULL;
 		m_frontier = NULL;
-		m_capacity = NULL;
+		m_capacity = 0;
 	}
 
 private:

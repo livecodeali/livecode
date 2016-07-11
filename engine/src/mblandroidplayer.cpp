@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -22,7 +22,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "parsedef.h"
 
 #include "mcerror.h"
-//#include "execpt.h"
+
 #include "printer.h"
 #include "globals.h"
 #include "dispatch.h"
@@ -58,11 +58,6 @@ public:
     MCAndroidPlayerControl(void);
     
     virtual MCNativeControlType GetType(void);
-#ifdef LEGACY_EXEC
-    virtual Exec_stat Set(MCNativeControlProperty property, MCExecPoint &ep);
-    virtual Exec_stat Get(MCNativeControlProperty property, MCExecPoint &ep);
-    virtual Exec_stat Do(MCNativeControlAction action, MCParameter *parameters);
-#endif
     
     virtual const MCNativeControlActionTable *getactiontable(void) const { return &kActionTable; }
     virtual const MCObjectPropertyTable *getpropertytable(void) const { return &kPropertyTable; }
@@ -78,6 +73,8 @@ public:
     
     void GetDuration(MCExecContext& ctxt, integer_t& r_duration);
     void GetNaturalSize(MCExecContext& ctxt, integer_t r_size[2]);
+    // // PM-2015-09-15: [[ Bug 15925 ]] Add "playableDuration" prop to Android native player
+    void GetPlayableDuration(MCExecContext& ctxt, integer_t& r_duration);
     
 	// Player-specific actions
 	void ExecPlay(MCExecContext& ctxt);
@@ -104,6 +101,7 @@ MCPropertyInfo MCAndroidPlayerControl::kProperties[] =
     DEFINE_RW_CTRL_PROPERTY(P_CURRENT_TIME, Int32, MCAndroidPlayerControl, CurrentTime)
     DEFINE_RW_CTRL_PROPERTY(P_LOOPING, Bool, MCAndroidPlayerControl, Looping)
     DEFINE_RO_CTRL_PROPERTY(P_DURATION, Int32, MCAndroidPlayerControl, Duration)
+    DEFINE_RO_CTRL_PROPERTY(P_PLAYABLE_DURATION, Int32, MCAndroidPlayerControl, PlayableDuration)
     DEFINE_RO_CTRL_PROPERTY(P_NATURAL_SIZE, Int32X2, MCAndroidPlayerControl, NaturalSize)
 };
 
@@ -118,9 +116,9 @@ MCObjectPropertyTable MCAndroidPlayerControl::kPropertyTable =
 
 MCNativeControlActionInfo MCAndroidPlayerControl::kActions[] =
 {
-    DEFINE_CTRL_EXEC_METHOD(Play, MCAndroidPlayerControl, Play)
-    DEFINE_CTRL_EXEC_METHOD(Pause, MCAndroidPlayerControl, Pause)
-    DEFINE_CTRL_EXEC_METHOD(Stop, MCAndroidPlayerControl, Stop)
+    DEFINE_CTRL_EXEC_METHOD(Play, Void, MCAndroidPlayerControl, Play)
+    DEFINE_CTRL_EXEC_METHOD(Pause, Void, MCAndroidPlayerControl, Pause)
+    DEFINE_CTRL_EXEC_METHOD(Stop, Void, MCAndroidPlayerControl, Stop)
 };
 
 MCNativeControlActionTable MCAndroidPlayerControl::kActionTable =
@@ -243,6 +241,15 @@ void MCAndroidPlayerControl::GetDuration(MCExecContext& ctxt, integer_t& r_durat
     MCAndroidObjectRemoteCall(t_view, "getDuration", "i", &r_duration);
 }
 
+// PM-2015-09-15: [[ Bug 15925 ]] Allow mobileControlGet(myPlayer, "playableDuration" on Android
+void MCAndroidPlayerControl::GetPlayableDuration(MCExecContext& ctxt, integer_t& r_duration)
+{
+    jobject t_view;
+    t_view = GetView();
+
+    MCAndroidObjectRemoteCall(t_view, "getPlayableDuration", "i", &r_duration);
+}
+
 void MCAndroidPlayerControl::GetNaturalSize(MCExecContext& ctxt, integer_t r_size[2])
 {
     jobject t_view;
@@ -254,166 +261,6 @@ void MCAndroidPlayerControl::GetNaturalSize(MCExecContext& ctxt, integer_t r_siz
     r_size[0] = t_width;
     r_size[1] = t_height;
 }
-
-#ifdef /* MCAndroidPlayerControl::Set */ LEGACY_EXEC
-Exec_stat MCAndroidPlayerControl::Set(MCNativeControlProperty p_property, MCExecPoint &ep)
-{
-    bool t_bool = false;
-    int32_t t_integer;
-    
-    jobject t_view;
-    t_view = GetView();
-    
-    switch (p_property)
-    {
-        case kMCNativeControlPropertyContent:
-        {
-            bool t_success = true;
-            MCCStringFree(m_path);
-            t_success = MCCStringClone(ep.getcstring(), m_path);
-            if (MCCStringBeginsWith(m_path, "http://") || MCCStringBeginsWith(m_path, "https://"))
-            {
-                MCAndroidObjectRemoteCall(t_view, "setUrl", "bs", &t_success, m_path);
-            }
-            else
-            {
-                char *t_resolved_path = nil;
-                bool t_is_asset = false;
-                const char *t_asset_path = nil;
-                
-                t_resolved_path = MCS_resolvepath(m_path);
-                t_is_asset = path_to_apk_path(t_resolved_path, t_asset_path);
-                
-                MCAndroidObjectRemoteCall(t_view, "setFile", "bsb", &t_success, t_is_asset ? t_asset_path : t_resolved_path, t_is_asset);
-                
-                MCCStringFree(t_resolved_path);
-            }
-            return ES_NORMAL;
-        }
-            
-        case kMCNativeControlPropertyShowController:
-        {
-            if (!ParseBoolean(ep, t_bool))
-                return ES_ERROR;
-            MCAndroidObjectRemoteCall(t_view, "setShowController", "vb", nil, t_bool);
-            return ES_NORMAL;
-        }
-            
-        case kMCNativeControlPropertyCurrentTime:
-        {
-            if (!ParseInteger(ep, t_integer))
-                return ES_ERROR;
-            MCAndroidObjectRemoteCall(t_view, "setCurrentTime", "vi", nil, t_integer);
-            return ES_NORMAL;
-        }
-            
-        case kMCNativeControlPropertyLooping:
-        {
-            if (!ParseBoolean(ep, t_bool))
-                return ES_ERROR;
-            MCAndroidObjectRemoteCall(t_view, "setLooping", "vb", nil, t_bool);
-            return ES_NORMAL;
-        }
-            
-        default:
-            break;
-    }
-    
-    return MCAndroidControl::Set(p_property, ep);
-}
-#endif /* MCAndroidPlayerControl::Set */
-
-#ifdef /* MCAndroidPlayerControl::Get */ LEGACY_EXEC
-Exec_stat MCAndroidPlayerControl::Get(MCNativeControlProperty p_property, MCExecPoint &ep)
-{
-    bool t_bool = false;
-    int32_t t_integer;
-    
-    jobject t_view;
-    t_view = GetView();
-    
-    switch (p_property)
-    {
-        case kMCNativeControlPropertyContent:
-        {
-            ep.setsvalue(m_path);
-            return ES_NORMAL;
-        }
-            
-        case kMCNativeControlPropertyShowController:
-        {
-            MCAndroidObjectRemoteCall(t_view, "getShowController", "b", &t_bool);
-            FormatBoolean(ep, t_bool);
-            return ES_NORMAL;
-        }
-        
-        case kMCNativeControlPropertyLooping:
-        {
-            MCAndroidObjectRemoteCall(t_view, "getLooping", "b", &t_bool);
-            FormatBoolean(ep, t_bool);
-            return ES_NORMAL;
-        }
-            
-        case kMCNativeControlPropertyDuration:
-        {
-            MCAndroidObjectRemoteCall(t_view, "getDuration", "i", &t_integer);
-            FormatInteger(ep, t_integer);
-            return ES_NORMAL;
-        }
-            
-        case kMCNativeControlPropertyCurrentTime:
-        {
-            MCAndroidObjectRemoteCall(t_view, "getCurrentTime", "i", &t_integer);
-            FormatInteger(ep, t_integer);
-            return ES_NORMAL;
-        }
-            
-        case kMCNativeControlPropertyNaturalSize:
-        {
-            int32_t t_width = 0, t_height = 0;
-            MCAndroidObjectRemoteCall(t_view, "getVideoWidth", "i", &t_width);
-            MCAndroidObjectRemoteCall(t_view, "getVideoHeight", "i", &t_height);
-			char t_buffer[I2L * 2 + 3];
-            sprintf(t_buffer, "%d,%d", t_width, t_height);
-            ep.setuint(strlen(t_buffer));
-            return ES_NORMAL;
-        }
-            
-        default:
-            break;
-    }
-    
-    return MCAndroidControl::Get(p_property, ep);
-}
-#endif /* MCAndroidPlayerControl::Get */
-
-#ifdef /* MCAndroidPlayerControl::Do */ LEGACY_EXEC
-Exec_stat MCAndroidPlayerControl::Do(MCNativeControlAction p_action, MCParameter *p_parameters)
-{
-    jobject t_view;
-    t_view = GetView();
-    
-    switch (p_action)
-    {
-        case kMCNativeControlActionPlay:
-            MCAndroidObjectRemoteCall(t_view, "start", "v", nil);
-            return ES_NORMAL;
-            
-        case kMCNativeControlActionPause:
-            MCAndroidObjectRemoteCall(t_view, "pause", "v", nil);
-            return ES_NORMAL;
-            
-        case kMCNativeControlActionStop:
-            MCAndroidObjectRemoteCall(t_view, "stop", "v", nil);
-            return ES_NORMAL;
-            
-        default:
-            break;
-    }
-    
-    return MCAndroidControl::Do(p_action, p_parameters);
-}
-#endif /* MCAndroidPlayerControl::Do */
 
 // Player-specific actions
 void MCAndroidPlayerControl::ExecPlay(MCExecContext& ctxt)

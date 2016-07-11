@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -21,7 +21,7 @@
 
 #include "graphics.h"
 #include "stack.h"
-#include "execpt.h"
+
 #include "player.h"
 #include "util.h"
 #include "osspec.h"
@@ -43,6 +43,8 @@
 #import <sys/stat.h>
 
 ////////////////////////////////////////////////////////////////////////////////
+
+#ifdef FEATURE_QUICKTIME
 
 class MCQTSoundRecorder;
 
@@ -215,8 +217,9 @@ static void exportToSoundFile(MCStringRef sourcefile, MCStringRef destfile)
     MCAutoStringRef t_src_resolved;
 	MCAutoStringRef t_dst_resolved;
     
+    // AL-2015-01-05: [[ Bug 14302 ]] Assign resolved path strings correctly
     t_success = MCS_resolvepath(sourcefile, &t_src_resolved)
-    && MCS_resolvepath(destfile, &t_src_resolved);
+    && MCS_resolvepath(destfile, &t_dst_resolved);
     
 	t_success = (*t_src_resolved != NULL && *t_dst_resolved != NULL);
 	
@@ -306,8 +309,8 @@ MCQTSoundRecorder::MCQTSoundRecorder(void)
     m_dialog_result = kMCPlatformDialogResultContinue;
     m_seq_grab = nil;
     m_channel = nil;
-    m_temp_file = MCValueRetain(kMCEmptyString);
-    m_filename = MCValueRetain(kMCEmptyString);
+    m_temp_file = nil;
+    m_filename = nil;
     m_has_magic_cookie = false;
     
     m_observer = [[com_runrev_livecode_MCQTSoundRecorderObserver alloc] initWithRecorder: this];
@@ -488,8 +491,10 @@ void MCQTSoundRecorder::GetASBD(AudioStreamBasicDescription &r_description)
             break;
         case kAudioFormatMPEG4AAC_LD:
         case kAudioFormatMPEG4AAC_ELD:
+#if MAC_OS_X_VERSION_MAX_ALLOWED > MAC_OS_X_VERSION_10_6
         case kAudioFormatMPEG4AAC_ELD_SBR:
         case kAudioFormatMPEG4AAC_ELD_V2:
+#endif
             if (m_configuration . sample_rate < 16)
                 r_description . mSampleRate = 16000;
             r_description . mFramesPerPacket = 1 << 9;
@@ -656,7 +661,8 @@ bool MCQTSoundRecorder::StartRecording(MCStringRef p_filename)
     if (t_success)
         t_success = MCS_tmpnam(m_temp_file);
     
-    m_filename = MCValueRetain(p_filename);
+    if (t_success)
+        m_filename = MCValueRetain(p_filename);
     
     if (t_success)
     {
@@ -710,6 +716,18 @@ bool MCQTSoundRecorder::StartRecording(MCStringRef p_filename)
 			SGDisposeChannel(m_seq_grab, m_channel);
             m_channel = nil;
 		}
+        
+        if (m_filename != nil)
+        {
+            MCValueRelease(m_filename);
+            m_filename = nil;
+        }
+        
+        if (m_temp_file != nil)
+        {
+            MCValueRelease(m_temp_file);
+            m_temp_file = nil;
+        }
     }
     return t_success;
 }
@@ -722,8 +740,23 @@ void MCQTSoundRecorder::StopRecording(void)
     [m_observer stopTimer];
     SGStop(m_seq_grab);
     
+	// PM-2015-07-22: [[ Bug 15625 ]] Make sure we properly recreate the exported file, if it already exists
+	MCS_unlink(m_filename);
     exportToSoundFile(m_temp_file, m_filename);
-    
+	MCS_unlink(m_temp_file);
+
+	if (m_filename != nil)
+    {
+		MCValueRelease(m_filename);
+        m_filename = nil;
+    }
+
+	if (m_temp_file != nil)
+    {
+		MCValueRelease(m_temp_file);
+        m_temp_file = nil;
+    }
+
     if (m_channel != NULL)
     {
         SGDisposeChannel(m_seq_grab, m_channel);
@@ -828,12 +861,21 @@ double MCQTSoundRecorder::GetLoudness()
     
     MCMemoryDeleteArray(t_levels);
     
-    return MCU_min(t_loudness * 100, 100);
+    return MCU_min(t_loudness * 100.0, 100.0);
 }
 
 MCQTSoundRecorder *MCQTSoundRecorderCreate(void)
 {
     return new MCQTSoundRecorder;
 }
+
+#else   /* ifdef FEATURE_QUICKTIME */
+
+class MCQTSoundRecorder* MCQTSoundRecorderCreate()
+{
+    return NULL;
+}
+
+#endif
 
 ////////////////////////////////////////////////////////

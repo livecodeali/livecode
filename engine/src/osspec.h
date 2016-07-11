@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -78,7 +78,7 @@ extern bool MCS_resolvepath(MCStringRef p_path, MCStringRef& r_resolved_path);
 extern void MCS_getcurdir(MCStringRef& r_path);
 /* LEGACY */ extern char *MCS_getcurdir();
 extern Boolean MCS_setcurdir(MCStringRef p_path);
-extern bool MCS_getentries(bool p_files, bool p_detailed, MCListRef& r_list);
+extern bool MCS_getentries(MCStringRef p_folder, bool p_files, bool p_detailed, MCListRef& r_list);
 
 extern bool MCS_getDNSservers(MCListRef& r_list);
 extern Boolean MCS_getdevices(MCStringRef& r_list);
@@ -109,9 +109,6 @@ extern bool MCS_savetextfile(MCStringRef f, MCStringRef data);
 extern void MCS_saveresfile(MCStringRef p_path, MCDataRef data);
 
 extern bool MCS_query_registry(MCStringRef p_key, MCValueRef& r_value, MCStringRef& r_type, MCStringRef& r_error);
-#ifdef LEGACY_EXEC
-/* LEGACY */ extern void MCS_query_registry(MCExecPoint &dest);
-#endif
 extern bool MCS_delete_registry(MCStringRef p_key, MCStringRef& r_error);
 extern bool MCS_list_registry(MCStringRef p_path, MCListRef& r_list, MCStringRef& r_error);
 extern bool MCS_set_registry(MCStringRef p_key, MCValueRef p_value, MCSRegistryValueType p_type, MCStringRef& r_error);
@@ -133,6 +130,8 @@ extern bool MCS_getresources(MCStringRef p_source, MCStringRef p_type, MCListRef
 extern bool MCS_setresource(MCStringRef p_source, MCStringRef p_type, MCStringRef p_id, MCStringRef p_name,
 							MCStringRef p_flags, MCStringRef p_value, MCStringRef& r_error);
 extern Boolean MCS_getspecialfolder(MCNameRef p_type, MCStringRef& r_path);
+// SN-2015-01-16: [[ Bug 14295 ]] Added mode-specific way to get the resources folder
+extern void MCS_getresourcesfolder(bool p_standalone, MCStringRef &r_resourcesfolder);
 extern bool MCS_shortfilepath(MCStringRef p_path, MCStringRef& r_short_path);
 extern bool MCS_longfilepath(MCStringRef p_path, MCStringRef& r_long_path);
 extern Boolean MCS_createalias(MCStringRef srcpath, MCStringRef dstpath);
@@ -182,22 +181,16 @@ void MCS_posttourl(MCObject *p_target, MCDataRef p_data, MCStringRef p_url);
 void MCS_putintourl(MCObject *p_target, MCDataRef p_data, MCStringRef p_url);
 void MCS_geturl(MCObject *p_target, MCStringRef p_url);
 
-// MW-2013-05-21: [[ RandomBytes ]] Attempt to generate a sequence of random
-//   bytes into the provided buffer. The function returns 'false' if there isnt
-//   enough entropy available to generate them.
-bool MCS_random_bytes(size_t p_count, MCDataRef& r_buffer);
-
 extern uint2 MCS_getplayloudness();
 extern void MCS_setplayloudness(uint2 p_loudness);
 
 ///////////////////////////////////////////////////////////////////////////////
 
-extern Boolean MCS_handle_sockets(void);
 extern bool MCS_init_sockets();
 extern bool MCS_compare_host_domain(MCStringRef p_host_a, MCStringRef p_host_b);
 extern MCSocket *MCS_open_socket(MCNameRef name, Boolean datagram, MCObject *o, MCNameRef m, Boolean secure, Boolean sslverify, MCStringRef sslcertfile, MCNameRef p_end_hostname);
 extern void MCS_close_socket(MCSocket *s);
-extern void MCS_read_socket(MCSocket *s, MCExecContext &ctxt, uint4 length, const char *until, MCNameRef m, MCDataRef& r_data);
+extern MCDataRef MCS_read_socket(MCSocket *s, MCExecContext &ctxt, uint4 length, const char *until, MCNameRef m);
 extern void MCS_write_socket(const MCStringRef d, MCSocket *s, MCObject *optr, MCNameRef m);
 extern MCSocket *MCS_accept(uint2 p, MCObject *o, MCNameRef m, Boolean datagram,Boolean secure,Boolean sslverify, MCStringRef sslcertfile);
 extern bool MCS_ha(MCSocket *s, MCStringRef& r_string);

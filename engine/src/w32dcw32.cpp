@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -29,7 +29,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "stacklst.h"
 #include "sellst.h"
 #include "util.h"
-//#include "execpt.h"
+
 #include "debug.h"
 #include "param.h"
 #include "osspec.h"
@@ -128,10 +128,6 @@ static uint2 shift_keysyms[] =
 		/* 0xD8 */ 0x0000, 0x0000, 0x0000, 0x007B, 0x007C, 0x007D, 0x0022
     };
 
-#ifdef LEGACY_EXEC
-static bool build_pick_string(MCExecPoint& p_ep, HMENU p_menu, UINT32 p_command);
-#endif
-
 void MCScreenDC::appendevent(MCEventnode *tptr)
 {
 	tptr->appendto(pendingevents);
@@ -209,7 +205,24 @@ KeySym MCScreenDC::getkeysym(WPARAM wParam, LPARAM lParam)
 		}
 	}
 	KeySym keysym;
-	setmods();
+
+	// We need to update the modifier state here. If the current event being
+	// processed is not live then we must rely on the state of MCmodifierstate
+	// as it is. Otherwise, we must fetch the synchronous key state.
+	if (curinfo -> live)
+	{
+		uint2 t_state = 0;
+		if (GetKeyState(VK_CONTROL) & 0x8000)
+			t_state |= MS_CONTROL;
+		if (GetKeyState(VK_MENU) & 0x8000)
+			t_state |= MS_MOD1;
+		if (GetKeyState(VK_SHIFT) & 0x8000)
+			t_state |= MS_SHIFT;
+		if (GetKeyState(VK_CAPITAL) & 0x0001)
+			t_state |= MS_CAPS_LOCK;
+		MCmodifierstate = t_state;
+	}
+
 	if (curks == KS_ALTGR)
 		if (MCmodifierstate & MS_CONTROL && MCmodifierstate & MS_MOD1)
 			MCmodifierstate &= ~(MS_CONTROL| MS_MOD1);
@@ -287,48 +300,64 @@ Boolean MCScreenDC::handle(real8 sleep, Boolean dispatch, Boolean anyevent,
 	{
 		if (dispatch && pendingevents != NULL)
 		{
+			MCEventnode *tptr = pendingevents->remove(pendingevents);;
 			curinfo->live = False;
-			MCEventnode *tptr = (MCEventnode *)pendingevents->remove
-			                    (pendingevents);
 			MCmodifierstate = tptr->modifier;
-			MCeventtime = tptr->time;
-			curinfo->keysym = tptr->keysym;
-			MCWindowProc(tptr->hwnd, tptr->msg, tptr->wParam, tptr->lParam);
+			msg.hwnd = tptr->hwnd;
+			msg.message = tptr->msg;
+			msg.wParam = tptr->wParam;
+			msg.lParam = tptr->lParam;
+			msg.pt.x = msg.pt.y = 0;
 			delete tptr;
 		}
-		else
-		{
-			Boolean dodispatch = True;
-			if (dodispatch)
-			{
-				curinfo->live = True;
-				MCeventtime = msg.time;
-				if (msg.message == WM_KEYDOWN || msg.message == WM_SYSKEYDOWN
-				        || msg.message == WM_KEYUP || msg.message == WM_SYSKEYUP)
-					curinfo->keysym = getkeysym(msg.wParam, msg.lParam);
+
+		bool t_keymessage, t_syskeymessage;
+		t_keymessage = msg.message == WM_KEYDOWN || msg.message == WM_KEYUP;
+		t_syskeymessage = msg.message == WM_SYSKEYDOWN || msg.message == WM_SYSKEYUP;
+
+		curinfo->live = True;
+		MCeventtime = msg.time;
+		if (t_keymessage || t_syskeymessage)
+			curinfo->keysym = getkeysym(msg.wParam, msg.lParam);
 				
-				// SN-2014-09-10: [[ Bug 13348 ]] Set the key move appropriately
-				if (msg.message == WM_KEYUP || msg.message == WM_SYSKEYUP)
-					curinfo->keymove = KM_KEY_UP;
-				else if (msg.message == WM_KEYDOWN || msg.message == WM_SYSKEYDOWN)
-					curinfo->keymove = KM_KEY_DOWN;
+		// SN-2014-09-10: [[ Bug 13348 ]] Set the key move appropriately
+		if (msg.message == WM_KEYUP || msg.message == WM_SYSKEYUP)
+			curinfo->keymove = KM_KEY_UP;
+		else if (msg.message == WM_KEYDOWN || msg.message == WM_SYSKEYDOWN)
+			curinfo->keymove = KM_KEY_DOWN;
 
-                TranslateMessage(&msg);
+		// IM-2016-01-11: [[ Bug 16415 ]] Always use DispatchMessage for non-stack windows		
+		bool t_foreign_window;
+		t_foreign_window = MCdispatcher->findstackwindowid((uintptr_t)msg.hwnd) == nil;
+		bool t_os_dispatch;
+		t_os_dispatch = !dispatch || t_foreign_window;
 
+		if (t_keymessage || t_syskeymessage)
+		{
+			// IM-2016-01-11: [[ Bug 16415 ]] Call TranslateMessage for any hwnd.
+			//    Only remove WM_(SYS)KEYDOWN for stack windows.
+			TranslateMessage(&msg);
+
+			// If the window receiving the key message is a stack window then we
+			// only want to see WM_CHAR and not WM_KEYDOWN. However, if it is a
+			// non-stack window (like CEF Browser's) we don't want to fiddle with
+			// the message flow.
+			if (!t_foreign_window)
+			{
 				// SN-2014-09-05: [[ Bug 13348 ]] Remove the WM_KEYDOWN, WM_SYSKEYDOWN messages
 				// in case TranslateMessage succeeded, and queued a WM_[SYS]CHAR message
-				bool t_cleaned_queue;
-				t_cleaned_queue = PeekMessageW(&msg, NULL, WM_CHAR, WM_DEADCHAR, PM_REMOVE);				
-				if (!t_cleaned_queue)
-					t_cleaned_queue = PeekMessageW(&msg, NULL, WM_SYSCHAR, WM_SYSDEADCHAR, PM_REMOVE);
-
-				DispatchMessageW(&msg);
+				if (t_keymessage)
+					PeekMessageW(&msg, NULL, WM_CHAR, WM_DEADCHAR, PM_REMOVE);				
+				else if (t_syskeymessage)
+					PeekMessageW(&msg, NULL, WM_SYSCHAR, WM_SYSDEADCHAR, PM_REMOVE);
 			}
 		}
+
+		if (t_os_dispatch)
+			DispatchMessageW(&msg);
+		else
+			MCWindowProc(msg.hwnd, msg.message, msg.wParam, msg.lParam);
 	}
-	
-	extern void MCQTHandleRecord(void);
-	MCQTHandleRecord();
 
 	abort = curinfo->abort;
 	reset = curinfo->reset;
@@ -347,6 +376,9 @@ static uint32_t lastcodepoint;
 static KeySym lastkeysym;
 // SN-2014-09-12: [[ Bug 13423 ]] Keeps whether a the next char follows a dead char
 static Boolean deadcharfollower = False;
+// SN-2015-05-18: [[ Bug 15040 ]] Keep an indication if we are in an Alt+<number>
+//  sequence. We don't want to send any keyDown/Up message (same as dead chars).
+static Boolean isInAltPlusSequence = False;
 static Boolean doubleclick;
 Boolean tripleclick;
 static uint4 clicktime;
@@ -562,7 +594,8 @@ LRESULT CALLBACK MCWindowProc(HWND hwnd, UINT msg, WPARAM wParam,
 					else
 					{
 						t_argument = sptr;
-						while (t_char != '\0' && iswspace(t_char))
+						// SN-2014-11-19: [[ Bug 14058 ]] We consider the characters which are NOT a space
+						while (t_char != '\0' && !iswspace(t_char))
 						{
 							t_char = MCStringGetCharAtIndex(*t_cmdline, ++sptr);
 							t_argument_length += 1;
@@ -698,6 +731,16 @@ LRESULT CALLBACK MCWindowProc(HWND hwnd, UINT msg, WPARAM wParam,
 			pms->appendevent(tptr);
 			break;
 		}
+		
+		// If the repeat count > 1 then we only process one event right now
+		// and push a pending event onto the queue for the rest. This means that
+		// 'flushEvents' can purge any repeated key messages.
+		if (LOWORD(lParam) > 1)
+		{
+			MCEventnode *tptr = new MCEventnode(hwnd, msg, wParam, MAKELPARAM(LOWORD(lParam) - 1, HIWORD(lParam)), 0, MCmodifierstate, MCeventtime);
+			pms->appendevent(tptr);
+			lParam = MAKELPARAM(1, HIWORD(lParam));
+		}
 
 		// SN-2014-09-10: [[ Bug 13348 ]] The keysym is got as for the WM_KEYDOWN case
 		if (curinfo->keysym == 0) // event came from some other dispatch
@@ -780,23 +823,35 @@ LRESULT CALLBACK MCWindowProc(HWND hwnd, UINT msg, WPARAM wParam,
 
 		if (MCtracewindow == DNULL || hwnd != (HWND)MCtracewindow->handle.window)
 		{
-			// Submit the character as both text and a key stroke
-			uint16_t count = LOWORD(lParam);
-
-			while (count--)
+			// SN-2014-09-05: [[ Bug 13348 ]] Call the appropriate message
+			//	 [[ MERGE-6_7_RC_2 ]] and add the KeyDown/Up in case we follow
+			//   a dead-key started sequence
+			// SN-2015-05-18: [[ Bug 15040 ]] We must send the char resulting
+			//  from an Alt+<number> sequence.
+			if (curinfo->keymove == KM_KEY_DOWN || deadcharfollower || isInAltPlusSequence)
 			{
-				// SN-2014-09-05: [[ Bug 13348 ]] Call the appropriate message
-				//	 [[ MERGE-6_7_RC_2 ]] and add the KeyDown/Up in case we follow
-				//   a dead-key started sequence
-				if (curinfo->keymove == KM_KEY_DOWN || deadcharfollower)
-					MCdispatcher->wkdown(dw, *t_input, t_keysym);
-				
-				if (curinfo->keymove == KM_KEY_UP || deadcharfollower)
-  					MCdispatcher->wkup(dw, *t_input, t_keysym);
+				// Pressing Alt and the key "+" starts a number-typing sequence.
+				//  Otherwise, we are not in such a sequence - be it because a normal
+				//  char has been typed, or because the sequence is terminated.
+				isInAltPlusSequence = (t_keysym == '+' && MCmodifierstate == MS_ALT);
+
+				// We don't want to send any Key message for the "+" pressed
+				//  to start the Alt+<number> sequence
+				if (isInAltPlusSequence
+						|| (!MCdispatcher->wkdown(dw, *t_input, t_keysym)
+							&& msg == WM_SYSCHAR))
+					return IsWindowUnicode(hwnd) ? DefWindowProcW(hwnd, msg, wParam, lParam) : DefWindowProcA(hwnd, msg, wParam, lParam);
 			}
+				
+			if (curinfo->keymove == KM_KEY_UP || deadcharfollower)
+  				MCdispatcher->wkup(dw, *t_input, t_keysym);
 
 			curinfo->handled = curinfo->reset = true;
 		}
+
+		// SN-2015-05-18: [[ Bug 15040 ]] Make sure that it can't let be set to True
+		isInAltPlusSequence = False;
+
 		break;
 	}
 
@@ -829,7 +884,10 @@ LRESULT CALLBACK MCWindowProc(HWND hwnd, UINT msg, WPARAM wParam,
 
 		if (curinfo->dispatch)
 		{
-			if (MCtracewindow == DNULL || hwnd != (HWND)MCtracewindow->handle.window)
+			// SN-2015-05-18: [[ Bug 15040 ]] We do not want to send any key
+			//  message if we are in an Alt+<number> sequence.
+			if ((MCtracewindow == DNULL || hwnd != (HWND)MCtracewindow->handle.window) 
+					&& !isInAltPlusSequence)
 			{
 				// The low word contains the repeat count
 				uint2 count = LOWORD(lParam);
@@ -907,7 +965,10 @@ LRESULT CALLBACK MCWindowProc(HWND hwnd, UINT msg, WPARAM wParam,
 				MCeventtime = GetMessageTime(); //krevent->time;
 				// SN-2014-09-10: [[ Bug 13348 ]] Send the string we could build from the last
 				// codepoint.
-				MCdispatcher->wkup(dw, *t_string, keysym);
+				// SN-2015-05-18: [[ Bug 15040 ]] We don't send any key message
+				//  if we are in an Alt+<number> sequence.
+				if (!isInAltPlusSequence)
+					MCdispatcher->wkup(dw, *t_string, keysym);
 				curinfo->handled = curinfo->reset = True;
 			}
 		}
@@ -1251,19 +1312,30 @@ LRESULT CALLBACK MCWindowProc(HWND hwnd, UINT msg, WPARAM wParam,
 					if (target->isiconic())
 					{
 						MCstacks->restack(target);
-						target->view_configure(true);
+						MCdispatcher->wreshape(dw);
 						target->uniconify();
 						SetWindowPos((HWND)target -> getwindow() -> handle . window, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
 					}
 					else
-						target->view_configure(true);
+						MCdispatcher->wreshape(dw);
 				curinfo->handled = True;
 			}
 		}
 		break;
 	case WM_MOVE:
-		MCdispatcher->configure(dw);
-		curinfo->handled = True;
+		// IM-2016-04-14: [[ Bug 16749 ]] WM_MOVE can arrive before WM_SIZE when minimized.
+		//   - check if window is minimized before reconfiguring the stack
+		if (IsIconic(hwnd))
+		{
+			MCStack *target = MCdispatcher->findstackd(dw);
+			if (target != NULL)
+				target->iconify();
+		}
+		else
+		{
+			MCdispatcher->wreshape(dw);
+			curinfo->handled = True;
+		}
 		break;
 	case WM_CLOSE:
 		MCdispatcher->wclose(dw);
@@ -1304,25 +1376,6 @@ LRESULT CALLBACK MCWindowProc(HWND hwnd, UINT msg, WPARAM wParam,
 			pms->setgrabbed(False);
 			MCmousex = MCmousey = -1; // prevent button msg from reopening menu
 			MCdispatcher->wmfocus(dw, MCmousex, MCmousey);
-		}
-		break;
-	case MM_MCINOTIFY:
-		if (wParam == MCI_NOTIFY_SUCCESSFUL)
-		{
-			MCPlayer *tptr = MCplayers;
-			while (tptr != NULL)
-			{
-				if (lParam == (LPARAM)tptr->getDeviceID())
-				{
-					if (tptr->isdisposable())
-						tptr->playstop();
-					else
-						tptr->message_with_valueref_args(MCM_play_stopped, tptr->getname());
-					break;
-				}
-				tptr = tptr->getnextplayer();
-			}
-			curinfo->handled = True;
 		}
 		break;
 	case WM_USER:

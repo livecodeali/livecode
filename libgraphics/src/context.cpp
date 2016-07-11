@@ -1,5 +1,5 @@
 #include "graphics.h"
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -381,6 +381,42 @@ bool MCGContextCreateWithPixels(uint32_t p_width, uint32_t p_height, uint32_t p_
 	t_bitmap . setPixels(p_pixels);
 	
 	return MCGContextCreateWithBitmap(t_bitmap, r_context);	
+}
+
+void *MCGContextGetPixelPtr(MCGContextRef context)
+{
+    MCGContextLayerRef t_layer;
+    t_layer = context -> layer;
+    while(t_layer -> parent != nil)
+        t_layer = t_layer -> parent;
+    
+	const SkBitmap& t_bitmap = t_layer -> canvas -> getTopDevice() -> accessBitmap(false);
+    
+    return t_bitmap . getPixels();
+}
+
+uint32_t MCGContextGetWidth(MCGContextRef context)
+{
+    MCGContextLayerRef t_layer;
+    t_layer = context -> layer;
+    while(t_layer -> parent != nil)
+        t_layer = t_layer -> parent;
+    
+	const SkBitmap& t_bitmap = t_layer -> canvas -> getTopDevice() -> accessBitmap(false);
+    
+    return t_bitmap . width();
+}
+
+uint32_t MCGContextGetHeight(MCGContextRef context)
+{
+    MCGContextLayerRef t_layer;
+    t_layer = context -> layer;
+    while(t_layer -> parent != nil)
+        t_layer = t_layer -> parent;
+    
+	const SkBitmap& t_bitmap = t_layer -> canvas -> getTopDevice() -> accessBitmap(false);
+    
+    return t_bitmap . height();
 }
 
 MCGContextRef MCGContextRetain(MCGContextRef self)
@@ -2658,18 +2694,7 @@ MCGFloat MCGContextMeasureText(MCGContextRef self, const char *p_text, uindex_t 
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// MM-2014-08-06: [[ ThreadedRendering ]] Reference to system mutex routines. This should probably centralised in libfoundation in future.
-typedef struct __MCThreadMutex *MCThreadMutexRef;
-
-extern bool MCThreadMutexCreate(MCThreadMutexRef &r_mutex);
-extern MCThreadMutexRef MCThreadMutexRetain(MCThreadMutexRef mutex);
-extern void MCThreadMutexRelease(MCThreadMutexRef mutex);
-extern void MCThreadMutexLock(MCThreadMutexRef mutex);
-extern void MCThreadMutexUnlock(MCThreadMutexRef mutex);
-
-
 static MCGCacheTableRef s_measure_cache = NULL;
-static MCThreadMutexRef s_measure_cache_mutex = NULL;
 
 void MCGTextMeasureCacheInitialize(void)
 {
@@ -2677,18 +2702,12 @@ void MCGTextMeasureCacheInitialize(void)
     s_measure_cache = NULL;
 	srand(time(NULL));
 	/* UNCHECKED */ MCGCacheTableCreate(kMCGTextMeasureCacheTableSize, kMCGTextMeasureCacheMaxOccupancy, kMCGTextMeasureCacheByteSize, s_measure_cache);
-    
-    s_measure_cache_mutex = NULL;
-    /* UNCHECKED */ MCThreadMutexCreate(s_measure_cache_mutex);
 }
 
 void MCGTextMeasureCacheFinalize(void)
 {
 	MCGCacheTableDestroy(s_measure_cache);
     s_measure_cache = NULL;
-    
-    MCThreadMutexRelease(s_measure_cache_mutex);
-    s_measure_cache_mutex = NULL;
 }
 
 void MCGTextMeasureCacheCompact(void)
@@ -2719,7 +2738,7 @@ MCGFloat MCGContextMeasurePlatformText(MCGContextRef self, const unichar_t *p_te
 	if (t_success)
 	{
         // MM-2014-06-02: [[ CoreText ]] We no no longer need to store the style - was only needed by Mac/ATSUI.
-		t_key_length = p_length + sizeof(p_length) + sizeof(p_font . fid) + sizeof(p_font . size) + sizeof(p_transform . a) + sizeof(p_transform . d);
+		t_key_length = p_length + sizeof(p_length) + sizeof(p_font . fid) + sizeof(p_font . size) + sizeof(p_transform . a) * 4;
 		t_success = MCMemoryNew(t_key_length, t_key);
 	}
 	
@@ -2753,10 +2772,13 @@ MCGFloat MCGContextMeasurePlatformText(MCGContextRef self, const unichar_t *p_te
 		t_key_ptr += sizeof(p_font . size);
 
 		// MM-2014-04-16: [[ Bug 11964 ]] Store the scale of the transform in the key.
-		//  We only need to store the (x?) scale of the transform as that is all that will effect the text measurment.
-		//  (We are ignoring rotation for the time being).
+		// Don't store translation component of transform as it has no effect on bounds
 		MCMemoryCopy(t_key_ptr, &p_transform . a, sizeof(p_transform . a));
 		t_key_ptr += sizeof(p_transform . a);
+		MCMemoryCopy(t_key_ptr, &p_transform . b, sizeof(p_transform . b));
+		t_key_ptr += sizeof(p_transform . b);
+		MCMemoryCopy(t_key_ptr, &p_transform . c, sizeof(p_transform . c));
+		t_key_ptr += sizeof(p_transform . c);
 		MCMemoryCopy(t_key_ptr, &p_transform . d, sizeof(p_transform . d));
 		t_key_ptr += sizeof(p_transform . d);
 		
@@ -2772,9 +2794,7 @@ MCGFloat MCGContextMeasurePlatformText(MCGContextRef self, const unichar_t *p_te
 		t_width = __MCGContextMeasurePlatformText(self, p_text, p_length, p_font, p_transform);
         
         // MM-2014-08-05: [[ Bug 13101 ]] Make sure only 1 thread mutates the measure cache at the time.
-        MCThreadMutexLock(s_measure_cache_mutex);
 		MCGCacheTableSet(s_measure_cache, t_key, t_key_length, &t_width, sizeof(MCGFloat));
-        MCThreadMutexUnlock(s_measure_cache_mutex);
         
         return t_width;
 	}

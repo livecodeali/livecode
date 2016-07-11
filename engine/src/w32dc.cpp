@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -27,13 +27,12 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "stack.h"
 #include "util.h"
 #include "stacklst.h"
-//#include "execpt.h"
+
 #include "globals.h"
 #include "notify.h"
 
 #include "w32dc.h"
 #include "w32printer.h"
-#include "w32context.h"
 #include "resolution.h"
 #include "mode.h"
 
@@ -73,7 +72,6 @@ MCScreenDC::MCScreenDC()
 	grabbingclipboard = False;
 	exposures = False;
 	opened = 0;
-	dnddata = NULL;
 	taskbarhidden = False;
 
 	backdrop_active = false;
@@ -86,16 +84,10 @@ MCScreenDC::MCScreenDC()
 	m_printer_dc = NULL;
 	m_printer_dc_locked = false;
 	m_printer_dc_changed = false;
-
-	m_clipboard = NULL;
-
-	MCNotifyInitialize();
 }
 
 MCScreenDC::~MCScreenDC()
 {
-	MCNotifyFinalize();
-
 	showtaskbar();
 	while (opened)
 		close(True);
@@ -287,6 +279,13 @@ MCStack *MCScreenDC::platform_getstackatpoint(int32_t x, int32_t y)
 		return nil;
 		
 	return MCdispatcher->findstackwindowid((uint32_t)t_window);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+void *MCScreenDC::GetNativeWindowHandle(Window p_win)
+{
+	return p_win != nil ? p_win->handle.window : nil;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

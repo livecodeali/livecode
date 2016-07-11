@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -323,6 +323,9 @@ static void MCPrintingPrinterPageRangeParse(MCExecContext& ctxt, MCStringRef p_i
 		return;
 	}
 	
+    if (t_ranges != nil)
+        MCMemoryDeallocate(t_ranges);
+    
 	ctxt . LegacyThrow(EE_PROPERTY_BADPRINTPROP);
 }
 
@@ -624,8 +627,9 @@ void MCPrintingExecPrintRectOfCard(MCExecContext& ctxt, MCCard *p_card, MCPoint 
 	t_src_rect . x = p_from . x;
 	t_src_rect . y = p_from . y;
     // SN-2014-11-03: [[ Bug 13913 ]] Use the correct coordinates
-	t_src_rect . width = p_from . x - p_to . x;
-	t_src_rect . height = p_from . y - p_to . y;
+    // SN-2014-11-13: [[ Bug 13913 ]] Really, the right coordinates should be used...
+    t_src_rect . width = p_to . x - p_from . x;
+    t_src_rect . height = p_to . y - p_from . y;
 	
 	MCprinter -> LayoutCard(p_card, &t_src_rect);
 
@@ -650,8 +654,10 @@ void MCPrintingExecPrintRectOfSomeCards(MCExecContext& ctxt, integer_t p_count, 
 	MCRectangle t_src_rect;
 	t_src_rect . x = p_from . x;
 	t_src_rect . y = p_from . y;
-	t_src_rect . width = p_to . x - p_to . x;
-	t_src_rect . height = p_to . y - p_to . y;
+    // SN-2015-03-10: [[ Bug 14814 ]] Same fix as for
+    //  MCPrintingExecPrintRectOfCardIntoRect
+	t_src_rect . width = p_to . x - p_from . x;
+	t_src_rect . height = p_to . y - p_from . y;
 	
 	MCprinter -> LayoutCardSequence(MCdefaultstackptr, p_count, &t_src_rect);
 
@@ -669,8 +675,10 @@ void MCPrintingExecPrintRectOfCardIntoRect(MCExecContext& ctxt, MCCard *p_card, 
 	MCRectangle t_src_rect;
 	t_src_rect . x = p_src_from . x;
 	t_src_rect . y = p_src_from . y;
-	t_src_rect . width = p_src_to . x - p_src_to . x;
-	t_src_rect . height = p_src_to . y - p_src_to . y;
+    // SN-2015-03-10: [[ Bug 14814 ]] Use p_src_to - p_src_from coordinates
+    //  to compute the width and height (not p_src_to - p_src_to).
+	t_src_rect . width = p_src_to . x - p_src_from . x;
+	t_src_rect . height = p_src_to. y - p_src_from . y;
 	
 	MCprinter -> Render(p_card, t_src_rect, p_dst_rect);
 
@@ -694,8 +702,7 @@ void MCPrintingExecPrintCardIntoRect(MCExecContext& ctxt, MCCard *p_card, MCRect
 
 void MCPrintingExecOpenPrintingToDestination(MCExecContext& ctxt, MCStringRef p_destination, MCStringRef p_filename, MCArrayRef p_options)
 {
-	extern Exec_stat MCCustomPrinterCreate(MCStringRef, MCStringRef, MCArrayRef , MCPrinter*&);
-	if (MCCustomPrinterCreate(p_destination, p_filename, p_options, MCprinter) == ES_NORMAL)
+	if (MCCustomPrinterCreate(p_destination, p_filename, p_options, (MCCustomPrinter*&)MCprinter) == ES_NORMAL)
 		MCPrintingExecOpenPrinting(ctxt);
 }
 
@@ -731,7 +738,7 @@ void MCPrintingExecClosePrinting(MCExecContext& ctxt)
 {
 	MCprinter -> Close();
 	if (MCsystemprinter != MCprinter)	
-	{	
+	{
 		delete MCprinter;
 		MCprinter = MCsystemprinter;
 	}
@@ -827,7 +834,8 @@ void MCPrintingGetPrintDeviceOutput(MCExecContext& ctxt, MCPrintingPrintDeviceOu
 	
 	if (t_output_type == PRINTER_OUTPUT_FILE)
 	{
-		if (!MCStringCreateWithCString(MCprinter -> GetDeviceOutputLocation(), r_output . location))
+        // SN-2014-12-22: [[ Bug 14278 ]] Output location now stored as a UTF-8 string.
+		if (!MCStringCreateWithBytes((byte_t*)MCprinter -> GetDeviceOutputLocation(), strlen(MCprinter->GetDeviceOutputLocation()), kMCStringEncodingUTF8, false, r_output . location))
 		{
 			ctxt . Throw();
 			return;

@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -144,6 +144,7 @@ void MCPurchaseDelete(MCPurchase *p_purchase);
 
 void MCPurchaseRetain(MCPurchase *p_purchase);
 void MCPurchaseRelease(MCPurchase *p_purchase);
+void MCPurchaseCompleteListUpdate(MCPurchase *p_purchase);
 
 bool MCPurchaseSendRequest(MCPurchase *p_purchase);
 bool MCPurchaseConfirmDelivery(MCPurchase *p_purchase);

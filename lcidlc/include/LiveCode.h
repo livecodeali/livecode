@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -122,6 +122,12 @@ typedef enum LCError
 	
 	// The value argument to object set/get was nil
 	kLCErrorNoObjectPropertyValue = 35,
+    
+    // The query option passed to InterfaceQuery was unknown
+    kLCErrorInvalidInterfaceQuery = 36,
+    
+    // Returned if LicenseCheck fails.
+    kLCErrorUnlicensed = 42,
 	
 	//////////
 	
@@ -355,23 +361,34 @@ enum
     // The 'value' parameter is a point to a uint16_t * variable (UTF-16 encoding)
     kLCValueOptionAsUTF16CString = 10,
 
-    // SN-2014-07-16: [[ ExternalsApiV6 ]] Enum updated to match
-    //  the enum declared in externalsv1.cpp in the Engine
 	// The 'value' parameter is a pointer to an LCArrayRef variable.
 	kLCValueOptionAsLCArray = 16,
 	// The 'value' parameter is a pointer to an NSNumber* variable.
 	kLCValueOptionAsObjcNumber = 17,
 	// The 'value' parameter is a pointer to an NSString* variable.
-	kLCValueOptionAsObjcString = 19,
+	kLCValueOptionAsObjcString = 18,
 	// The 'value' parameter is a pointer to an NSData* variable.
-	kLCValueOptionAsObjcData = 21,
+	kLCValueOptionAsObjcData = 19,
 	// The 'value' parameter is a pointer to an NSArray* variable.
-	kLCValueOptionAsObjcArray = 23,
+	kLCValueOptionAsObjcArray = 20,
 	// The 'value' parameter is a pointer to an NSDictionary *variable.
-	kLCValueOptionAsObjcDictionary = 25,
+	kLCValueOptionAsObjcDictionary = 21,
 	
 	// The 'value' parameter is a pointer to a char variable (native encoding)
-	kLCValueOptionAsCChar = 28,
+	kLCValueOptionAsCChar = 22,
+    
+    // SN-2015-02-13: [[ ExternalsApiV6 ]] Added CF-type arguments, which
+    //  are NOT autoreleased when used as input
+    // The 'value' parameter is a pointer to an CFNumberRef variable.
+    kLCValueOptionAsCFNumber = 23,
+    // The 'value' parameter is a pointer to an CFStringRef variable.
+    kLCValueOptionAsCFString = 24,
+    // The 'value' parameter is a pointer to an CFDataRef variable.
+    kLCValueOptionAsCFData = 25,
+    // The 'value' parameter is a pointer to an CFArrayRef variable.
+    kLCValueOptionAsCFArray = 26,
+    // The 'value' parameter is a pointer to an CFDictionaryRef variable.
+    kLCValueOptionAsCFDictionary = 27,
 	
 	// Treat array keys as case-insensitive.
 	kLCValueOptionCaseSensitiveFalse = 0 << 30,
@@ -407,6 +424,13 @@ enum
 	kLCValueOptionNumberFormatFromContext = 3 << 26,	
 };
 	
+enum
+{
+    kLCLicenseEditionCommunity = 1000,
+    kLCLicenseEditionIndy = 2000,
+    kLCLicenseEditionBusiness = 3000,
+};
+    
 ////////////////////////////////////////////////////////////////////////////////
 	
 typedef struct __LCArray *LCArrayRef;
@@ -444,6 +468,30 @@ LCError LCArrayRemoveKey(LCArrayRef array, unsigned int options, const char *key
 LCError LCArrayRemoveKeyOnPath(LCArrayRef array, unsigned int options, const char **path, unsigned int path_length, const char *key);
 LCError LCArrayRemoveKeyWithPath(LCArrayRef array, unsigned int options, const char **path, unsigned int path_length);
 	
+////////////////////////////////////////////////////////////////////////////////
+
+#ifdef __ANDROID__
+
+// Function:
+//   LCAttachCurrentThread
+// Parameters:
+//   none
+// Errors:
+//   Failed - System was unable to attach the current thread to the Java VM
+//
+LCError LCAttachCurrentThread(void);
+
+// Function:
+//   LCDetachCurrentThread
+// Parameters:
+//   none
+// Errors:
+//   Failed - System was unable to detach the current thread from the Java VM
+//
+LCError LCDetachCurrentThread(void);
+
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////
 
 typedef struct __LCObject *LCObjectRef;
@@ -547,17 +595,24 @@ LCError LCObjectRelease(LCObjectRef object);
 //     'i' - the parameter is of 'int' type, converts to a number
 //     'r' - the parameter is of 'double' type, converts to a number
 //     'z' - the parameter is of 'c-string' type, converts to a (text) string
+//     'u' - the parameter is of 'utf8 c-string' type, converts to a (text) string
+//     'w' - the parameter is of 'utf16 c-string' type, converts to a (text) string
 //	   'y' - the parameter is of 'c-data' type, converts to a (binary) string
+//	   'v' - the parameter is of 'utf8 c-data' type, converts to a (text) string
+//	   't' - the parameter is of 'utf16 c-data' type, converts to a (text) string
 //     'c' - the parameter is of 'char' type, converts to a (text) string
 //     'N' - the parameter is of 'NSNumber*' type, converts to a number
 //     'S' - the parameter is of 'NSString*' type, converts to a (text) string
 //     'D' - the parameter is of 'NSData*' type, converts to a (binary) string
+//     'A' - the parameter is of 'NSArray*' type, converts to a sequentially indexed array
+//     'M' - the parameter is of 'NSDictionary*' type, converts to a key/value map array
 //
 //   The parameters appear in the resulting LiveCode message in the same order
 //   that they appear in the signature.
 //
-//   The 'z' type should be passed a 'const char *' (zero-terminated) string.
-//   The 'y' type should be passed a 'const LCBytes *' type.
+//   The 'z' & 'u' types should be passed a 'const char *' (zero-terminated) string.
+//   The 'w' type should be passed a 'const uint16_t *' (zero-terminated) string.
+//   The 'y','v' & 't' types should be passed a 'const LCBytes *' type.
 //
 LCError LCObjectSend(LCObjectRef object, const char *message, const char *signature, ...);
 	
@@ -884,6 +939,111 @@ LCError LCContextColumnDelimiter(unsigned int options, void *r_value);
 //
 LCError LCContextRowDelimiter(unsigned int options, void *r_value);
 
+    
+// Function:
+//   LCContextUnicodeItemDelimiter
+// Parameters:
+//   (in) options - unsigned int
+//   (out) value - depends on options
+// Errors:
+//   OutOfMemory - memory ran out while attempting to perform the operation
+//   NotABoolean - the value was requested as a boolean, and it is not a boolean
+//   NotANumber - the value was requested as a number, and it is not a number
+//   NotAnInteger - the value was requested as an integer, and it is not an
+//     integer
+//   NotABinaryString - the value was requested as binary data, and it is not
+//     binary data
+//   NotAString - the value was requested as a string, and it is not a string
+//   NotAnArray - the value was requested as an array, and it is not an array
+//   NotAChar - the value was requested as a char, and it is not a char
+// Context Safety:
+//   Must be called from handler context.
+//   This function will only work if the external is called by an engine post-7.0
+//      and return NotImplemented for the earlier versions.
+//   The returned value must be free'd by the caller of this function.
+// Semantics:
+//   Returns a the current value of the local 'itemDelimiter' property.
+//
+LCError LCContextUnicodeItemDelimiter(unsigned int options, void *r_value);
+
+// Function:
+//   LCContextUnicodeLineDelimiter
+// Parameters:
+//   (in) options - unsigned int
+//   (out) value - depends on options
+// Errors:
+//   OutOfMemory - memory ran out while attempting to perform the operation
+//   NotABoolean - the value was requested as a boolean, and it is not a boolean
+//   NotANumber - the value was requested as a number, and it is not a number
+//   NotAnInteger - the value was requested as an integer, and it is not an
+//     integer
+//   NotABinaryString - the value was requested as binary data, and it is not
+//     binary data
+//   NotAString - the value was requested as a string, and it is not a string
+//   NotAnArray - the value was requested as an array, and it is not an array
+//   NotAChar - the value was requested as a char, and it is not a char
+// Context Safety:
+//   Must be called from handler context.
+//   This function will only work if the external is called by an engine post-7.0
+//      and return NotImplemented for the earlier versions.
+//   The returned value must be free'd by the caller of this function.
+// Semantics:
+//   Returns a the current value of the local 'lineDelimiter' property.
+//
+LCError LCContextUnicodeLineDelimiter(unsigned int options, void *r_value);
+
+// Function:
+//   LCContextUnicodeColumnDelimiter
+// Parameters:
+//   (in) options - unsigned int
+//   (out) value - depends on options
+// Errors:
+//   OutOfMemory - memory ran out while attempting to perform the operation
+//   NotABoolean - the value was requested as a boolean, and it is not a boolean
+//   NotANumber - the value was requested as a number, and it is not a number
+//   NotAnInteger - the value was requested as an integer, and it is not an
+//     integer
+//   NotABinaryString - the value was requested as binary data, and it is not
+//     binary data
+//   NotAString - the value was requested as a string, and it is not a string
+//   NotAnArray - the value was requested as an array, and it is not an array
+//   NotAChar - the value was requested as a char, and it is not a char
+// Context Safety:
+//   Must be called from handler context.
+//   This function will only work if the external is called by an engine post-7.0
+//      and return NotImplemented for the earlier versions.
+//   The returned value must be free'd by the caller of this function.
+// Semantics:
+//   Returns a the current value of the local 'columnDelimiter' property.
+//
+LCError LCContextColumnDelimiter(unsigned int options, void *r_value);
+
+// Function:
+//   LCContextUnicodeRowDelimiter
+// Parameters:
+//   (in) options - unsigned int
+//   (out) value - depends on options
+// Errors:
+//   OutOfMemory - memory ran out while attempting to perform the operation
+//   NotABoolean - the value was requested as a boolean, and it is not a boolean
+//   NotANumber - the value was requested as a number, and it is not a number
+//   NotAnInteger - the value was requested as an integer, and it is not an
+//     integer
+//   NotABinaryString - the value was requested as binary data, and it is not
+//     binary data
+//   NotAString - the value was requested as a string, and it is not a string
+//   NotAnArray - the value was requested as an array, and it is not an array
+//   NotAChar - the value was requested as a char, and it is not a char
+// Context Safety:
+//   Must be called from handler context.
+//   This function will only work if the external is called by an engine post-7.0
+//      and return NotImplemented for the earlier versions.
+//   The returned value must be free'd by the caller of this function.
+// Semantics:
+//   Returns a the current value of the local 'rowDelimiter' property.
+//
+LCError LCContextRowDelimiter(unsigned int options, void *r_value);
+
 // Function:
 //   LCContextResult
 // Parameters:
@@ -1103,7 +1263,11 @@ LCError LCWaitBreak(LCWaitRef wait);
 LCError LCWaitReset(LCWaitRef wait);
 
 ////////////////////////////////////////////////////////////////////////////////
+    
+// SN-2015-01-28: [[ Bug 13781 ]] Image functions disabled as they were using
+//  imagePixmapId and maskPixmapId, which are no longer working reliably.
 
+/*
 typedef enum LCImageRasterFormat
 {
 	// The raster uses the gray colorspace with 1-bit per pixel (i.e. it is a
@@ -1250,6 +1414,8 @@ LCError LCImageUpdate(LCImageRef image);
 //   top-left of the image.
 //	
 LCError LCImageUpdateRect(LCImageRef image, int top, int left, int right, int bottom);
+
+*/
 	
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1384,6 +1550,32 @@ LCError LCPostBlockOnMainThread(unsigned int options, void (^callback)(void));
 	
 ////////////////////////////////////////////////////////////////////////////////
 
+// Function:
+//   LCLicenseCheckEdition
+// Parameters:
+//   (in) min_edition
+//
+// Errors:
+//   Unlicensed - the license check failed.
+// Context Safety:
+//   Must be called from handler context.
+// Semantics:
+//   Checks that the engine is licensed with at min_edition edition level.
+//
+//   If the check fails, then an 'unlicensed' error will be returned when control
+//   returns to the engine.
+//
+//   If a license check fails during the external's initialize handler then the
+//   whole external is marked as unlicensed and all further calls to it will cause
+//   an unlicensed error to be raised.
+//
+//   If a license check fails during an external's handler execution then just
+//   that call will fail.
+//
+LCError LCLicenseCheckEdition(unsigned int min_edition);
+    
+////////////////////////////////////////////////////////////////////////////////
+    
 #if defined(__OBJC__) && TARGET_OS_IPHONE
 
 #import <UIKit/UIKit.h>
@@ -1401,6 +1593,21 @@ LCError LCPostBlockOnMainThread(unsigned int options, void (^callback)(void));
 //    view of the application.
 //
 LCError LCInterfaceQueryView(UIView **r_view);
+    
+// Function:
+//   LCInterfaceQueryViewController
+// Parameters:
+//   (out) r_controller - UIViewController *
+// Errors:
+//   (none)
+// Context Safety:
+//    May be called in any context on the main thread.
+// Semantics:
+//    Returns the UIViewController for the currently visible stack that makes up the main
+//    view of the application.
+//
+
+LCError LCInterfaceQueryViewController(UIViewController** r_controller);
 
 // Function:
 //   LCInterfaceQueryViewScale

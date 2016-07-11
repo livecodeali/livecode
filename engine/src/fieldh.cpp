@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -26,7 +26,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "paragraf.h"
 #include "cdata.h"
 #include "mcerror.h"
-//#include "execpt.h"
+
 #include "util.h"
 #include "MCBlock.h"
 #include "line.h"
@@ -130,9 +130,9 @@ bool MCField::doexport(MCFieldExportFlags p_flags, uint32_t p_part_id, int32_t p
 // and finish, invoking the callback for each and every requested event.
 bool MCField::doexport(MCFieldExportFlags p_flags, MCParagraph *p_paragraphs, int32_t p_start_index, int32_t p_finish_index, MCFieldExportCallback p_callback, void *p_context)
 {
-	// If the null range is requested, there is nothing to do.
-	if (p_start_index == p_finish_index)
-		return true;
+	// If the null range is requested, only export if there are attributes.
+    bool t_empty_range;
+    t_empty_range = p_start_index == p_finish_index;
 
 	// Fetch the paragraphs
 	MCParagraph *t_paragraphs;
@@ -206,6 +206,10 @@ bool MCField::doexport(MCFieldExportFlags p_flags, MCParagraph *p_paragraphs, in
 				compute_paragraph_number(t_numbering, t_paragraph -> getliststyle(), t_paragraph -> getlistdepth(), t_paragraph -> getlistindex());
 	}
 
+    // Abort if this is the empty range and there are no paragraph attributes
+    if (t_empty_range && !(t_first_paragraph->hasattrs()))
+        return true;
+    
 	// Now loop through the paragraphs, starting at the one that has been
 	// identified as the first.
 	MCParagraph *t_paragraph;
@@ -603,27 +607,6 @@ static bool export_formatted_text(void *p_context, MCFieldExportEventType p_even
 // MW-2012-02-20: [[ FieldExport ]] This method exports the content of the
 //   field as either native or unicode.
 
-#ifdef LEGACY_EXEC
-void MCField::exportastext(uint32_t p_part_id, MCExecPoint& ep, int32_t p_start_index, int32_t p_finish_index, bool p_as_unicode)
-{
-	MCAutoStringRef t_string;
-	if (exportastext(p_part_id, p_start_index, p_finish_index, &t_string))
-	{
-		if (p_as_unicode)
-		{
-			MCAutoDataRef t_data;
-			/* UNCHECKED */ MCStringEncode(*t_string, kMCStringEncodingUTF16, false, &t_data);
-			/* UNCHECKED */
-			ep . setvalueref(*t_data);
-		}
-		else
-			/* UNCHECKED */ ep . setvalueref(*t_string);
-	}
-	else
-		ep . clear();
-}
-#endif
-
 /* UNSAFE */ bool MCField::exportastext(uint32_t p_part_id, int32_t p_start_index, int32_t p_finish_index, MCStringRef& r_string)
 {
 	uint32_t t_char_count;
@@ -641,32 +624,6 @@ void MCField::exportastext(uint32_t p_part_id, MCExecPoint& ep, int32_t p_start_
 
 // MW-2012-02-20: [[ FieldExport ]] This method exports the content of the
 //   field as either native or unicode including any list indices.
-
-#ifdef LEGACY_EXEC
-void MCField::exportasplaintext(MCExecPoint& ep, MCParagraph *p_paragraphs, int32_t p_start_index, int32_t p_finish_index, bool p_as_unicode)
-{
-	MCAutoStringRef t_string;
-	if (exportasplaintext(p_paragraphs, p_start_index, p_finish_index, &t_string))
-	{
-		if (p_as_unicode)
-		{
-			MCAutoDataRef t_data;
-			/* UNCHECKED */ MCStringEncode(*t_string, kMCStringEncodingUTF16, false, &t_data);
-			/* UNCHECKED */
-			ep . setvalueref(*t_data);
-		}
-		else
-			/* UNCHECKED */ ep . setvalueref(*t_string);
-	}
-	else
-		ep . clear();
-}
-
-void MCField::exportasplaintext(uint32_t p_part_id, MCExecPoint& ep, int32_t p_start_index, int32_t p_finish_index, bool p_as_unicode)
-{
-	exportasplaintext(ep, resolveparagraphs(p_part_id), p_start_index, p_finish_index, p_as_unicode);
-}
-#endif
 
 bool MCField::exportasplaintext(MCParagraph *p_paragraphs, int32_t p_start_index, int32_t p_finish_index, MCStringRef& r_string)
 {
@@ -691,27 +648,6 @@ bool MCField::exportasplaintext(uint32_t p_part_id, int32_t p_start_index, int32
 // MW-2012-02-21: [[ FieldExport ]] This method exports the content of the
 //   field as either native or unicode, including any list indices and implicit
 //   line breaks.
-#ifdef LEGACY_EXEC
-void MCField::exportasformattedtext(uint32_t p_part_id, MCExecPoint& ep, int32_t p_start_index, int32_t p_finish_index, bool p_as_unicode)
-{
-	MCAutoStringRef t_string;
-	if (exportasformattedtext(p_part_id, p_start_index, p_finish_index, &t_string))
-	{
-		if (p_as_unicode)
-		{
-			MCAutoDataRef t_data;
-			/* UNCHECKED */ MCStringEncode(*t_string, kMCStringEncodingUTF16, false, &t_data);
-			/* UNCHECKED */
-			ep . setvalueref(*t_data);
-		}
-		else
-			/* UNCHECKED */ ep . setvalueref(*t_string);
-	}
-	else
-		ep . clear();
-}
-#endif
-
 bool MCField::exportasformattedtext(uint32_t p_part_id, int32_t p_start_index, int32_t p_finish_index, MCStringRef& r_string)
 {
 	uint32_t t_char_count;
@@ -800,97 +736,68 @@ Exec_stat MCField::setrtf(uint4 parid, MCStringRef data)
 	return ES_NORMAL;
 }
 
-#ifdef LEGACY_EXEC
-Exec_stat MCField::setstyledtext(uint4 parid, MCExecPoint &ep)
-{
-	state |= CS_NO_FILE; // prevent interactions while downloading images
-	MCParagraph *stpgptr = styledtexttoparagraphs(ep);
-	if (stpgptr == nil)
-		setpartialtext(parid, MCnullmcstring, false);
-	else
-		setparagraphs(stpgptr, parid);
-	state &= ~CS_NO_FILE;
-	return ES_NORMAL;
-}
-#endif
-
 void MCField::setstyledtext(uint32_t part_id, MCArrayRef p_text)
 {
 	state |= CS_NO_FILE; // prevent interactions while downloading images
 	MCParagraph *stpgptr = styledtexttoparagraphs(p_text);
 	if (stpgptr == nil)
-		setpartialtext(part_id, MCnullmcstring, false);
+		setpartialtext(part_id, kMCEmptyString);
 	else
 		setparagraphs(stpgptr, part_id);
 	state &= ~CS_NO_FILE;
 }
 
-Exec_stat MCField::setpartialtext(uint4 parid, const MCString &data, bool p_unicode)
+Exec_stat MCField::setpartialtext(uint4 parid, MCStringRef p_text)
 {
 	state |= CS_NO_FILE; // prevent interactions while downloading images
-	MCParagraph *htmlpgptr = texttoparagraphs(data, p_unicode);
+	MCParagraph *htmlpgptr = texttoparagraphs(p_text);
     // SN-2014-06-23: [[ Bug 12303 ]] Parameter added to preserve the 0-length styles
 	setparagraphs(htmlpgptr, parid, true);
 	state &= ~CS_NO_FILE;
 	return ES_NORMAL;
 }
 
-MCParagraph *MCField::texttoparagraphs(const MCString& p_text, Boolean p_unicode)
+MCParagraph *MCField::texttoparagraphs(MCStringRef p_text)
 {
-	MCParagraph *t_paragraphs;
+    // Create a new list of paragraphs
+    MCParagraph *t_paragraphs;
 	t_paragraphs = new MCParagraph;
 	t_paragraphs -> setparent(this);
 	t_paragraphs -> inittext();
 
-	const char *t_native_text;
-	t_native_text = p_text . getstring();
+	const unichar_t* t_unicode_text;
+    t_unicode_text = MCStringGetCharPtr(p_text);
 
-	uint2 *t_unicode_text;
-	t_unicode_text = (uint2 *)p_text . getstring();
-
-	uint4 t_text_length;
-	t_text_length = p_text . getlength();
-	if (p_unicode)
-		t_text_length /= 2;
+    uindex_t t_text_length;
+    t_text_length = MCStringGetLength(p_text);
 	
 	MCTextBlock t_block;
 	memset(&t_block, 0, sizeof(MCTextBlock));
-	t_block . string_native = (p_unicode == False);
+    t_block . string_native = false;
 	t_block . foreground_color = 0xffffffff;
-	t_block . background_color = 0xffffffff;	
+	t_block . background_color = 0xffffffff;
+    
 	while(t_text_length > 0)
 	{
-		uint4 t_next;
+		uindex_t t_next;
 		for(t_next = 0; t_next < t_text_length; ++t_next)
 		{
-			if (p_unicode)
-			{
-				if (t_unicode_text[t_next] == (uint2)'\n')
-					break;
-			}
-			else if (t_native_text[t_next] == '\n')
-				break;
+            if (t_unicode_text[t_next] == '\n')
+                break;
 		}
 
 		if (t_next > 0)
 		{
-			if (p_unicode)
-				t_block . string_buffer = t_unicode_text;
-			else
-				t_block . string_buffer = (uint2 *)t_native_text;
+            t_block . string_buffer = (const uint2*)t_unicode_text;
 			t_block . string_length = t_next;
+            
 			converttoparagraphs(t_paragraphs, NULL, &t_block);
 		}
 
 		while(t_next < t_text_length)
 		{
-			if (p_unicode)
-			{
-				if (t_unicode_text[t_next] != (uint2)'\n')
-					break;
-			}
-			else if (t_native_text[t_next] != '\n')
-				break;
+            if (t_unicode_text[t_next] != (uint2)'\n')
+                break;
 
 			converttoparagraphs(t_paragraphs, NULL, NULL);
 
@@ -898,10 +805,7 @@ MCParagraph *MCField::texttoparagraphs(const MCString& p_text, Boolean p_unicode
 		}
 
 		t_text_length -= t_next;
-		if (p_unicode)
-			t_unicode_text += t_next;
-		else
-			t_native_text += t_next;
+        t_unicode_text += t_next;
 	}
 
 	converttoparagraphs(t_paragraphs, NULL, NULL);
@@ -993,24 +897,18 @@ bool MCField::converttoparagraphs(void *p_context, const MCTextParagraph *p_para
 		if (p_block -> foreground_color != 0xffffffff)
 		{
 			MCColor t_color;
-			t_color . pixel = 0;
 			t_color . red = ((p_block -> foreground_color & 0xff) << 8) | (p_block -> foreground_color & 0xff);
 			t_color . green = (p_block -> foreground_color & 0xff00) | ((p_block -> foreground_color & 0xff00) >> 8);
 			t_color . blue = ((p_block -> foreground_color & 0xff0000) >> 8) | ((p_block -> foreground_color & 0xff0000) >> 16);
-			t_color . flags = 0xff;
-			t_color . pad = 0;
 			t_block -> setcolor(&t_color);
 		}
 
 		if (p_block -> background_color != 0xffffffff)
 		{
 			MCColor t_color;
-			t_color . pixel = 0;
 			t_color . red = ((p_block -> background_color & 0xff) << 8) | (p_block -> background_color & 0xff);
 			t_color . green = (p_block -> background_color & 0xff00) | ((p_block -> background_color & 0xff00) >> 8);
 			t_color . blue = ((p_block -> background_color & 0xff0000) >> 8) | ((p_block -> background_color & 0xff0000) >> 16);
-			t_color . flags = 0xff;
-			t_color . pad = 0;
 			t_block -> setbackcolor(&t_color);
 		}
 
@@ -1027,15 +925,17 @@ bool MCField::converttoparagraphs(void *p_context, const MCTextParagraph *p_para
 
 		const char *t_font_name;
 		t_font_name = p_block -> font_name == NULL ? "" : p_block -> font_name;
-
-#ifdef _MACOSX
+        
+#if defined _MACOSX
+        
 		// MW-2011-03-13: [[ Bug ]] Try different variants of font searching to ensure we don't
 		//   get strange choices. (e.g. Helvetica -> Helvetica Light Oblique).
 		char t_derived_font_name[256];
 		if (macmatchfontname(t_font_name, t_derived_font_name))
 			t_font_name = t_derived_font_name;
-#endif
 		
+#endif
+        
         MCAutoStringRef t_font_name_ref;
         MCStringCreateWithCString(t_font_name, &t_font_name_ref);
         t_block -> SetTextFont(ctxt, *t_font_name_ref);

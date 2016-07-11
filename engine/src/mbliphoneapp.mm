@@ -1,5 +1,4 @@
-
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -29,6 +28,8 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "mblnotification.h"
 #import <sys/utsname.h>
+
+#include "libscript/script.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -87,7 +88,11 @@ static void dispatch_notification_events(void)
         s_notification_events = s_notification_events -> next;
 
         MCAutoStringRef t_text;
-        /* UNCHECKED */ MCStringCreateWithCFString((CFStringRef)t_event -> text, &t_text);
+		// PM-2015-10-27: [[ Bug 16279 ]] Prevent crash when the payload is empty
+		if (t_event -> text != nil)
+			/* UNCHECKED */ MCStringCreateWithCFString((CFStringRef)t_event -> text, &t_text);
+		else
+			t_text = MCValueRetain(kMCEmptyString);
 
         switch(t_event -> type)
         {
@@ -195,6 +200,7 @@ static UIDeviceOrientation patch_device_orientation(id self, SEL _cmd)
 	
 	m_status_bar_style = UIStatusBarStyleDefault;
 	m_status_bar_hidden = NO;
+    m_status_bar_solid = NO;
 	
 	m_in_autorotation = false;
 	m_prepare_status_pending = false;
@@ -206,6 +212,7 @@ static UIDeviceOrientation patch_device_orientation(id self, SEL _cmd)
 	
 	m_keyboard_activation_pending = false;
     m_keyboard_is_visible = false;
+    m_is_remote_notification = false;
 	
     m_pending_push_notification = nil;
     m_pending_local_notification = nil;
@@ -309,6 +316,14 @@ static UIDeviceOrientation patch_device_orientation(id self, SEL _cmd)
 	// Fetch the status bar state.
 	m_status_bar_style = [m_application statusBarStyle];
 	m_status_bar_hidden = [m_application isStatusBarHidden];
+    
+    // PM-2015-02-17: [[ Bug 14482 ]] Check if "solid" status bar style is selected
+    NSDictionary *t_dict;
+    t_dict = [[NSBundle mainBundle] infoDictionary];
+    NSNumber *t_status_bar_solid;
+    t_status_bar_solid = [t_dict objectForKey:@"com_livecode_StatusBarSolid"];
+    
+    m_status_bar_solid = [t_status_bar_solid boolValue];
 	
 	// Initialize our window with the main screen's bounds.
 	m_window = [[MCIPhoneWindow alloc] initWithFrame: [[UIScreen mainScreen] bounds]];
@@ -323,6 +338,21 @@ static UIDeviceOrientation patch_device_orientation(id self, SEL _cmd)
 	Class t_cls = NSClassFromString(@"UILocalNotification");
     if (t_cls)
     {
+#ifdef __IPHONE_8_0
+        // PM-2015-02-18: [[ Bug 14400 ]] Ask for permission for local notifications only if this option is selected in standalone application settings
+        NSNumber *t_uses_local_notifications;
+        t_uses_local_notifications = [t_dict objectForKey:@"com_livecode_UsesLocalNotifications"];
+        if ([t_uses_local_notifications boolValue])
+        {
+            // PM-2014-11-14: [[ Bug 13927 ]] From iOS 8 we have to ask for user permission for local notifications
+            if ([UIApplication instancesRespondToSelector:@selector(registerUserNotificationSettings:)])
+            {
+                UIUserNotificationSettings *t_local_settings;
+                t_local_settings = [UIUserNotificationSettings settingsForTypes:UIUserNotificationTypeAlert|UIUserNotificationTypeBadge|UIUserNotificationTypeSound categories:nil];
+                [[UIApplication sharedApplication] registerUserNotificationSettings:t_local_settings];
+            }
+        }
+#endif
         UILocalNotification *t_notification = [p_launchOptions objectForKey: UIApplicationLaunchOptionsLocalNotificationKey];
         if (t_notification)
         {
@@ -336,8 +366,18 @@ static UIDeviceOrientation patch_device_orientation(id self, SEL _cmd)
     NSDictionary *t_push_notification = [p_launchOptions objectForKey: UIApplicationLaunchOptionsRemoteNotificationKey];
     // MM-2012-09-25: [[ Bug 10391 ]] Retain notification.
     if (t_push_notification)
-        m_pending_push_notification = [[t_push_notification objectForKey:@"payload"] retain];
-
+	{
+		// Prevent crash when launching the app from the notifications screen:
+		// If the payload is empty, JSON null will be deserialized to NSNull. Unlike nil,
+		// we cannot send (most) messages to NSNull
+		id t_pending_push_notification_value = [t_push_notification objectForKey:@"payload"];
+		if ([t_pending_push_notification_value isKindOfClass: [NSString class]])
+			m_pending_push_notification = [t_pending_push_notification_value retain];
+		else
+			// t_pending_push_notification_value is NSNull, not NSString
+			m_pending_push_notification = nil;
+	}
+	
     // Check if we have received a custom URL
     // This check is carried out at application launch
     NSURL *t_launch_url = [p_launchOptions objectForKey: UIApplicationLaunchOptionsURLKey];
@@ -407,6 +447,7 @@ static UIDeviceOrientation patch_device_orientation(id self, SEL _cmd)
             }
             if (t_allowed_notifications != UIUserNotificationTypeNone)
             {
+                m_is_remote_notification = true;
                 UIUserNotificationSettings *t_push_settings;
                 t_push_settings = [UIUserNotificationSettings settingsForTypes: t_allowed_notifications categories:nil];
                 [[UIApplication sharedApplication] registerUserNotificationSettings: t_push_settings];
@@ -424,14 +465,18 @@ static UIDeviceOrientation patch_device_orientation(id self, SEL _cmd)
                                              selector: @selector(orientationChanged:)
                                                  name: UIDeviceOrientationDidChangeNotification
                                                object: nil];
+    
+    return TRUE;
 }
 
-// MM-2014-09-30: [[ iOS 8 Support ]] Method called after successully registering (push) notification settings.
+// MM-2014-09-30: [[ iOS 8 Support ]] Method called after successully registering (local or remote) notification settings.
 //  Call registerForRemoteNotifications to finish off push notification registration process. (Will send didRegisterForRemoteNotificationsWithDeviceToken which will be handled as before.)
+// PM-2014-11-14: [[ Bug 13927 ]] Call registerForRemoteNotifications only if didRegisterUserNotificationSettings was called after successully registering *remote* notification settings
 #ifdef __IPHONE_8_0
 - (void)application: (UIApplication *)p_application didRegisterUserNotificationSettings: (UIUserNotificationSettings *)p_notificationSettings
 {
-    [p_application registerForRemoteNotifications];
+    if (m_is_remote_notification)
+        [p_application registerForRemoteNotifications];
 }
 #endif
 
@@ -441,7 +486,12 @@ static UIDeviceOrientation patch_device_orientation(id self, SEL _cmd)
     UIApplicationState t_state = [p_application applicationState];
     MCAutoStringRef t_mc_reminder_text;
     NSString *t_reminder_text = [p_notification.userInfo objectForKey:@"payload"];
-	/* UNCHECKED */ MCStringCreateWithCFString((CFStringRef)t_reminder_text, &t_mc_reminder_text);
+	
+	// PM-2015-10-27: [[ Bug 16279 ]] Prevent crash when the payload is empty
+	if (t_reminder_text != nil)
+		/* UNCHECKED */ MCStringCreateWithCFString((CFStringRef)t_reminder_text, &t_mc_reminder_text);
+	else
+		t_mc_reminder_text = MCValueRetain(kMCEmptyString);
     if (m_did_become_active)
     {
 		MCNotificationPostLocalNotificationEvent(*t_mc_reminder_text);
@@ -475,8 +525,25 @@ static UIDeviceOrientation patch_device_orientation(id self, SEL _cmd)
     MCLog("application:didReceiveRemoteNotification:");
     UIApplicationState t_state = [p_application applicationState];
     MCAutoStringRef t_mc_push_notification_text;
-    NSString *t_reminder_text = [p_dictionary objectForKey:@"payload"];
-    /* UNCHECKED */ MCStringCreateWithCFString((CFStringRef)t_reminder_text, &t_mc_push_notification_text);
+	id t_reminder_text_value = [p_dictionary objectForKey:@"payload"];
+	
+	// Prevent crash when sending push notifications while the app is running:
+	// If the payload is empty, JSON null will be deserialized to NSNull. Unlike nil,
+	// we cannot send (most) messages to NSNull
+	NSString *t_reminder_text;
+	if ([t_reminder_text_value isKindOfClass: [NSString class]])
+		t_reminder_text = t_reminder_text_value;
+	else
+		// t_reminder_text_value is NSNull, not NSString
+		t_reminder_text = nil;
+	
+	
+	// PM-2015-10-27: [[ Bug 16279 ]] Prevent crash when the payload is empty
+	if (t_reminder_text != nil)
+		/* UNCHECKED */ MCStringCreateWithCFString((CFStringRef)t_reminder_text, &t_mc_push_notification_text);
+	else
+		t_mc_push_notification_text = MCValueRetain(kMCEmptyString);
+	
     if (m_did_become_active)
     {
 		MCNotificationPostPushNotificationEvent(*t_mc_push_notification_text);
@@ -774,8 +841,7 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
 				t_new_orientation = UIInterfaceOrientationLandscapeLeft;
 				break;
             default:
-                assert(false);
-                break;
+                MCUnreachableReturn();
 		}
 		
 		// Store the pending notification.
@@ -847,6 +913,13 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
 	[[m_main_controller rootView] reshape];
 }
 
+// PM-2015-02-17: [[ Bug 14482 ]]
+// This method should be called before switchToStatusBarStyle
+- (void)setStatusBarSolid: (BOOL)p_is_solid
+{
+    m_status_bar_solid = p_is_solid;
+}
+
 //////////
 
 - (CGRect)fetchScreenBounds
@@ -869,8 +942,9 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
 	// MW-2011-10-24: [[ Bug ]] The status bar only clips the display if actually
 	//   hidden, or on iPhone with black translucent style.
     // MM-2013-09-25: [[ iOS7Support ]] The status bar is always overlaid ontop of the view, irrespective of its style.
+    // PM-2015-02-17: [[ Bug 14482 ]] If the style is "solid", do not put status bar on top of the view
 	CGFloat t_status_bar_size;
-	if (m_status_bar_hidden || MCmajorosversion >= 700 || ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPhone && m_status_bar_style == UIStatusBarStyleBlackTranslucent))
+	if (m_status_bar_hidden || (MCmajorosversion >= 700 && !m_status_bar_solid)|| ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPhone && m_status_bar_style == UIStatusBarStyleBlackTranslucent))
 		t_status_bar_size = 0.0f;
 	else
 		t_status_bar_size = 20.0f;
@@ -1495,11 +1569,11 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
         {
             switch(p_new_orientation)
             {
-                default:
                 case UIInterfaceOrientationPortrait:
                 case UIInterfaceOrientationPortraitUpsideDown:
                     t_image_names[0] = @"Default-736h@3x.png";
                     t_image_angles[0] = 0.0f;
+                    break;
                 case UIInterfaceOrientationLandscapeLeft:
                 case UIInterfaceOrientationLandscapeRight:
                     t_image_names[0] = @"Default-414h@3x.png";
@@ -1521,7 +1595,8 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
                 t_image_names[0] = @"Default-667h@2x.png";
                 t_image_names[1] = nil;
             }
-            if ([[UIScreen mainScreen] bounds] . size . height == 568 || [[UIScreen mainScreen] bounds] . size . width == 568)
+            // PM-2015-03-19: [[ Bug 13969 ]] Make sure the correct splash screen is used for iPhone6
+            else if ([[UIScreen mainScreen] bounds] . size . height == 568 || [[UIScreen mainScreen] bounds] . size . width == 568)
             {
                 t_image_names[0] = @"Default-568h@2x.png";
                 t_image_names[1] = nil;
@@ -1763,9 +1838,12 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
 // PM-2014-10-13: [[ Bug 13659 ]] Make sure we can interact with the LC app when Voice Over is enabled/disabled while our view is already onscreen
 - (void)voiceOverStatusChanged
 {
+    if (MCignorevoiceoversensitivity == True)
+        return;
+    
     UIView *t_main_view;
     t_main_view = [[MCIPhoneApplication sharedApplication] fetchMainView];
-    
+
     if (UIAccessibilityIsVoiceOverRunning())
     {
         t_main_view.isAccessibilityElement = YES;
@@ -1842,7 +1920,8 @@ NSString* MCIPhoneGetDeviceModelName(void)
                                            @"iPod 3rd Gen",         @"iPod3,1",
 										   @"iPod 4th Gen",         @"iPod4,1",
                                            @"iPod 5th Gen",         @"iPod5,1",
-                                           nil];
+                                           // PM-2015-03-03: [[ Bug 14689 ]] Cast to NSString* to prevent EXC_BAD_ACCESS when in release mode and run in 64bit device/sim
+                                           (NSString *)nil];
 										   
 	
 	NSString *t_device_name = [commonNamesDictionary objectForKey: t_machine_name];
@@ -1983,7 +2062,9 @@ static char *my_strndup(const char * p, int n)
 	return s;
 }
 
-int main(int argc, char *argv[], char *envp[])
+extern "C" bool MCModulesInitialize();
+
+MC_DLLEXPORT_DEF int platform_main(int argc, char *argv[], char *envp[])
 {
 #if defined(_DEBUG) && defined(_VALGRIND)
 	if (argc < 2 ||  (argc >= 2 && strcmp(argv[1], "-valgrind") != 0))
@@ -1993,7 +2074,8 @@ int main(int argc, char *argv[], char *envp[])
 	}
 #endif
 	
-    if (!MCInitialize())
+    if (!MCInitialize() || !MCSInitialize() ||
+        !MCModulesInitialize() || !MCScriptInitialize())
         return -1;
     
 	int t_exit_code;

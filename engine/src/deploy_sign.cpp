@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -21,7 +21,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "parsedef.h"
 #include "filedefs.h"
 
-//#include "execpt.h"
+
 #include "exec.h"
 #include "handler.h"
 #include "scriptpt.h"
@@ -171,8 +171,8 @@ struct SpcString
 
 DECLARE_ASN1_FUNCTIONS(SpcString)
 ASN1_CHOICE(SpcString) = {
-	ASN1_IMP(SpcString, d.unicode, ASN1_BMPSTRING, 0),
-	ASN1_IMP(SpcString, d.ascii, ASN1_IA5STRING, 1)
+	ASN1_IMP_OPT(SpcString, d.unicode, ASN1_BMPSTRING, 0),
+	ASN1_IMP_OPT(SpcString, d.ascii, ASN1_IA5STRING, 1)
 } ASN1_CHOICE_END(SpcString)
 IMPLEMENT_ASN1_FUNCTIONS(SpcString)
 
@@ -219,9 +219,9 @@ struct SpcLink
 
 DECLARE_ASN1_FUNCTIONS(SpcLink)
 ASN1_CHOICE(SpcLink) = {
-	ASN1_IMP(SpcLink, d.url, ASN1_IA5STRING, 0),
-	ASN1_IMP(SpcLink, d.moniker, SpcSerializedObject, 1),
-	ASN1_EXP(SpcLink, d.file, SpcString, 2)
+	ASN1_IMP_OPT(SpcLink, d.url, ASN1_IA5STRING, 0),
+	ASN1_IMP_OPT(SpcLink, d.moniker, SpcSerializedObject, 1),
+	ASN1_EXP_OPT(SpcLink, d.file, SpcString, 2)
 } ASN1_CHOICE_END(SpcLink)
 IMPLEMENT_ASN1_FUNCTIONS(SpcLink)
 
@@ -879,7 +879,9 @@ static bool MCDeploySignWindowsAddTimeStamp(const MCDeploySignParameters& p_para
 	PKCS7_SIGNER_INFO *t_signer_info;
 	t_signer_info = sk_PKCS7_SIGNER_INFO_value(p_signature -> d . sign -> signer_info, 0);
 
-	// Build a request to send to the time-stamp authority
+	// Build a request to send to the time-stamp authority. If there is a 'blob'
+    // field in this request, then we must reset the signature field before freeing
+    // it as that is borrowed from elsewhere.
 	SpcTimeStampRequest *t_request;
 	t_request = nil;
 	if (t_success)
@@ -937,10 +939,8 @@ static bool MCDeploySignWindowsAddTimeStamp(const MCDeploySignParameters& p_para
 			t_data . setnext(&t_url);
 			t_url . setvalueref_argument(p_params . timestamper);
             extern MCExecContext *MCECptr;
-            // SN-2014-05-09 [[ ClearResult ]]
-            // isempty is different from isclear - 'isempty' returns false for a cleared result
 			if (MCECptr->GetObject() -> message(MCM_post_url, &t_data, False, True) == ES_NORMAL &&
-				MCresult -> isclear())
+				MCresult -> isempty())
 			{
 				t_failed = false;
 				break;
@@ -1034,7 +1034,11 @@ static bool MCDeploySignWindowsAddTimeStamp(const MCDeploySignParameters& p_para
 	// the sig.
 	if (t_request != nil)
 	{
-		t_request -> blob -> signature = nil;
+        // If we have a 'blob' field then we will have potentially borrowed a
+        // signature from another data structure so must unhook that here to
+        // stop it being freed in SpcTimeStampRequest_free.
+        if (t_request -> blob != nil)
+            t_request -> blob -> signature = nil;
 		SpcTimeStampRequest_free(t_request);
 	}
 
@@ -1072,7 +1076,7 @@ bool MCDeploySignWindows(const MCDeploySignParameters& p_params)
 	EVP_PKEY* t_privatekey;
 	t_cert_chain = nil;
 	t_privatekey = nil;
-	if (t_success && p_params . certstore != nil)
+	if (t_success && !MCValueIsEmpty(p_params . certstore))
         t_success = MCDeployCertStoreLoad(p_params . passphrase,
                                           p_params . certstore,
 										  t_cert_chain, t_privatekey);
@@ -1250,7 +1254,7 @@ bool MCDeploySignWindows(const MCDeploySignParameters& p_params)
 
 	// Now we have our signature, we timestamp it - but only if we were
 	// given a timestamp authority url.
-	if (t_success && p_params . timestamper != nil)
+	if (t_success && !MCValueIsEmpty(p_params . timestamper))
 		t_success = MCDeploySignWindowsAddTimeStamp(p_params, t_signature);
 
 	// We now have a complete PKCS7 SignedData object which is now serialized.
@@ -1432,7 +1436,7 @@ bool MCDeploySignLoadPVK(MCStringRef p_filename, MCStringRef p_passphrase, EVP_P
 	// Next we read the salt (if any)
 	uint8_t *t_salt;
 	t_salt = nil;
-	if (t_header . salt_length > 0)
+	if (t_success && t_header . salt_length > 0)
 	{
 		if (t_success)
 			t_success = MCMemoryNewArray(t_header . salt_length, t_salt);
@@ -1467,7 +1471,7 @@ bool MCDeploySignLoadPVK(MCStringRef p_filename, MCStringRef p_passphrase, EVP_P
 			t_success = MCDeployThrowOpenSSL(kMCDeployErrorBadPrivateKey);
 
 	// We now have everything we need to attempt to decrypt the key (if necessary).
-	if (t_header . is_encrypted)
+	if (t_success && t_header . is_encrypted)
 	{
 		// First check we have a password
 		if (t_success && p_passphrase == nil)

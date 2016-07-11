@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -192,6 +192,12 @@ uint32_t MCWeightedPixelBox::split_axis(uint32_t p_channel, uint32_t p_left, uin
 	return pivot_pixels_by_value(pixels, p_channel, p_left, p_right, p_pivot_value, t_weight);
 }
 
+static int32_t vbox_compare_population(MCWeightedPixelBox *, MCWeightedPixelBox *) ATTRIBUTE_UNUSED;
+static int32_t vbox_compare_longest_dimension(MCWeightedPixelBox *, MCWeightedPixelBox *) ATTRIBUTE_UNUSED;
+static int32_t vbox_compare_volume(MCWeightedPixelBox *, MCWeightedPixelBox *) ATTRIBUTE_UNUSED;
+static int32_t vbox_compare_volume_population_product(MCWeightedPixelBox *, MCWeightedPixelBox *) ATTRIBUTE_UNUSED;
+static int32_t vbox_compare_null(MCWeightedPixelBox *, MCWeightedPixelBox *) ATTRIBUTE_UNUSED;
+
 static int32_t vbox_compare_population(MCWeightedPixelBox *p_a, MCWeightedPixelBox *p_b)
 {
 	return p_a->population - p_b->population;
@@ -271,7 +277,7 @@ bool MCImageMedianCutQuantization(MCWeightedPixel *p_pixels, uint32_t p_pixel_co
 			uint32_t t_midpoint_index = t_box->split_axis(t_box->longest_axis, t_box->first, t_median_index, t_midpoint_value) - 1;
 			t_box1 = new MCWeightedPixelBox(p_pixels, t_box->first, t_midpoint_index);
 			t_box2 = new MCWeightedPixelBox(p_pixels, t_midpoint_index + 1, t_box->last);
-			MCLog("split axis %d by value %d into %d+%d (population %d, first %d)", t_box->longest_axis, t_midpoint_value, t_box1->population, t_box2->population, t_box->population, t_box->first);
+            //MCLog("split axis %d by value %d into %d+%d (population %d, first %d)", t_box->longest_axis, t_midpoint_value, t_box1->population, t_box2->population, t_box->population, t_box->first);
 		}
 		else
 		{
@@ -279,7 +285,7 @@ bool MCImageMedianCutQuantization(MCWeightedPixel *p_pixels, uint32_t p_pixel_co
 			uint32_t t_midpoint_index = t_box->split_axis(t_box->longest_axis, t_median_index, t_box->last, t_midpoint_value) - 1;
 			t_box1 = new MCWeightedPixelBox(p_pixels, t_box->first, t_midpoint_index);
 			t_box2 = new MCWeightedPixelBox(p_pixels, t_midpoint_index + 1, t_box->last);
-			MCLog("split axis %d by value %d into %d+%d (population %d, first %d)", t_box->longest_axis, t_midpoint_value, t_box1->population, t_box2->population, t_box->population, t_box->first);
+            //MCLog("split axis %d by value %d into %d+%d (population %d, first %d)", t_box->longest_axis, t_midpoint_value, t_box1->population, t_box2->population, t_box->population, t_box->first);
 		}
 
 		t_box1->pre_count = t_box->pre_count;
@@ -352,8 +358,7 @@ bool MCImageGenerateOptimalPaletteWithWeightedPixels(MCImageBitmap *p_bitmap, ui
 			{
 				if ((*t_src_row >> 24) > 0)
 				{
-					c.pixel = *t_src_row;
-					MCscreen->querycolor(c);
+					MCColorSetPixel(c, *t_src_row);
 					t_pixels[t_pixel_count].channel[0] = c.red >> 8;
 					t_pixels[t_pixel_count].channel[1] = c.green >> 8;
 					t_pixels[t_pixel_count].channel[2] = c.blue >> 8;
@@ -405,11 +410,6 @@ bool MCImageGenerateOptimalPaletteWithWeightedPixels(MCImageBitmap *p_bitmap, ui
 			r_colours[i].red = t_colourmap[i].channel[0] << 8 | t_colourmap[i].channel[0];
 			r_colours[i].green = t_colourmap[i].channel[1] << 8 | t_colourmap[i].channel[1];
 			r_colours[i].blue = t_colourmap[i].channel[2] << 8 | t_colourmap[i].channel[2];
-			r_colours[i].pixel = MCGPixelPackNative(
-											  r_colours[i].red >> 8,
-											  r_colours[i].green >> 8,
-											  r_colours[i].blue,
-											  255);
 		}
 	}
 	if (t_colourmap != NULL)

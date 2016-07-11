@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -37,13 +37,21 @@ MCLine::MCLine(MCParagraph *paragraph)
 	parent = paragraph;
 	firstblock = lastblock = NULL;
     firstsegment = lastsegment = NULL;
-	width = ascent = descent = 0;
-	dirtywidth = 0;
+    width = 0.0f;
+    m_ascent = m_descent = m_leading = 0.0f;
+    dirtywidth = 0.0f;
     m_offset = 0;
 }
 
 MCLine::~MCLine()
 {
+}
+
+// SN-2015-01-21: [[ Bug 14229 ]] We want to get the length of the line we replace
+void MCLine::takewidth(MCLine *lptr)
+{
+    if (width != lptr -> width)
+        dirtywidth = MCU_max(width, lptr->width);
 }
 
 /*void MCLine::takebreaks(MCLine *lptr)
@@ -65,7 +73,11 @@ MCLine::~MCLine()
 	}
 	ascent = lptr->ascent;
 	descent = lptr->descent;
+    m_ascent = lptr->m_ascent;
+    m_descent = lptr->m_descent;
+    m_leading = lptr->m_leading;
 	lptr->ascent = lptr->descent = 0;
+    lptr->m_ascent = lptr->m_descent = lptr->m_leading = 0;
 	lptr->firstblock = lptr->lastblock = NULL;
 	lptr->width = 0;
 }*/
@@ -175,11 +187,20 @@ MCLine::~MCLine()
 	//   break index through any space chars.
 	for(;;)
 	{
-		// Consume all spaces after the break index.
+        // Consume all spaces after the break index.
         // AL-2014-03-21: [[ Bug 11958 ]] Break index is paragraph index, not block index.
 		while(t_break_index < (t_break_block -> GetOffset() + t_break_block -> GetLength()) &&
 			  parent -> TextIsWordBreak(parent -> GetCodepointAtIndex(t_break_index)))
-			t_break_index++;
+            t_break_index++;
+        {
+            // SN-2015-01-21: [[ Bug 14421 ]] If the break block is a unicode block,
+            //  then the next index is 2 'char' (a unichar) further, not one. This can lead to a
+            //  size of 1 for a unicode block, and a hang in FontBreaking.
+            if (t_break_block -> getflag(F_HAS_UNICODE))
+                t_break_index += sizeof(unichar_t);
+            else
+                t_break_index++;
+        }
 		
 		if (t_break_index < (t_break_block -> GetOffset() + t_break_block -> GetLength()))
 			break;
@@ -253,7 +274,6 @@ void MCLine::appendall(MCBlock *bptr, bool p_flow)
 	coord_t oldwidth = width;
 	width = 0;
 	bptr = lastblock;
-	ascent = descent = 0;
     SegmentLine();
     
     // Only resolve the display order if this line is not flowed (if it is
@@ -264,6 +284,7 @@ void MCLine::appendall(MCBlock *bptr, bool p_flow)
     }
 	
     dirtywidth = MCU_max(width, oldwidth);
+    m_ascent = m_descent = m_leading = 0;
 }
 
 void MCLine::appendsegments(MCSegment *first, MCSegment *last)
@@ -274,7 +295,7 @@ void MCLine::appendsegments(MCSegment *first, MCSegment *last)
     firstsegment = first;
     lastsegment = last;
     
-    ascent = descent = 0;
+    m_ascent = m_descent = m_leading = 0;
     
     coord_t oldwidth = width;
     width = 0;
@@ -303,12 +324,16 @@ void MCLine::draw(MCDC *dc, int2 x, int2 y, findex_t si, findex_t ei, MCStringRe
 
 void MCLine::setscents(MCBlock *bptr)
 {
-	uint2 aheight = bptr->getascent();
-	if (aheight > ascent)
-		ascent = aheight;
-	uint2 dheight = bptr->getdescent();
-	if (dheight > descent)
-		descent = dheight;
+    coord_t t_aheight, t_dheight, t_leading;
+    t_aheight = bptr->GetAscent();
+    t_dheight = bptr->GetDescent();
+    t_leading = bptr->GetLeading();
+    if (t_aheight > m_ascent)
+        m_ascent = t_aheight;
+    if (t_dheight > m_descent)
+        m_descent = t_dheight;
+    if (t_leading > m_leading)
+        m_leading = t_leading;
 }
 
 uint2 MCLine::getdirtywidth()
@@ -392,12 +417,13 @@ findex_t MCLine::GetCursorIndex(coord_t cx, Boolean chunk, bool moving_forward)
             
             // SN-2014-08-14: [[ Bug 13106 ]] We want the outside left edge
             coord_t origin = bptr->getorigin() + sgptr->GetLeft();
+
             // Different cases, according to the alignment:
             //  right-aligned: the origin belongs to the previous block
             //  others:        the origin belongs to the current block
             if ((sgptr -> GetHorizontalAlignment() == kMCSegmentTextHAlignRight
                         && cx > origin && cx <= (origin + bptr->getwidth()))
-                    || (cx >= origin && cx < (origin + bptr->getwidth())))
+                    || (cx >= origin && cx <= (origin + bptr->getwidth())))
             {
                 done = true;
                 break;
@@ -478,19 +504,24 @@ uint2 MCLine::getwidth()
 	return ceil(width);
 }
 
-uint2 MCLine::getheight()
+coord_t MCLine::GetAscent() const
 {
-	return ascent + descent;
+    return m_ascent;
 }
 
-uint2 MCLine::getascent()
+coord_t MCLine::GetDescent() const
 {
-	return ascent;
+    return m_descent;
 }
 
-uint2 MCLine::getdescent()
+coord_t MCLine::GetLeading() const
 {
-	return descent;
+    return m_leading;
+}
+
+coord_t MCLine::GetHeight() const
+{
+    return GetAscent() + GetDescent() + GetLeading();
 }
 
 // MW-2012-02-10: [[ FixedTable ]] In fixed-width table mode the paragraph needs to
@@ -747,8 +778,10 @@ MCLine *MCLine::DoLayout(bool p_flow, int16_t p_linewidth)
         
         // The last segment of the line should be no larger than its contents
         // (because it doesn't contain the whitespace of another tab) unless it
-        // is to be right aligned in LTR text or left-aligned in RTL text
-        if (!t_fixed_tabs && sgptr == lastsegment
+        // is to be right aligned in LTR text or left-aligned in RTL text or it
+        // terminates with a tab character.
+        if (!t_fixed_tabs
+            && (sgptr == lastsegment && !sgptr->GetLastBlock()->HasTrailingTab())
             && ((parent->getbasetextdirection() != kMCTextDirectionRTL && sgptr->GetHorizontalAlignment() != kMCSegmentTextHAlignRight)
             ||  (parent->getbasetextdirection() == kMCTextDirectionRTL && sgptr->GetHorizontalAlignment() != kMCSegmentTextHAlignLeft)))
         {

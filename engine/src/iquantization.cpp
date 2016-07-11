@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -345,7 +345,6 @@ bool MCImageGenerateWebsafePalette(uint32_t &r_palette_size, MCColor *&r_colours
 					r_colours[t_index].red = (red << 8) | red;
 					r_colours[t_index].green = (green << 8) | green;
 					r_colours[t_index].blue = (blue << 8) | blue;
-					r_colours[t_index++].pixel = 0xFF000000 | (red << 16) | (green << 8) | blue;
 				}
 		r_palette_size = t_index;
 	}
@@ -388,6 +387,9 @@ bool MCImageParseColourList(MCStringRef p_input, uint32_t &r_ncolours, MCColor *
 				break;
 			}
 		}
+        
+        // PM-2015-05-12: [[ Bug 15359 ]] Update t_ncolours var
+        t_ncolours = t_nlines;
 	}
 
 	if (t_success)

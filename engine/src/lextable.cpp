@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -67,8 +67,8 @@ uint8_t type_table[256] =
     ST_ID,   ST_ID,   ST_ID,   ST_ID,   //      l       m       n       o
     ST_ID,   ST_ID,   ST_ID,   ST_ID,   //      p       q       r       s
     ST_ID,   ST_ID,   ST_ID,   ST_ID,   //      t       u       v       w
-    ST_ID,   ST_ID,   ST_ID,   ST_LB,   //      x       y       z       {
-    ST_OP,   ST_RB,   ST_OP,   ST_ID,   //      |       }       ~       DEL
+    ST_ID,   ST_ID,   ST_ID,   ST_LC,   //      x       y       z       {
+    ST_OP,   ST_RC,   ST_OP,   ST_ID,   //      |       }       ~       DEL
     ST_ID,   ST_ID,   ST_ID,   ST_ID,   //      0x80    0x81    0x82    0x83
     ST_ID,   ST_ID,   ST_ID,   ST_ID,   //      0x84    0x85    0x86    0x87
     ST_ID,   ST_ID,   ST_ID,   ST_ID,   //      0x88    0x89    0x8A    0x8B
@@ -135,8 +135,8 @@ uint8_t unicode_type_table[256] =
     ST_ID,          ST_ID,          ST_ID,          ST_ID,          //      l       m       n       o
     ST_ID,          ST_ID,          ST_ID,          ST_ID,          //      p       q       r       s
     ST_ID,          ST_ID,          ST_ID,          ST_ID,          //      t       u       v       w
-    ST_ID,          ST_ID,          ST_ID,          ST_LB,          //      x       y       z       {
-    ST_OP,          ST_RB,          ST_OP,          ST_ID,          //      |       }       ~       DEL
+    ST_ID,          ST_ID,          ST_ID,          ST_LC,          //      x       y       z       {
+    ST_OP,          ST_RC,          ST_OP,          ST_ID,          //      |       }       ~       DEL
     ST_UNDEFINED,   ST_UNDEFINED,   ST_UNDEFINED,   ST_UNDEFINED,	//      0x80    0x81    0x82    0x83
     ST_UNDEFINED,   ST_UNDEFINED,   ST_UNDEFINED,   ST_UNDEFINED,	//      0x84    0x85    0x86    0x87
     ST_UNDEFINED,   ST_UNDEFINED,   ST_UNDEFINED,   ST_UNDEFINED,	//      0x88    0x89    0x8A    0x8B
@@ -276,7 +276,7 @@ static LT ask_table[] =
 
 LT command_table[] =
     {
-#if defined(MODE_DEVELOPMENT) || defined(MODE_INSTALLER)
+#if defined(MODE_DEVELOPMENT) || defined(MODE_INSTALLER) || defined(_TEST)
 		{"_internal", TT_STATEMENT, S_INTERNAL},
 #endif
         {"accept", TT_STATEMENT, S_ACCEPT},
@@ -691,6 +691,9 @@ LT factor_table[] =
         {"casesensitive", TT_PROPERTY, P_CASE_SENSITIVE},
         {"cd", TT_CHUNK, CT_CARD},
         {"cds", TT_CLASS, CT_CARD},
+		// MDW-2014-08-23 : [[ feature_floor ]]
+        {"ceil", TT_FUNCTION, F_CEIL},
+        {"ceiling", TT_FUNCTION, F_CEIL},
         {"centered", TT_PROPERTY, P_CENTERED},
         {"centerrect", TT_PROPERTY, P_CENTER_RECTANGLE},
         {"centerrectangle", TT_PROPERTY, P_CENTER_RECTANGLE},
@@ -721,7 +724,9 @@ LT factor_table[] =
         // MERG-2013-08-12: [[ ClipsToRect ]] If true group clips to the set rect rather than the rect of children
         {"clipstorect", TT_PROPERTY, P_CLIPS_TO_RECT},
         {"closebox", TT_PROPERTY, P_CLOSE_BOX},
+        {"cmdargs", TT_FUNCTION, F_COMMAND_ARGUMENTS},
         {"cmdkey", TT_FUNCTION, F_COMMAND_KEY},
+        {"cmdname", TT_FUNCTION, F_COMMAND_NAME},
         {"codepoint", TT_CHUNK, CT_CODEPOINT},
         {"codepointoffset", TT_FUNCTION, F_CODEPOINT_OFFSET},
         {"codepointproperty", TT_FUNCTION, F_CODEPOINT_PROPERTY},
@@ -729,7 +734,7 @@ LT factor_table[] =
         {"codepointtonum", TT_FUNCTION, F_UNICODE_CHAR_TO_NUM},
         {"codeunit", TT_CHUNK, CT_CODEUNIT},
         {"codeunitoffset", TT_FUNCTION, F_CODEUNIT_OFFSET},
-		{"codeunits", TT_CLASS, CT_CODEUNIT},
+        {"codeunits", TT_CLASS, CT_CODEUNIT},
         {"collapsebox", TT_PROPERTY, P_COLLAPSE_BOX},
 		// MERG-2013-08-17: [[ ColorDialogColors ]] Custom color management for the windows color dialog
 		{"colordialogcolors", TT_PROPERTY, P_COLOR_DIALOG_COLORS},
@@ -741,8 +746,12 @@ LT factor_table[] =
         {"colorworld", TT_PROPERTY, P_COLOR_WORLD},
         {"columndel", TT_PROPERTY, P_COLUMN_DELIMITER},
         {"columndelimiter", TT_PROPERTY, P_COLUMN_DELIMITER},
+        // SN-2015-07-18: [[ CommandFunctions ]] Added keywords for
+        //  commandName and commandArguments
+        {"commandarguments", TT_FUNCTION, F_COMMAND_ARGUMENTS},
         {"commandchar", TT_PROPERTY, P_COMMAND_CHAR},
         {"commandkey", TT_FUNCTION, F_COMMAND_KEY},
+        {"commandname", TT_FUNCTION, F_COMMAND_NAME},
         {"commandnames", TT_FUNCTION, F_COMMAND_NAMES},
 		// MW-2011-09-10: [[ TileCache ]] The maximum number of bytes to use for the tile cache
 		{"compositorcachelimit", TT_PROPERTY, P_COMPOSITOR_CACHE_LIMIT},
@@ -814,7 +823,9 @@ LT factor_table[] =
         {"div", TT_BINOP, O_DIV},
         {"dnsservers", TT_FUNCTION, F_DNS_SERVERS},
 		{"document", TT_CHUNK, CT_DOCUMENT},
-		// MW-2011-11-24: [[ Nice Folders ]] The adjective for 'the documents folder'.
+        // MERG-2015-10-11: [[ DocumentFilename ]] Property tag for documentFilename
+        {"documentfilename", TT_PROPERTY, P_DOCUMENT_FILENAME},
+        // MW-2011-11-24: [[ Nice Folders ]] The adjective for 'the documents folder'.
 		{"documents", TT_PROPERTY, P_DOCUMENTS_FOLDER},
         {"dontdither", TT_PROPERTY, P_DONT_DITHER},
         {"dontrefresh", TT_PROPERTY, P_DONT_REFRESH},
@@ -874,6 +885,12 @@ LT factor_table[] =
         {"epss", TT_CLASS, CT_EPS},
         {"eraser", TT_PROPERTY, P_ERASER},
 		{"errormode", TT_PROPERTY, P_ERROR_MODE},
+        {"eventaltkey", TT_FUNCTION, F_EVENT_OPTION_KEY},
+        {"eventcapslockkey", TT_FUNCTION, F_EVENT_CAPSLOCK_KEY},
+        {"eventcommandkey", TT_FUNCTION, F_EVENT_COMMAND_KEY},
+        {"eventcontrolkey", TT_FUNCTION, F_EVENT_CONTROL_KEY},
+        {"eventoptionkey", TT_FUNCTION, F_EVENT_OPTION_KEY},
+        {"eventshiftkey", TT_FUNCTION, F_EVENT_SHIFT_KEY},
         {"executioncontexts", TT_PROPERTY, P_EXECUTION_CONTEXTS},
         {"existence", TT_FUNCTION, F_EXISTS},
         {"exists", TT_FUNCTION, F_EXISTS},
@@ -915,6 +932,8 @@ LT factor_table[] =
 		{"flaggedranges", TT_PROPERTY, P_FLAGGED_RANGES},
         {"fld", TT_CHUNK, CT_FIELD},
         {"flds", TT_CLASS, CT_FIELD},
+		// MDW-2014-08-23 : [[ feature_floor ]]
+        {"floor", TT_FUNCTION, F_FLOOR},
         {"flushevents", TT_FUNCTION, F_FLUSH_EVENTS},
         {"focuscolor", TT_PROPERTY, P_FOCUS_COLOR},
         {"focusedobject", TT_FUNCTION, F_FOCUSED_OBJECT},
@@ -959,6 +978,8 @@ LT factor_table[] =
         {"from", TT_FROM, PT_FROM},
         {"frontscripts", TT_FUNCTION, F_FRONT_SCRIPTS},
         {"ftpproxy", TT_PROPERTY, P_FTP_PROXY},
+        {"fullclipboarddata", TT_PROPERTY, P_FULL_CLIPBOARD_DATA},
+        {"fulldragdata", TT_PROPERTY, P_FULL_DRAGBOARD_DATA},
 		{"fullscreen", TT_PROPERTY, P_FULLSCREEN},
 		// IM-2013-09-23: [[ FullscreenMode ]] New property for 'fullscreenmode'
 		{"fullscreenmode", TT_PROPERTY, P_FULLSCREENMODE},
@@ -1074,6 +1095,7 @@ LT factor_table[] =
         {"jpegquality", TT_PROPERTY, P_JPEG_QUALITY},
         {"keys", TT_FUNCTION, F_KEYS},
         {"keysdown", TT_FUNCTION, F_KEYS_DOWN},
+        {"kind", TT_PROPERTY, P_KIND},
         {"label", TT_PROPERTY, P_LABEL},
         {"labelwidth", TT_PROPERTY, P_LABEL_WIDTH},
         {"last", TT_CHUNK, CT_LAST},
@@ -1114,6 +1136,7 @@ LT factor_table[] =
         {"liveresizing", TT_PROPERTY, P_LIVE_RESIZING},
         {"ln", TT_FUNCTION, F_LN},
         {"ln1", TT_FUNCTION, F_LN1},
+        {"loadedextensions", TT_PROPERTY, P_LOADED_EXTENSIONS},
         {"loadedtime", TT_PROPERTY, P_MOVIE_LOADED_TIME},
         {"loc", TT_PROPERTY, P_LOCATION},
         {"localloc", TT_FUNCTION, F_LOCAL_LOC},
@@ -1207,6 +1230,7 @@ LT factor_table[] =
         {"minheight", TT_PROPERTY, P_MIN_HEIGHT},
         {"minimizebox", TT_PROPERTY, P_MINIMIZE_BOX},
         {"minwidth", TT_PROPERTY, P_MIN_WIDTH},
+        {"mirrored", TT_PROPERTY, P_MIRRORED},
 		{"miterlimit", TT_PROPERTY, P_MITER_LIMIT},
         {"mnemonic", TT_PROPERTY, P_MNEMONIC},
         {"mod", TT_BINOP, O_MOD},
@@ -1240,6 +1264,7 @@ LT factor_table[] =
         {"nativechartonum", TT_FUNCTION, F_NATIVE_CHAR_TO_NUM},
         {"navigationarrows", TT_PROPERTY, P_NAVIGATION_ARROWS},
 		{"networkinterfaces", TT_PROPERTY, P_NETWORK_INTERFACES},
+        {"newest", TT_PREP, PT_NEWEST},
         {"next", TT_CHUNK, CT_NEXT},
         {"ninth", TT_CHUNK, CT_NINTH},
         {"no", TT_UNOP, O_NOT},
@@ -1397,6 +1422,8 @@ LT factor_table[] =
         {"random", TT_FUNCTION, F_RANDOM},
 		{"randombytes", TT_FUNCTION, F_RANDOM_BYTES},
         {"randomseed", TT_PROPERTY, P_RANDOM_SEED},
+        {"rawclipboarddata", TT_PROPERTY, P_RAW_CLIPBOARD_DATA},
+        {"rawdragdata", TT_PROPERTY, P_RAW_DRAGBOARD_DATA},
         {"recent", TT_CHUNK, CT_RECENT},
         {"recentcards", TT_PROPERTY, P_RECENT_CARDS},
         {"recentnames", TT_PROPERTY, P_RECENT_NAMES},
@@ -1497,7 +1524,8 @@ LT factor_table[] =
         {"script", TT_PROPERTY, P_SCRIPT},
 		{"scriptexecutionerrors", TT_PROPERTY, P_SCRIPT_EXECUTION_ERRORS},
         {"scriptlimits", TT_FUNCTION, F_SCRIPT_LIMITS},
-		{"scriptparsingerrors", TT_PROPERTY, P_SCRIPT_PARSING_ERRORS},
+        {"scriptonly", TT_PROPERTY, P_SCRIPT_ONLY},
+        {"scriptparsingerrors", TT_PROPERTY, P_SCRIPT_PARSING_ERRORS},
         {"scripttextfont", TT_PROPERTY, P_SCRIPT_TEXT_FONT},
         {"scripttextsize", TT_PROPERTY, P_SCRIPT_TEXT_SIZE},		
         {"scroll", TT_PROPERTY, P_VSCROLL},
@@ -1517,7 +1545,6 @@ LT factor_table[] =
         {"segmentoffset", TT_FUNCTION, F_WORD_OFFSET},
         {"segments", TT_CLASS, CT_WORD},
         {"selected", TT_PROPERTY, P_SELECTED},
-        //{"selectedareacolor", TT_PROPERTY, P_SELECTED_AREA_COLOR},
         {"selectedbutton", TT_FUNCTION, F_SELECTED_BUTTON},
         {"selectedchunk", TT_FUNCTION, F_SELECTED_CHUNK},
         {"selectedcolor", TT_PROPERTY, P_SELECTED_COLOR},
@@ -1677,6 +1704,8 @@ LT factor_table[] =
         {"textsize", TT_PROPERTY, P_TEXT_SIZE},
         {"textstyle", TT_PROPERTY, P_TEXT_STYLE},
         {"the", TT_THE, F_UNDEFINED},
+        {"theme", TT_PROPERTY, P_THEME},
+        {"themeclass", TT_PROPERTY, P_THEME_CONTROL_TYPE},
         {"there", TT_UNOP, O_THERE},
         {"third", TT_CHUNK, CT_THIRD},
         {"thirdcolor", TT_PROPERTY, P_HILITE_COLOR},
@@ -1766,6 +1795,7 @@ LT factor_table[] =
         {"vc", TT_CHUNK, CT_VIDEO_CLIP},
         {"vcplayer", TT_PROPERTY, P_VC_PLAYER},
         {"vcs", TT_CLASS, CT_VIDEO_CLIP},
+        {"vectordotproduct", TT_FUNCTION, F_VECTOR_DOT_PRODUCT},
         {"version", TT_FUNCTION, F_VERSION},
         {"vgrid", TT_PROPERTY, P_VGRID},
         {"videoclip", TT_CHUNK, CT_VIDEO_CLIP},
@@ -1784,6 +1814,8 @@ LT factor_table[] =
         {"weekdaynames", TT_FUNCTION, F_WEEK_DAY_NAMES},
         {"wholematches", TT_PROPERTY, P_WHOLE_MATCHES},
         {"widemargins", TT_PROPERTY, P_WIDE_MARGINS},
+        {"widget", TT_CHUNK, CT_WIDGET},
+        {"widgets", TT_CLASS, CT_WIDGET},
         {"width", TT_PROPERTY, P_WIDTH},
         {"window", TT_CHUNK, CT_STACK},
         {"windowboundingrect", TT_PROPERTY, P_WINDOW_BOUNDING_RECT},
@@ -1874,6 +1906,7 @@ static LT insert_table[] =
 
 static LT lock_table[] =
     {
+        {"clipboard", TT_UNDEFINED, LC_CLIPBOARD},
         {"colormap", TT_UNDEFINED, LC_COLORMAP},
         {"cursor", TT_UNDEFINED, LC_CURSOR},
         {"dialog", TT_UNDEFINED, LC_ERRORS},
@@ -1971,6 +2004,8 @@ static LT repeat_table[] =
         {"for", TT_UNDEFINED, RF_FOR},
         {"forever", TT_UNDEFINED, RF_FOREVER},
         {"step", TT_UNDEFINED, RF_STEP},
+        // SN-2015-06-18: [[ Bug 15509 ]] Parse 'times' in 'repeat for x times'
+        {"times", TT_UNDEFINED, RF_TIMES},
         {"until", TT_UNDEFINED, RF_UNTIL},
         {"while", TT_UNDEFINED, RF_WHILE},
         {"with", TT_UNDEFINED, RF_WITH}
@@ -1992,7 +2027,7 @@ static LT reset_table[] =
         {"templateplayer", TT_UNDEFINED, RT_TEMPLATE_PLAYER},
         {"templatescrollbar", TT_UNDEFINED, RT_TEMPLATE_SCROLLBAR},
         {"templatestack", TT_UNDEFINED, RT_TEMPLATE_STACK},
-        {"templatevideoclip", TT_UNDEFINED, RT_TEMPLATE_VIDEO_CLIP}
+        {"templatevideoclip", TT_UNDEFINED, RT_TEMPLATE_VIDEO_CLIP},
     };
 
 static LT show_table[] =
@@ -2070,9 +2105,12 @@ static LT sugar_table[] =
         {"callback", TT_CHUNK, CT_UNDEFINED},
 		{"caller", TT_UNDEFINED, SG_CALLER},
 		{"closed", TT_UNDEFINED, SG_CLOSED},
+        {"data", TT_UNDEFINED, SG_DATA},
 		{"effects", TT_UNDEFINED, SG_EFFECTS},
 		{"elevated", TT_UNDEFINED, SG_ELEVATED},
         {"empty", TT_CHUNK, CT_UNDEFINED},
+        {"error", TT_UNDEFINED, SG_ERROR},
+        {"extension", TT_UNDEFINED, SG_EXTENSION},
 		// MW-2013-11-14: [[ AssertCmd ]] Token for 'failure'
 		{"failure", TT_UNDEFINED, SG_FAILURE},
 		// MW-2013-11-14: [[ AssertCmd ]] Token for 'false'
@@ -2102,22 +2140,31 @@ static LT sugar_table[] =
 		{"open", TT_UNDEFINED, SG_OPEN},
 		{"optimized", TT_UNDEFINED, SG_OPTIMIZED},
 		{"options", TT_UNDEFINED, SG_OPTIONS},
+		{"path", TT_UNDEFINED, SG_PATH},
 		// JS-2013-07-01: [[ EnhancedFilter ]] Token for 'pattern'.
 		{"pattern", TT_UNDEFINED, SG_PATTERN},
+		{"preserving", TT_UNDEFINED, SG_PRESERVING},
+        {"real", TT_UNDEFINED, SG_REAL},
 		// MERG-2013-08-26: [[ RecursiveArrayOp ]] Support nested arrays in union and intersect
 		// AL-2013-10-30: [[ Bug 11351 ]] Ensure table is in alphabetical order.
         {"recursively", TT_UNDEFINED, SG_RECURSIVELY},
 		// JS-2013-07-01: [[ EnhancedFilter ]] Token for 'regex'.
 		{"regex", TT_UNDEFINED, SG_REGEX},
+		{"replacing", TT_UNDEFINED, SG_REPLACING},
+		{"resource", TT_UNDEFINED, SG_RESOURCE},
 		{"standard", TT_UNDEFINED, SG_STANDARD},
+        {"strictly", TT_UNDEFINED, SG_STRICTLY},
 		// MERG-2013-06-24: [[ IsAnAsciiString ]] Token for 'string'.
         {"string", TT_UNDEFINED, SG_STRING},
+		{"styles", TT_UNDEFINED, SG_STYLES},
 		// MW-2013-11-14: [[ AssertCmd ]] Token for 'success'
 		{"success", TT_UNDEFINED, SG_SUCCESS},
 		// MW-2013-11-14: [[ AssertCmd ]] Token for 'true'
 		{"true", TT_UNDEFINED, SG_TRUE},
 		{"unicode", TT_UNDEFINED, SG_UNICODE},
 		{"url", TT_UNDEFINED, SG_URL},
+        {"urlresult", TT_UNDEFINED, SG_URL_RESULT},
+        {"value", TT_UNDEFINED, SG_VALUE},
 		// JS-2013-07-01: [[ EnhancedFilter ]] Token for 'wildcard'.
 		{"wildcard", TT_UNDEFINED, SG_WILDCARD},
 		{"without", TT_PREP, PT_WITHOUT},
@@ -2179,7 +2226,7 @@ static LT unit_table[] =
         {"codepoint", TT_UNDEFINED, FU_CODEPOINT},
         {"codepoints", TT_UNDEFINED, FU_CODEPOINT},
         {"codeunit", TT_UNDEFINED, FU_CODEUNIT},
-        {"codeunit", TT_UNDEFINED, FU_CODEUNIT},
+        {"codeunits", TT_UNDEFINED, FU_CODEUNIT},
         {"element", TT_UNDEFINED, FU_ELEMENT},
         {"int1", TT_UNDEFINED, FU_INT1},
         {"int1s", TT_UNDEFINED, FU_INT1},
@@ -2338,6 +2385,7 @@ LT *table_pointers[] =
     visual_table,
 	server_table
 };
+extern const uint4 table_pointers_size = ELEMENTS(table_pointers);
 
 uint2 table_sizes[] =
 {
@@ -2376,3 +2424,4 @@ uint2 table_sizes[] =
     ELEMENTS(visual_table),
 	ELEMENTS(server_table),
 };
+extern const uint4 table_sizes_size = ELEMENTS(table_sizes);

@@ -1,195 +1,198 @@
-###############################################################################
-# Engine Targets
+# Copyright (C) 2015 LiveCode Ltd.
+#
+# This file is part of LiveCode.
+#
+# LiveCode is free software; you can redistribute it and/or modify it under
+# the terms of the GNU General Public License v3 as published by the Free
+# Software Foundation.
+#
+# LiveCode is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+# for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with LiveCode.  If not see <http://www.gnu.org/licenses/>.
 
-.PHONY: libopenssl liburlcache libstubs libfoundation libcore
-.PHONY: libexternal libexternalv1 libz libjpeg libpcre libpng libplugin libgraphics libskia
-.PHONY: revsecurity libgif
-.PHONY: kernel development standalone webruntime webplugin webplayer server
-.PHONY: kernel-standalone kernel-development kernel-server
-.PHONY: libireviam onrev-server
+# Usually, you'll just want to type "make all".
 
-libcore:
-	$(MAKE) -C ./libcore libcore
+################################################################
 
-libexternal:
-	$(MAKE) -C ./libexternal libexternal
+# Tools that Make calls
+XCODEBUILD ?= xcodebuild
+WINE ?= wine
+EMMAKE ?= emmake
 
-libexternalv1:
-	$(MAKE) -C ./libexternalv1 libexternalv1
+# Some magic to control which versions of iOS we try to build.  N.b. you may
+# also need to modify the buildbot configuration
+IPHONEOS_VERSIONS ?= 8.2 9.2 9.3
+IPHONESIMULATOR_VERSIONS ?= 6.1 7.1 8.2 9.2 9.3
 
-libz: 
-	$(MAKE) -C ./thirdparty/libz libz
-	
-libjpeg:
-	$(MAKE) -C ./thirdparty/libjpeg libjpeg
-	
-libpcre:
-	$(MAKE) -C ./thirdparty/libpcre libpcre
+IOS_SDKS ?= \
+	$(addprefix iphoneos,$(IPHONEOS_VERSIONS)) \
+	$(addprefix iphonesimulator,$(IPHONESIMULATOR_VERSIONS))
 
-libpng:
-	$(MAKE) -C ./thirdparty/libpng libpng
+# Choose the correct build type
+MODE ?= debug
 
-libgif:
-	$(MAKE) -C ./thirdparty/libgif libgif
+# Where to run the build command depends on community vs commercial
+ifeq ($(BUILD_EDITION),commercial)
+  BUILD_SUBDIR :=
+  BUILD_PROJECT := livecode-commercial
+else
+  BUILD_SUBDIR := /livecode
+  BUILD_PROJECT := livecode
+endif
 
-libopenssl:
-	$(MAKE) -C ./thirdparty/libopenssl libopenssl
+include Makefile.common
 
-libskia:
-	$(MAKE) -C ./thirdparty/libskia libskia
+################################################################
 
-libfoundation:
-	$(MAKE) -C ./libfoundation libfoundation
+.DEFAULT: all
 
-revsecurity:
-	$(MAKE) -C ./thirdparty/libopenssl -f Makefile.revsecurity revsecurity
-	
-libgraphics: libskia
-	$(MAKE) -C ./libgraphics libgraphics
+all: all-$(guess_platform)
+check: check-$(guess_platform)
 
-kernel: libz libgif libjpeg libpcre libpng libopenssl libexternal libfoundation libgraphics
+check-common-%:
+	$(MAKE) -C tests bin_dir=../$*-bin
+	$(MAKE) -C ide/tests bin_dir=../../$*-bin
+	$(MAKE) -C extensions bin_dir=../$*-bin
 
-	$(MAKE) -C ./engine -f Makefile.kernel libkernel
-	
-kernel-standalone: kernel
-	$(MAKE) -C ./engine -f Makefile.kernel-standalone libkernel-standalone
+################################################################
+# Linux rules
+################################################################
 
-kernel-development: kernel
-	$(MAKE) -C ./engine -f Makefile.kernel-development libkernel-development
+LINUX_ARCHS = x86_64 x86
 
-kernel-server: libz libgif libjpeg libpcre libpng libopenssl libexternal libfoundation libgraphics
-	$(MAKE) -C ./engine -f Makefile.kernel-server libkernel-server
+config-linux-%:
+	./config.sh --platform linux-$*
 
-development: libz libgif libjpeg libpcre libpng libopenssl libexternal libfoundation kernel kernel-development revsecurity
-	$(MAKE) -C ./engine -f Makefile.development engine-community
+compile-linux-%:
+	$(MAKE) -C build-linux-$*/livecode default
 
-standalone: libz libgif libjpeg libpcre libpng libopenssl libfoundation kernel revsecurity kernel-standalone revsecurity
-	$(MAKE) -C ./engine -f Makefile.standalone standalone-community
+check-linux-%:
+	$(MAKE) -C build-linux-$*/livecode check
+	$(MAKE) check-common-linux-$*
 
-installer: libz libgif libjpeg libpcre libpng libopenssl libexternal libfoundation kernel revsecurity
+all-linux-%:
+	$(MAKE) config-linux-$*
+	$(MAKE) compile-linux-$*
 
-	$(MAKE) -C ./engine -f Makefile.installer installer
+$(addsuffix -linux,all config compile check): %: %-$(guess_linux_arch)
 
-server: libz libgif libjpeg libpcre libpng libopenssl libexternal libfoundation libgraphics kernel-server revsecurity
-	$(MAKE) -C ./engine -f Makefile.server server-community
+################################################################
+# Android rules
+################################################################
 
-###############################################################################
-# revPDFPrinter Targets
+ANDROID_ARCHS = armv6
 
-.PHONY: libcairopdf revpdfprinter
+config-android-%:
+	./config.sh --platform android-$*
 
-libcairopdf:
-	$(MAKE) -C ./thirdparty/libcairo libcairopdf
+compile-android-%:
+	$(MAKE) -C build-android-$*/livecode default
 
-revpdfprinter: libcairopdf libcore
-	$(MAKE) -C ./revpdfprinter revpdfprinter
+check-android-%:
+	$(MAKE) -C build-android-$*/livecode check
 
-###############################################################################
-# revDB Targets
+all-android-%:
+	$(MAKE) config-android-$*
+	$(MAKE) compile-android-$*
 
-.PHONY: libpq libmysql libsqlite libiodbc
+$(addsuffix -android,all config compile check): %: %-armv6
 
-libpq:
-	$(MAKE) -C ./thirdparty/libpq libpq
+################################################################
+# Mac rules
+################################################################
 
-libmysql:
-	$(MAKE) -C ./thirdparty/libmysql libmysql
+config-mac:
+	./config.sh --platform mac
 
-libsqlite:
-	$(MAKE) -C ./thirdparty/libsqlite libsqlite
+compile-mac:
+	$(XCODEBUILD) -project "build-mac$(BUILD_SUBDIR)/$(BUILD_PROJECT).xcodeproj" -configuration $(BUILDTYPE) -target default
 
-libiodbc:
-	$(MAKE) -C ./thirdparty/libiodbc libiodbc
+check-mac:
+	$(XCODEBUILD) -project "build-mac$(BUILD_SUBDIR)/$(BUILD_PROJECT).xcodeproj" -configuration $(BUILDTYPE) -target check
+	$(MAKE) check-common-mac
 
-#####
 
-.PHONY: dbpostgresql dbmysql dbsqlite dbodbc server-dbpostgresql server-dbmysql server-dbodbc server-dbsqlite
+all-mac:
+	$(MAKE) config-mac
+	$(MAKE) compile-mac
 
-dbpostgresql: libpq
-	$(MAKE) -C ./revdb dbpostgresql
+################################################################
+# iOS rules
+################################################################
 
-dbmysql: libmysql libz libopenssl
-	$(MAKE) -C ./revdb dbmysql
+all-ios-%:
+	$(MAKE) config-ios-$*
+	$(MAKE) compile-ios-$*
 
-dbsqlite: libsqlite libexternal
-	$(MAKE) -C ./revdb dbsqlite
+config-ios-%:
+	./config.sh --platform ios --generator-output build-ios-$*/livecode -Dtarget_sdk=$*
 
-dbodbc: libiodbc libexternal
-	$(MAKE) -C ./revdb dbodbc
+compile-ios-%:
+	$(XCODEBUILD) -project "build-ios-$*$(BUILD_SUBDIR)/$(BUILD_PROJECT).xcodeproj" -configuration $(BUILDTYPE) -target default
 
-server-dbpostgresql: libpq
-	$(MAKE) -C ./revdb server-dbpostgresql
+check-ios-%:
+	$(XCODEBUILD) -project "build-ios-$*$(BUILD_SUBDIR)/$(BUILD_PROJECT).xcodeproj" -configuration $(BUILDTYPE) -target check
 
-server-dbmysql: libmysql libz
-	$(MAKE) -C ./revdb server-dbmysql
+# Dummy targets to prevent our build system from building iOS 5.1 simulator
+config-ios-iphonesimulator5.1:
+	@echo "Skipping iOS simulator 5.1 (no longer supported)"
+compile-ios-iphonesimulator5.1:
+	@echo "Skipping iOS simulator 5.1 (no longer supported)"
+check-ios-iphonesimulator5.1:
+	@echo "Skipping iOS simulator 5.1 (no longer supported)"
 
-server-dbsqlite: libsqlite libexternal
-	$(MAKE) -C ./revdb server-dbsqlite
+# Provide some synonyms for "latest iOS SDK"
+$(addsuffix -ios-iphoneos,all config compile check): %: %$(lastword $(IPHONEOS_VERSIONS))
+	@true
+$(addsuffix -ios-iphonesimulator,all config compile check): %: %$(lastword ($IPHONESIMULATOR_VERSIONS))
+	@true
 
-server-dbodbc: libiodbc libexternal
-	$(MAKE) -C ./revdb server-dbodbc
+all_ios_subplatforms = iphoneos iphonesimulator $(IOS_SDKS)
 
-####
+all-ios: $(addprefix all-ios-,$(IOS_SDKS))
+config-ios: $(addprefix config-ios-,$(IOS_SDKS))
+compile-ios: $(addprefix compile-ios-,$(IOS_SDKS))
+check-ios: $(addprefix check-ios-,$(IOS_SDKS))
 
-.PHONY: revdb server-revdb
+################################################################
+# Windows rules
+################################################################
 
-revdb: libexternal
-	$(MAKE) -C ./revdb revdb
+config-win-%:
+	./config.sh --platform win-$*
 
-server-revdb: libexternal
-	$(MAKE) -C ./revdb server-revdb
+compile-win-%:
+	# windows builds occur under Wine
+	cd build-win-$* && $(WINE) /K ../make.cmd
 
-###############################################################################
-# revXML Targets
+check-win-%:
+	# windows builds occur under Wine
+	cd build-win-$* && $(WINE) /K ../make.cmd check
+	$(MAKE) check-common-win-$*
 
-.PHONY: libxml libxslt revxml server-revxml
+all-win-%:
+	$(MAKE) config-win-$*
+	$(MAKE) compile-win-$*
 
-libxml:
-	$(MAKE) -C ./thirdparty/libxml libxml
+$(addsuffix -win,all config compile): %: %-x86
 
-libxslt:
-	$(MAKE) -C ./thirdparty/libxslt libxslt
+################################################################
+# Emscripten rules
+################################################################
 
-revxml: libxml libxslt libexternal
-	$(MAKE) -C ./revxml revxml
+config-emscripten:
+	$(EMMAKE) ./config.sh --platform emscripten
 
-server-revxml: libxml libxslt libexternal
-	$(MAKE) -C ./revxml server-revxml
+compile-emscripten:
+	$(EMMAKE) $(MAKE) -C build-emscripten/livecode default
 
-###############################################################################
-# revZip Targets
+check-emscripten:
+	$(EMMAKE) $(MAKE) -C build-emscripten/livecode check
 
-.PHONY: libzip revzip server-revzip
-
-libzip:
-	$(MAKE) -C ./thirdparty/libzip libzip
-
-revzip: libzip libz libexternal
-	$(MAKE) -C ./revzip revzip
-
-server-revzip: libzip libz libexternal
-	$(MAKE) -C ./revzip server-revzip
-
-###############################################################################
-# revAndroid Targets
-
-.PHONY: revandroid
-
-revandroid: libexternalv1
-	$(MAKE) -C ./revmobile revandroid
-
-###############################################################################
-# All Targets
-
-.PHONY: all clean
-.DEFAULT_GOAL := all
-
-all: revzip server-revzip
-all: revxml server-revxml
-all: revdb dbodbc dbsqlite dbmysql dbpostgresql
-all: server-revdb server-dbodbc server-dbsqlite server-dbmysql server-dbpostgresql
-all: development standalone installer server
-all: revpdfprinter revandroid
-
-clean:
-	@rm -r _build/linux _cache/linux
+all-emscripten:
+	$(MAKE) config-emscripten
+	$(MAKE) compile-emscripten

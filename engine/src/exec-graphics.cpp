@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -215,9 +215,10 @@ void MCGraphicsExecResetPaint(MCExecContext& ctxt)
 {
     MCeditingimage = nil;
     
-    MCbrush = 8;
-    MCspray = 31;
-    MCeraser = 2;
+		// MDW-2016-05-06 [[ bugfix_17553 ]] set brush defaults using validators
+    MCInterfaceSetBrush(ctxt, 8);
+    MCInterfaceSetSpray(ctxt, 34);
+    MCInterfaceSetEraser(ctxt, 2);
     MCcentered = False;
     MCfilled = False;
     MCgrid = False;
@@ -225,18 +226,15 @@ void MCGraphicsExecResetPaint(MCExecContext& ctxt)
     MClinesize = 1;
     MCmultiple = False;
     MCmultispace = 1;
-    MCpattern = 1;
     MCpolysides = 4;
     MCroundends = False;
     MCslices = 16;
     MCmagnification = 8;
     MCpatternlist->freepat(MCpenpattern);
     MCpencolor.red = MCpencolor.green = MCpencolor.blue = 0x0;
-    MCscreen->alloccolor(MCpencolor);
-    
+	
     MCpatternlist->freepat(MCbrushpattern);
     MCbrushcolor.red = MCbrushcolor.green = MCbrushcolor.blue = 0xFFFF;
-    MCscreen->alloccolor(MCbrushcolor);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

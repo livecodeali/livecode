@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -20,7 +20,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "parsedef.h"
 #include "filedefs.h"
 #include "objdefs.h"
-//#include "execpt.h"
+
 #include "exec.h"
 #include "mcerror.h"
 #include "ans.h"
@@ -169,11 +169,6 @@ char * get_filter_masks (const char * p_type )
     const char *t_ptr ;
 	uint4 a ;
 
-	// MW-2010-10-14: Make sure we have enough room to do this.
-	char *ret;
-	ret = strdup(p_type);
-	memset(ret, 0, strlen(p_type));
-
 	a = 0 ;
 	t_ptr = p_type ;
 	
@@ -185,6 +180,11 @@ char * get_filter_masks (const char * p_type )
 		return (NULL);	// Something went wrong!
 	t_ptr++; // Move over the breaking char
 	
+    // MW-2010-10-14: Make sure we have enough room to do this.
+    char *ret;
+    ret = strdup(p_type);
+    memset(ret, 0, strlen(p_type));
+    
 	while ( *t_ptr != '|' && *t_ptr != '\0' )
 		ret[a++] = *t_ptr++;
 	
@@ -234,12 +234,10 @@ char * get_next_mask ( char *p_masks )
 // Get mask number <p_mask_id> from the comma delimited list of masks.
 char * get_filter_mask ( uint4 p_mask_id, char * p_masks ) 
 {
-	uint4 a ;
 	uint4 t_count ;
 	char *t_ptr ;
 
 	t_count = 0 ;
-	a = 0 ;
 	t_ptr = p_masks ;
 	
 	
@@ -383,13 +381,19 @@ void add_dialog_filters(GtkWidget *dialog, MCStringRef *p_types, uint4 p_type_co
 		{
             MCAutoStringRefAsSysString t_type_str;
             t_type_str.Lock(p_types[a]);
-            char *t_filter_name, *t_filter_masks;
-            t_filter_name = get_filter_name(*t_type_str);
-            t_filter_masks = get_filter_masks(*t_type_str);
 
-            // [[ bug 11268 ]] - Ensure there is a filter alongside with the name
+			char *t_filter_name;
+            t_filter_name = get_filter_name(*t_type_str);
+			if (t_filter_name == nil)
+				continue;
+
+			char * t_filter_masks;
+            t_filter_masks = get_filter_masks(*t_type_str);
             if (t_filter_masks == nil)
+			{
+				free (t_filter_name);
                 continue;
+			}
 
 			filter = gtk_file_filter_new();
 			gtk_file_filter_set_name(filter, t_filter_name);
@@ -416,8 +420,8 @@ void add_dialog_filters(GtkWidget *dialog, MCStringRef *p_types, uint4 p_type_co
 
 			gtk_file_chooser_add_filter ( GTK_FILE_CHOOSER ( dialog ) , filter ) ;
 
-			delete t_filter_name;
-			delete t_filter_masks;
+			free (t_filter_name);
+			free (t_filter_masks);
 		}
 	}
 		
@@ -586,7 +590,7 @@ int MCA_file_with_types(MCStringRef p_title, MCStringRef p_prompt, MCStringRef *
 
     if (r_value == nil)
         /* UNCHECKED */ MCStringCreateWithCString(MCcancelstring, r_result);
-    else if (p_options & MCA_OPTION_RETURN_FILTER != 0)
+    else if ((p_options & MCA_OPTION_RETURN_FILTER) != 0)
         /* UNCHECKED */ MCStringCreateWithSysString(get_current_filter_name(dialog), r_result);
 
 	
@@ -820,56 +824,42 @@ void MCA_getcolordialogcolors(MCColor*& r_colors, uindex_t& r_count)
 
 MCPrinterDialogResult MCA_gtk_printer_setup ( PSPrinterSettings &p_settings )
 {
-	if (!MCModeMakeLocalWindows())
-	{
-		bool t_success;
-		t_success = true;
-
-		MCLinuxPrintSetup t_setup;
-
-		MCAutoDataRef t_data_in;
-
-		if (t_success)
-			t_success = MCLinuxPrintSetupEncode(t_setup, &t_data_in);
-
-		uint32_t t_result;
-		t_result = PRINTER_DIALOG_RESULT_ERROR;
-		if (t_success)
-		{
-			MCAutoDataRef t_data_out;
-            
-            MCRemotePrintSetupDialog(*t_data_in, &t_data_out, t_result);
-			
-			if (t_result == PRINTER_DIALOG_RESULT_OKAY)
-			{
-				if (MCLinuxPrintSetupDecode(*t_data_out, t_setup))
-				{
-				}
-				else
-					t_result = PRINTER_DIALOG_RESULT_ERROR;
-
-			}
-        }
-
-
-		return (MCPrinterDialogResult)t_result;
-	}
-
-	GtkWidget * dialog ;
+	GtkPrintUnixDialog * dialog ;
 	gint ret_code ;
 	MCPrinterDialogResult result  = PRINTER_DIALOG_RESULT_CANCEL ;
 
 	gtk_init();
 	
-	dialog = gtk_print_unix_dialog_new  ( "Printer setup", NULL );
-	make_front_widget ( dialog ) ;
+	dialog = (GtkPrintUnixDialog *)gtk_print_unix_dialog_new  ( "Printer setup", NULL );
+	make_front_widget ( (GtkWidget *)dialog ) ;
 	
-	gtk_print_unix_dialog_set_manual_capabilities ( GTK_PRINT_UNIX_DIALOG(dialog), GTK_PRINT_CAPABILITY_GENERATE_PS);
+	gtk_print_unix_dialog_set_manual_capabilities ( GTK_PRINT_UNIX_DIALOG(dialog), GTK_PRINT_CAPABILITY_GENERATE_PDF);
 
+#if NOT_WORKING
+    // Capture existing settings and ensure they are presented in the dialog.
+    GtkPrintSettings *t_settings;
+    t_settings = gtk_print_settings_new();
+    //gtk_print_settings_set_printer(t_settings, p_settings, printername);
+    gtk_print_settings_set_n_copies(t_settings, p_settings . copies);
+    gtk_print_settings_set_collate(t_settings, p_settings . collate);
+    gtk_print_settings_set_orientation(t_settings,
+            p_settings . orientation == PRINTER_ORIENTATION_PORTRAIT ? GTK_PAGE_ORIENTATION_PORTRAIT :
+            p_settings . orientation == PRINTER_ORIENTATION_LANDSCAPE ? GTK_PAGE_ORIENTATION_LANDSCAPE :
+            p_settings . orientation == PRINTER_ORIENTATION_REVERSE_PORTRAIT ? GTK_PAGE_ORIENTATION_REVERSE_PORTRAIT :
+            /*p_settings . orientation == PRINTER_ORIENTATION_REVERSE_LANDSCAPE ?*/ GTK_PAGE_ORIENTATION_REVERSE_LANDSCAPE);
+    gtk_print_settings_set_duplex(t_settings,
+            p_settings . duplex_mode == PRINTER_DUPLEX_MODE_SIMPLEX ? GTK_PRINT_DUPLEX_SIMPLEX :
+            p_settings . duplex_mode == PRINTER_DUPLEX_MODE_LONG_EDGE ? GTK_PRINT_DUPLEX_HORIZONTAL :
+            /* p_settings . duplex_mode == PRINTER_DUPLEX_MODE_SHORT_EDGE ? */ GTK_PRINT_DUPLEX_VERTICAL);
+    gtk_print_settings_set_paper_width(t_settings, p_settings . paper_size_width, GTK_UNIT_POINTS);
+    gtk_print_settings_set_paper_height(t_settings, p_settings . paper_size_height, GTK_UNIT_POINTS);
+    gtk_print_unix_dialog_set_settings(dialog, t_settings);
+    g_object_unref(t_settings);
+#endif
+    
 	g_timeout_add(100, gtk_idle_callback, NULL);
 	ret_code = gtk_dialog_run(GTK_DIALOG (dialog)) ;
-	
-	
+
 	if ( ret_code == GTK_RESPONSE_OK ) 
 	{
 		result = PRINTER_DIALOG_RESULT_OKAY ;
@@ -878,29 +868,28 @@ MCPrinterDialogResult MCA_gtk_printer_setup ( PSPrinterSettings &p_settings )
 		t_printer = gtk_print_unix_dialog_get_selected_printer  ( GTK_PRINT_UNIX_DIALOG ( dialog ) ) ;
 		p_settings . printername = strdup ( gtk_printer_get_name ( t_printer ) ) ;
 
-		
-		GtkPrintSettings* t_printer_settings ;
-		t_printer_settings = gtk_print_unix_dialog_get_settings  ( GTK_PRINT_UNIX_DIALOG ( dialog )) ;
-			
-
 		if ( p_settings . outputfilename != NULL ) 
 			delete (p_settings . outputfilename - 7 );
 		p_settings . outputfilename = NULL ;
 		p_settings . printertype = PRINTER_OUTPUT_DEVICE ;
 		
+        GtkPrintSettings* t_printer_settings ;
+		t_printer_settings = gtk_print_unix_dialog_get_settings  ( GTK_PRINT_UNIX_DIALOG ( dialog )) ;
+        
 		if ( strcmp( p_settings . printername, "Print to File") == 0 ) 
 		{
 			p_settings . printertype = PRINTER_OUTPUT_FILE ;
 			p_settings . outputfilename = strdup ( gtk_print_settings_get ( t_printer_settings, GTK_PRINT_SETTINGS_OUTPUT_URI) ) ;
 			p_settings . outputfilename += 7 ;
 		}
+
+#ifdef NOT_WORKING
+
 		
-		
-		GtkPageRange* t_ranges ;
+/*		GtkPageRange* t_ranges ;
 		MCInterval * t_rev_ranges ;
 		
-		int4 t_range_count ; 
-		
+		int4 t_range_count;
 		t_ranges = gtk_print_settings_get_page_ranges  ( t_printer_settings , &t_range_count ) ;
 		if ( t_range_count > 0 ) 
 		{
@@ -908,18 +897,15 @@ MCPrinterDialogResult MCA_gtk_printer_setup ( PSPrinterSettings &p_settings )
 			p_settings . page_range_count = t_range_count ;
 			
 			// We need to adjust these as GTK starts pages at 0 and we start pages at 1
-			for ( uint4 a=0; a<t_range_count; a++)
+			for (int4 a = 0; a < t_range_count; a++)
 			{
 				p_settings . page_ranges[a] . from++;
 				p_settings . page_ranges[a] . to++;
 			}
-		}
-		
-		
-		
+		}*/
+
 		p_settings . copies =  gtk_print_settings_get_n_copies  ( t_printer_settings ) ;
 		p_settings . collate = gtk_print_settings_get_collate ( t_printer_settings ) ;
-		
 		GtkPageOrientation tGtkOr = gtk_print_settings_get_orientation  ( t_printer_settings ) ;
 		switch(tGtkOr)
 		{
@@ -939,8 +925,6 @@ MCPrinterDialogResult MCA_gtk_printer_setup ( PSPrinterSettings &p_settings )
 				p_settings . orientation = PRINTER_ORIENTATION_REVERSE_LANDSCAPE ;
 			break ;
 		}
-		
-		
 		switch ( gtk_print_settings_get_duplex  ( t_printer_settings ) )
 		{
 			case GTK_PRINT_DUPLEX_SIMPLEX:
@@ -954,12 +938,15 @@ MCPrinterDialogResult MCA_gtk_printer_setup ( PSPrinterSettings &p_settings )
 			case GTK_PRINT_DUPLEX_VERTICAL:
 				p_settings . duplex_mode = PRINTER_DUPLEX_MODE_LONG_EDGE ;
 			break ;
-			
 		}
-		
+        p_settings . paper_size_width = (uint4)ceil(gtk_print_settings_get_paper_width(t_printer_settings, GTK_UNIT_POINTS));
+        p_settings . paper_size_height = (uint4)ceil(gtk_print_settings_get_paper_height(t_printer_settings, GTK_UNIT_POINTS));
+#endif
+        
+        g_object_unref(t_printer_settings);
 	}
 	
-	gtk_widget_destroy(dialog);
+	gtk_widget_destroy((GtkWidget *)dialog);
 
 	while (gtk_events_pending())
 		gtk_main_iteration();
@@ -975,47 +962,6 @@ MCPrinterDialogResult MCA_gtk_printer_setup ( PSPrinterSettings &p_settings )
 
 MCPrinterDialogResult MCA_gtk_page_setup (PSPrinterSettings &p_settings)
 {
-	if (!MCModeMakeLocalWindows())
-	{
-		bool t_success;
-		t_success = true;
-
-		MCLinuxPageSetup t_setup;
-		t_setup . paper_width = p_settings . paper_size_width;
-		t_setup . paper_height = p_settings . paper_size_height;
-		t_setup . orientation = p_settings . orientation;
-		t_setup . left_margin = t_setup . top_margin = t_setup . right_margin = t_setup . bottom_margin = 0;
-
-		MCAutoDataRef t_data_in;
-
-		if (t_success)
-			t_success = MCLinuxPageSetupEncode(t_setup, &t_data_in);
-
-		uint32_t t_result;
-		t_result = PRINTER_DIALOG_RESULT_ERROR;
-		if (t_success)
-		{
-			MCAutoDataRef t_data_out;
-            
-			MCRemotePageSetupDialog(*t_data_in, &t_data_out, t_result);
-
-			if (t_result == PRINTER_DIALOG_RESULT_OKAY)
-			{
-				if (MCLinuxPageSetupDecode(*t_data_out, t_setup))
-				{
-					p_settings . paper_size_width = t_setup . paper_width;
-					p_settings . paper_size_height = t_setup . paper_height;
-					p_settings . orientation = (MCPrinterOrientation)t_setup . orientation;
-				}
-				else
-					t_result = PRINTER_DIALOG_RESULT_ERROR;
-
-			}
-		}
-
-		return (MCPrinterDialogResult)t_result;
-	}
-
 	GtkWidget * dialog ;
 	
 	gint ret_code ;
@@ -1086,65 +1032,11 @@ MCPrinterDialogResult MCA_gtk_page_setup (PSPrinterSettings &p_settings)
 bool MCLinuxPageSetupEncode(const MCLinuxPageSetup& setup, MCDataRef &r_data)
 {
 	return false;
-
-	/*bool t_success;
-	t_success = true;
-
-	MCBinaryEncoder *t_encoder;
-	t_encoder = nil;
-	if (t_success)
-		t_success = MCBinaryEncoderCreate(t_encoder);
-
-	if (t_success)
-		t_success = 
-			MCBinaryEncoderWriteUInt32(t_encoder, 0) &&
-			MCBinaryEncoderWriteInt32(t_encoder, setup . paper_width) &&
-			MCBinaryEncoderWriteInt32(t_encoder, setup . paper_height) &&
-			MCBinaryEncoderWriteInt32(t_encoder, setup . left_margin) &&
-			MCBinaryEncoderWriteInt32(t_encoder, setup . top_margin) &&
-			MCBinaryEncoderWriteInt32(t_encoder, setup . right_margin) &&
-			MCBinaryEncoderWriteInt32(t_encoder, setup . bottom_margin) &&
-			MCBinaryEncoderWriteUInt32(t_encoder, setup . orientation);
-
-	if (t_success)
-	{
-		void *t_data;
-		uint32_t t_data_size;
-		MCBinaryEncoderBorrow(t_encoder, t_data, t_data_size);
-		t_success = MCMemoryAllocateCopy(t_data, t_data_size, r_data);
-		if (t_success)
-			r_data_size = t_data_size;
-	}
-
-	MCBinaryEncoderDestroy(t_encoder);
-
-	return t_success;*/
 }
 
 bool MCLinuxPageSetupDecode(MCDataRef p_data, MCLinuxPageSetup& setup)
 {
 	return false;
-
-	/*MCBinaryDecoder *t_decoder;
-
-	if (!MCBinaryDecoderCreate(p_data, p_data_size, t_decoder))
-		return false;
-
-	bool t_success;
-	uint32_t version;
-	t_success =
-		MCBinaryDecoderReadUInt32(t_decoder, version) &&
-		MCBinaryDecoderReadInt32(t_decoder, setup . paper_width) &&
-		MCBinaryDecoderReadInt32(t_decoder, setup . paper_height) &&
-		MCBinaryDecoderReadInt32(t_decoder, setup . left_margin) &&
-		MCBinaryDecoderReadInt32(t_decoder, setup . top_margin) &&
-		MCBinaryDecoderReadInt32(t_decoder, setup . right_margin) &&
-		MCBinaryDecoderReadInt32(t_decoder, setup . bottom_margin) &&
-		MCBinaryDecoderReadUInt32(t_decoder, setup . orientation);
-
-	MCBinaryDecoderDestroy(t_decoder);
-
-	return t_success;*/
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1152,48 +1044,11 @@ bool MCLinuxPageSetupDecode(MCDataRef p_data, MCLinuxPageSetup& setup)
 bool MCLinuxPrintSetupEncode(const MCLinuxPrintSetup& setup, MCDataRef &r_data)
 {
 	return false;
-
-	/*bool t_success;
-	t_success = true;
-
-	MCBinaryEncoder *t_encoder;
-	t_encoder = nil;
-	if (t_success)
-		t_success = MCBinaryEncoderCreate(t_encoder);
-
-	if (t_success)
-		t_success = true;
-
-	if (t_success)
-	{
-		void *t_data;
-		uint32_t t_data_size;
-		MCBinaryEncoderBorrow(t_encoder, t_data, t_data_size);
-		t_success = MCMemoryAllocateCopy(t_data, t_data_size, r_data);
-		if (t_success)
-			r_data_size = t_data_size;
-	}
-
-	MCBinaryEncoderDestroy(t_encoder);
-
-	return t_success;*/
 }
 
 bool MCLinuxPrintSetupDecode(MCDataRef p_data, MCLinuxPrintSetup& setup)
 {
 	return false;
-
-	/*MCBinaryDecoder *t_decoder;
-
-	if (!MCBinaryDecoderCreate(p_data, p_data_size, t_decoder))
-		return false;
-
-	bool t_success;
-	t_success = true;
-
-	MCBinaryDecoderDestroy(t_decoder);
-
-	return t_success;*/
 }
 
 ////////////////////////////////////////////////////////////////////////////////

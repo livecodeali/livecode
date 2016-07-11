@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2016 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -26,10 +26,12 @@
 
 #include "mac-internal.h"
 
-#include "mac-player.h"
 #include "graphics_util.h"
+#include <objc/objc-runtime.h>
 
 ////////////////////////////////////////////////////////////////////////////////
+
+#ifdef FEATURE_QUICKTIME
 
  class MCQTKitPlayer;
  
@@ -48,9 +50,19 @@
  @end
 
 @interface QTMovie(QtExtensions)
+
 - (NSArray*)loadedRanges;
 - (QTTime)maxTimeLoaded;
+
 @end
+
+@interface com_runrev_livecode_MCQTKitHelper : NSObject
+
++ (void) dynamicallySubclassQTMovieView:(QTMovieView *)view ;
+- (NSView *) newHitTest: (NSPoint) aPoint;
+
+@end
+
  
 class MCQTKitPlayer: public MCPlatformPlayer
 {
@@ -58,13 +70,15 @@ public:
     MCQTKitPlayer(void);
     virtual ~MCQTKitPlayer(void);
     
+	virtual bool GetNativeView(void *& r_view);
+	
     virtual bool IsPlaying(void);
     // PM-2014-05-28: [[ Bug 12523 ]] Take into account the playRate property
     virtual void Start(double rate);
     virtual void Stop(void);
     virtual void Step(int amount);
     
-    virtual void LockBitmap(MCImageBitmap*& r_bitmap);
+    virtual bool LockBitmap(const MCGIntegerSize &p_size, MCImageBitmap*& r_bitmap);
     virtual void UnlockBitmap(MCImageBitmap *bitmap);
     
     virtual void SetProperty(MCPlatformPlayerProperty property, MCPlatformPropertyType type, void *value);
@@ -94,6 +108,9 @@ private:
     static OSErr MovieDrawingComplete(Movie movie, long ref);
     static Boolean MovieActionFilter(MovieController mc, short action, void *params, long refcon);
     
+    void Mirror(void);
+    void Unmirror(void);
+    
     QTMovie *m_movie;
     QTMovieView *m_view;
     CVImageBufferRef m_current_frame;
@@ -102,9 +119,10 @@ private:
     
     com_runrev_livecode_MCQTKitPlayerObserver *m_observer;
     
-    uint32_t *m_markers;
+    MCPlatformPlayerDuration *m_markers;
     uindex_t m_marker_count;
     uint32_t m_last_marker;
+	double m_scale;
     
     MCRectangle m_rect;
     bool m_visible : 1;
@@ -115,6 +133,11 @@ private:
     bool m_switch_scheduled : 1;
     bool m_playing : 1;
     bool m_synchronizing : 1;
+
+    bool m_has_invalid_filename : 1;
+
+    bool m_mirrored : 1;
+
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -143,7 +166,49 @@ private:
 }
 
 @end
- 
+
+// PM-2015-05-27: [[ Bug 14349 ]] Dynamically subclass QTMovieView and override hitTest method to make mouse events respond to the superview
+@implementation com_runrev_livecode_MCQTKitHelper
+
+// We cannot subclass QTMovieView statically, because we have to dynamically load QTKit
++ (void) dynamicallySubclassQTMovieView:(QTMovieView *)p_qt_movie_view
+{
+    Class t_qt_movie_view_class = [p_qt_movie_view class];
+    
+    // Build the name of the new class
+    NSString *t_subclass_name = @"com_runrev_livecode_MCQTMovieView";
+    Class t_subclass = NSClassFromString(t_subclass_name);
+    
+    // Look in the runtime to see if class of this name already exists
+    if (t_subclass == nil)
+    {
+        // Create the class
+        t_subclass = objc_allocateClassPair(t_qt_movie_view_class, [t_subclass_name UTF8String], 0);
+        if (t_subclass != nil)
+        {
+            IMP hitTest = class_getMethodImplementation([com_runrev_livecode_MCQTKitHelper class], @selector(newHitTest:));
+            
+            // Add the custom -hitTest method (called newHitTest) to the new subclass
+            class_addMethod(t_subclass, @selector(hitTest:), hitTest, "v@:");
+            
+            // Register the class with the runtime
+            objc_registerClassPair(t_subclass);
+        }
+    }
+    
+    if (t_subclass != nil)
+    {
+        // Set the class of p_qt_movie_view to the new subclass
+        object_setClass(p_qt_movie_view, t_subclass);
+    }
+}
+
+- (NSView *) newHitTest: (NSPoint) aPoint
+{
+	return nil;
+}
+
+@end
 ////////////////////////////////////////////////////////////////////////////////
 
 
@@ -165,6 +230,7 @@ MCQTKitPlayer::MCQTKitPlayer(void)
 {
 	m_movie = [[NSClassFromString(@"QTMovie") movie] retain];
 	m_view = [[NSClassFromString(@"QTMovieView") alloc] initWithFrame: NSZeroRect];
+    [com_runrev_livecode_MCQTKitHelper dynamicallySubclassQTMovieView:m_view];
 	m_observer = [[com_runrev_livecode_MCQTKitPlayerObserver alloc] initWithPlayer: this];
     
 	m_current_frame = nil;
@@ -186,6 +252,8 @@ MCQTKitPlayer::MCQTKitPlayer(void)
     
     m_last_current_time = do_QTMakeTime(INT64_MAX, 1);
     m_buffered_time = do_QTMakeTime(0, 1);
+    m_mirrored = false;
+	m_scale = 1.0;
 }
 
 MCQTKitPlayer::~MCQTKitPlayer(void)
@@ -204,6 +272,15 @@ MCQTKitPlayer::~MCQTKitPlayer(void)
 	[m_movie release];
     
     MCMemoryDeleteArray(m_markers);
+}
+
+bool MCQTKitPlayer::GetNativeView(void *& r_view)
+{
+	if (m_view == nil)
+		return false;
+	
+	r_view = m_view;
+	return true;
 }
 
 void MCQTKitPlayer::MovieIsLoading(QTTimeRange p_timerange)
@@ -285,6 +362,7 @@ void MCQTKitPlayer::Switch(bool p_new_offscreen)
 	m_switch_scheduled = true;
 }
 
+
 void MCQTKitPlayer::DoSwitch(void *ctxt)
 {
 	MCQTKitPlayer *t_player;
@@ -328,37 +406,11 @@ void MCQTKitPlayer::DoSwitch(void *ctxt)
 
 void MCQTKitPlayer::Realize(void)
 {
-	if (m_window == nil)
-		return;
-	
-	MCMacPlatformWindow *t_window;
-	t_window = (MCMacPlatformWindow *)m_window;
-	
-	if (!m_offscreen)
-	{
-		MCWindowView *t_parent_view;
-		t_parent_view = t_window -> GetView();
-		[t_parent_view addSubview: m_view];
-	}
-	
 	Synchronize();
 }
 
 void MCQTKitPlayer::Unrealize(void)
 {
-	if (m_offscreen || m_window == nil)
-		return;
-    
-	if (!m_offscreen)
-	{
-		MCMacPlatformWindow *t_window;
-		t_window = (MCMacPlatformWindow *)m_window;
-        
-		MCWindowView *t_parent_view;
-		t_parent_view = t_window -> GetView();
-        
-		[m_view removeFromSuperview];
-	}
 }
 
 Boolean MCQTKitPlayer::MovieActionFilter(MovieController mc, short action, void *params, long refcon)
@@ -457,8 +509,15 @@ void MCQTKitPlayer::Load(MCStringRef p_filename, bool p_is_url)
 	if (t_error != nil)
 	{
 		[t_new_movie release];
+        // PM-2014-12-17: [[ Bug 14233 ]] If invalid filename is used, reset previous open movie
+        m_movie = nil;
+        [m_view setMovie:nil];
+        m_has_invalid_filename = true;
+
 		return;
 	}
+    
+    m_has_invalid_filename = false;
 	
     // MW-2014-07-18: [[ Bug ]] Clean up callbacks before we release.
     MCSetActionFilterWithRefCon([m_movie quickTimeMovieController], nil, nil);
@@ -514,27 +573,37 @@ void MCQTKitPlayer::Load(MCStringRef p_filename, bool p_is_url)
     }
 }
 
+void MCQTKitPlayer::Mirror(void)
+{
+    CGAffineTransform t_transform1 = CGAffineTransformMakeScale(-1, 1);
+    
+    CGAffineTransform t_transform2 = CGAffineTransformMakeTranslation(m_view.bounds.size.width, 0);
+    
+    CGAffineTransform t_flip_horizontally = CGAffineTransformConcat(t_transform1, t_transform2);
+    
+    [m_view setWantsLayer:YES];
+    m_view.layer.affineTransform = t_flip_horizontally;
+}
+
+void MCQTKitPlayer::Unmirror(void)
+{
+    m_view.layer.affineTransform = CGAffineTransformMakeScale(1, 1);
+}
+
+
 void MCQTKitPlayer::Synchronize(void)
 {
-	if (m_window == nil)
-		return;
-	
-	MCMacPlatformWindow *t_window;
-	t_window = (MCMacPlatformWindow *)m_window;
-	
-	NSRect t_frame;
-	t_window -> MapMCRectangleToNSRect(m_rect, t_frame);
-    
     m_synchronizing = true;
-    
-	[m_view setFrame: t_frame];
-	
-	[m_view setHidden: !m_visible];
     
     [m_view setEditable: m_show_selection];
 	[m_view setControllerVisible: m_show_controller];
 	
 	MCMovieChanged([m_movie quickTimeMovieController], [m_movie quickTimeMovie]);
+    
+    if (m_mirrored)
+        Mirror();
+    else
+        Unmirror();
     
     m_synchronizing = false;
 }
@@ -563,56 +632,18 @@ void MCQTKitPlayer::Step(int amount)
 		[m_movie stepBackward];
 }
 
-void MCQTKitPlayer::LockBitmap(MCImageBitmap*& r_bitmap)
+extern bool MCMacPlayerSnapshotCVImageBuffer(CVImageBufferRef p_imagebuffer, uint32_t p_width, uint32_t p_height, bool p_mirror, MCImageBitmap *&r_bitmap);
+bool MCQTKitPlayer::LockBitmap(const MCGIntegerSize &p_size, MCImageBitmap*& r_bitmap)
 {
-	MCImageBitmap *t_bitmap;
-	t_bitmap = new MCImageBitmap;
-	t_bitmap -> width = m_rect . width;
-	t_bitmap -> height = m_rect . height;
-	t_bitmap -> stride = m_rect . width * sizeof(uint32_t);
-	t_bitmap -> data = (uint32_t *)malloc(t_bitmap -> stride * t_bitmap -> height);
-    memset(t_bitmap -> data, 0,t_bitmap -> stride * t_bitmap -> height);
-	t_bitmap -> has_alpha = t_bitmap -> has_transparency = true;
-    
+	if (m_current_frame == nil)
+		return false;
 	
-	// Now if we have a current frame, then composite at the appropriate size into
-	// the movie portion of the buffer.
-	if (m_current_frame != nil)
-	{
-		extern CGBitmapInfo MCGPixelFormatToCGBitmapInfo(uint32_t p_pixel_format, bool p_alpha);
-		
-		CGColorSpaceRef t_colorspace;
-		/* UNCHECKED */ MCMacPlatformGetImageColorSpace(t_colorspace);
-		
-		CGContextRef t_cg_context;
-		t_cg_context = CGBitmapContextCreate(t_bitmap -> data, t_bitmap -> width, t_bitmap -> height, 8, t_bitmap -> stride, t_colorspace, MCGPixelFormatToCGBitmapInfo(kMCGPixelFormatNative, true));
-		
-		CIImage *t_ci_image;
-		t_ci_image = [[CIImage alloc] initWithCVImageBuffer: m_current_frame];
-        
-        NSAutoreleasePool *t_pool;
-        t_pool = [[NSAutoreleasePool alloc] init];
-        
-		CIContext *t_ci_context;
-		t_ci_context = [CIContext contextWithCGContext: t_cg_context options: nil];
-		
-		[t_ci_context drawImage: t_ci_image inRect: CGRectMake(0, 0, m_rect . width, m_rect . height) fromRect: [t_ci_image extent]];
-		
-        [t_pool release];
-        
-		[t_ci_image release];
-		
-		CGContextRelease(t_cg_context);
-		CGColorSpaceRelease(t_colorspace);
-	}
-	
-	r_bitmap = t_bitmap;
+	return MCMacPlayerSnapshotCVImageBuffer(m_current_frame, p_size.width, p_size.height, m_mirrored, r_bitmap);
 }
 
 void MCQTKitPlayer::UnlockBitmap(MCImageBitmap *bitmap)
 {
-    delete bitmap -> data;
-	delete bitmap;
+	MCImageFreeBitmap(bitmap);
 }
 
 extern NSString **QTMovieLoopsAttribute_ptr;
@@ -635,6 +666,10 @@ void MCQTKitPlayer::SetProperty(MCPlatformPlayerProperty p_property, MCPlatformP
 		case kMCPlatformPlayerPropertyOffscreen:
 			Switch(*(bool *)p_value);
 			break;
+		case kMCPlatformPlayerPropertyScalefactor:
+			m_scale = *(double *)p_value;
+			Synchronize();
+			break;
 		case kMCPlatformPlayerPropertyRect:
 			m_rect = *(MCRectangle *)p_value;
 			Synchronize();
@@ -644,16 +679,18 @@ void MCQTKitPlayer::SetProperty(MCPlatformPlayerProperty p_property, MCPlatformP
 			Synchronize();
 			break;
 		case kMCPlatformPlayerPropertyCurrentTime:
-			[m_movie setCurrentTime: do_QTMakeTime(*(uint32_t *)p_value, [m_movie duration] . timeScale)];
+			MCAssert(p_type == kMCPlatformPropertyTypePlayerDuration);
+			[m_movie setCurrentTime: do_QTMakeTime(*(MCPlatformPlayerDuration*)p_value, [m_movie duration] . timeScale)];
 			break;
 		case kMCPlatformPlayerPropertyStartTime:
 		{
+			MCAssert(p_type == kMCPlatformPropertyTypePlayerDuration);
 			QTTime t_selection_start, t_selection_end;
 			t_selection_start = [m_movie selectionStart];
 			t_selection_end = [m_movie selectionEnd];
 			
 			uint32_t t_start_time, t_end_time;
-			t_start_time = *(uint32_t *)p_value;
+			t_start_time = *(MCPlatformPlayerDuration*)p_value;
 			t_end_time = t_selection_end . timeValue;
 			
 			if (t_start_time > t_end_time)
@@ -669,13 +706,14 @@ void MCQTKitPlayer::SetProperty(MCPlatformPlayerProperty p_property, MCPlatformP
             break;
 		case kMCPlatformPlayerPropertyFinishTime:
 		{
+			MCAssert(p_type == kMCPlatformPropertyTypePlayerDuration);
 			QTTime t_selection_start, t_selection_end;
 			t_selection_start = [m_movie selectionStart];
 			t_selection_end = [m_movie selectionEnd];
 			
 			uint32_t t_start_time, t_end_time;
 			t_start_time = t_selection_start . timeValue;
-			t_end_time = *(uint32_t *)p_value;
+			t_end_time = *(MCPlatformPlayerDuration*)p_value;
 			
 			if (t_start_time > t_end_time)
 				t_start_time = t_end_time;
@@ -704,17 +742,26 @@ void MCQTKitPlayer::SetProperty(MCPlatformPlayerProperty p_property, MCPlatformP
 		case kMCPlatformPlayerPropertyLoop:
 			[m_movie setAttribute: [NSNumber numberWithBool: *(bool *)p_value] forKey: *QTMovieLoopsAttribute_ptr];
 			break;
+        case kMCPlatformPlayerPropertyMirrored:
+            m_mirrored = *(bool *)p_value;
+            if (m_mirrored)
+                Mirror();
+            else
+                Unmirror();
+			break;
         case kMCPlatformPlayerPropertyMarkers:
         {
-            array_t<uint32_t> *t_markers;
-            t_markers = (array_t<uint32_t> *)p_value;
+			MCAssert(p_type == kMCPlatformPropertyTypePlayerDurationArray);
+			
+            MCPlatformPlayerDurationArray *t_markers;
+            t_markers = (MCPlatformPlayerDurationArray*)p_value;
             
             m_last_marker = UINT32_MAX;
             MCMemoryDeleteArray(m_markers);
             m_markers = nil;
             
             /* UNCHECKED */ MCMemoryResizeArray(t_markers -> count, m_markers, m_marker_count);
-            MCMemoryCopy(m_markers, t_markers -> ptr, m_marker_count * sizeof(uint32_t));
+            MCMemoryCopy(m_markers, t_markers -> ptr, m_marker_count * sizeof(MCPlatformPlayerDuration));
         }
             break;
 	}
@@ -800,22 +847,28 @@ void MCQTKitPlayer::GetProperty(MCPlatformPlayerProperty p_property, MCPlatformP
             break;
         // PM-2014-08-20 [[ Bug 13121 ]] Added property for displaying download progress
         case kMCPlatformPlayerPropertyLoadedTime:
-			*(uint32_t *)r_value = m_buffered_time . timeValue;
+			MCAssert(p_type == kMCPlatformPropertyTypePlayerDuration);
+			*(MCPlatformPlayerDuration*)r_value = m_buffered_time . timeValue;
 			break;
 		case kMCPlatformPlayerPropertyDuration:
-			*(uint32_t *)r_value = [m_movie duration] . timeValue;
+			MCAssert(p_type == kMCPlatformPropertyTypePlayerDuration);
+			*(MCPlatformPlayerDuration*)r_value = [m_movie duration] . timeValue;
 			break;
 		case kMCPlatformPlayerPropertyTimescale:
-			*(uint32_t *)r_value = [m_movie currentTime] . timeScale;
+			MCAssert(p_type == kMCPlatformPropertyTypePlayerDuration);
+			*(MCPlatformPlayerDuration*)r_value = [m_movie currentTime] . timeScale;
 			break;
 		case kMCPlatformPlayerPropertyCurrentTime:
-			*(uint32_t *)r_value = [m_movie currentTime] . timeValue;
+			MCAssert(p_type == kMCPlatformPropertyTypePlayerDuration);
+			*(MCPlatformPlayerDuration*)r_value = [m_movie currentTime] . timeValue;
 			break;
 		case kMCPlatformPlayerPropertyStartTime:
-			*(uint32_t *)r_value = [m_movie selectionStart] . timeValue;
+			MCAssert(p_type == kMCPlatformPropertyTypePlayerDuration);
+			*(MCPlatformPlayerDuration*)r_value = [m_movie selectionStart] . timeValue;
 			break;
 		case kMCPlatformPlayerPropertyFinishTime:
-			*(uint32_t *)r_value = [m_movie selectionEnd] . timeValue;
+			MCAssert(p_type == kMCPlatformPropertyTypePlayerDuration);
+			*(MCPlatformPlayerDuration*)r_value = [m_movie selectionEnd] . timeValue;
 			break;
 		case kMCPlatformPlayerPropertyPlayRate:
 			*(double *)r_value = [m_movie rate];
@@ -832,6 +885,19 @@ void MCQTKitPlayer::GetProperty(MCPlatformPlayerProperty p_property, MCPlatformP
 			break;
 		case kMCPlatformPlayerPropertyLoop:
 			*(bool *)r_value = [(NSNumber *)[m_movie attributeForKey: *QTMovieLoopsAttribute_ptr] boolValue] == YES;
+			break;
+
+        // PM-2014-12-17: [[ Bug 14232 ]] Read-only property that indicates if a filename is invalid or if the file is corrupted
+        case kMCPlatformPlayerPropertyInvalidFilename:
+			*(bool *)r_value = m_has_invalid_filename;
+			break;
+
+        case kMCPlatformPlayerPropertyMirrored:
+            *(bool *)r_value = m_mirrored;
+			break;
+			
+		case kMCPlatformPlayerPropertyScalefactor:
+            *(double *)r_value = m_scale;
 			break;
 	}
 }
@@ -908,9 +974,22 @@ void MCQTKitPlayer::GetTrackProperty(uindex_t p_index, MCPlatformPlayerTrackProp
 
 ////////////////////////////////////////////////////////
 
+extern bool MCQTInitialize();
 MCQTKitPlayer *MCQTKitPlayerCreate(void)
 {
+	if (!MCQTInitialize())
+		return nil;
+
     return new MCQTKitPlayer;
 }
 
+#else   /* ifdef FEATURE_QUICKTIME */
+
+class MCQTKitPlayer* MCQTKitPlayerCreate()
+{
+    return NULL;
+}
+
 ////////////////////////////////////////////////////////
+
+#endif  /* ifdef FEATURE_QUICKTIME ... else ... */

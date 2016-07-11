@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -21,7 +21,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "objdefs.h"
 #include "parsedef.h"
 
-//#include "execpt.h"
+
 #include "globals.h"
 #include "stack.h"
 #include "system.h"
@@ -82,9 +82,6 @@ MCCamerasFeaturesType MCSystemGetAllCameraFeatures()
 
 bool MCAndroidPickPhoto(const char *p_source, int32_t p_max_width, int32_t p_max_height)
 {
-#ifdef /* MCMobilePickPhoto */ LEGACY_EXEC
-	MCAndroidEngineCall("showPhotoPicker", "vs", nil, p_source);
-#endif /* MCMobilePickPhoto */
 	MCAndroidEngineCall("showPhotoPicker", "vs", nil, p_source);
     // SN-2014-09-03: [[ Bug 13329 ]] MCAndroidPickPhoto's return value is ignored in 6.x,
     // but not in 7.0 - whence the failure in mobilePickPhoto
@@ -108,7 +105,10 @@ static const char *MCPhotoSourceTypeToCString(MCPhotoSourceType p_source)
         case kMCPhotoSourceTypeFrontCamera:
         case kMCPhotoSourceTypeRearCamera:
             return "camera";
+        default:
+            MCUnreachableReturn("unknown");
     }
+
 }
 
 bool MCSystemAcquirePhoto(MCPhotoSourceType p_source, int32_t p_max_width, int32_t p_max_height, void*& r_image_data, size_t& r_image_data_size, MCStringRef& r_result)
@@ -131,8 +131,9 @@ bool MCSystemAcquirePhoto(MCPhotoSourceType p_source, int32_t p_max_width, int32
 	{
         if (s_pick_photo_err != nil)
         {
-            /* UNCHECKED */ MCStringCreateWithCString(s_pick_photo_err, r_result);
-            delete s_pick_photo_err;
+			/* UNCHECKED */ MCStringCreateWithCString(s_pick_photo_err, r_result);
+			MCCStringFree(s_pick_photo_err);
+			s_pick_photo_err = nil;
         }
         else
         /* UNCHECKED */MCStringCreateWithCString("cancel", r_result);
@@ -151,20 +152,6 @@ bool MCSystemCanAcquirePhoto(MCPhotoSourceType p_source)
 
 void MCAndroidPhotoPickDone(const char *p_data, uint32_t p_size)
 {
-#ifdef /* MCAndroidPhotoPickDone */ LEGACY_EXEC
-	if (s_pick_photo_data != nil)
-	{
-		MCMemoryDeallocate(s_pick_photo_data);
-		s_pick_photo_data = nil;
-	}
-    
-	if (p_data != nil)
-	{
-		MCMemoryAllocateCopy(p_data, p_size, (void*&)s_pick_photo_data);
-		s_pick_photo_size = p_size;
-	}
-	s_pick_photo_returned = true;
-#endif /* MCAndroidPhotoPickDone */
 	if (s_pick_photo_data != nil)
 	{
 		MCMemoryDeallocate(s_pick_photo_data);
@@ -181,17 +168,6 @@ void MCAndroidPhotoPickDone(const char *p_data, uint32_t p_size)
 
 void MCAndroidPhotoPickError(const char *p_error)
 {
-#ifdef /* MCAndroidPhotoPickError */ LEGACY_EXEC
-	if (s_pick_photo_data != nil)
-	{
-		MCMemoryDeallocate(s_pick_photo_data);
-		s_pick_photo_data = nil;
-	}
-	if (s_pick_photo_err != nil)
-		MCCStringFree(s_pick_photo_err);
-	MCCStringClone(p_error, s_pick_photo_err);
-	s_pick_photo_returned = true;
-#endif /* MCAndroidPhotoPickError */
 	if (s_pick_photo_data != nil)
 	{
 		MCMemoryDeallocate(s_pick_photo_data);
@@ -205,8 +181,5 @@ void MCAndroidPhotoPickError(const char *p_error)
 
 void MCAndroidPhotoPickCanceled()
 {
-#ifdef /* MCAndroidPhotoPickCanceled */ LEGACY_EXEC
-	MCAndroidPhotoPickError("cancel");
-#endif /* MCAndroidPhotoPickCanceled */
 	MCAndroidPhotoPickError("cancel");
 }

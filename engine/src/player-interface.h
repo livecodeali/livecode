@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -18,6 +18,8 @@
 #define PLAYER_INTERFACE_H
 
 typedef uint4 MCPlayerMediaTypeSet;
+typedef uint64_t MCPlayerDuration;
+
 enum
 {
 	PLAYER_MEDIA_TYPE_VIDEO_BIT = 0,
@@ -68,18 +70,21 @@ class MCPlayerInterface
 {
 protected:
 	MCStringRef filename;
+    MCStringRef resolved_filename;
 	uint2 framerate;
 	Boolean disposable;
 	Boolean istmpfile;
 	real8 scale;
 	real8 rate;
-	uint4 starttime;
-	uint4 endtime;
+	MCPlayerDuration starttime;
+	MCPlayerDuration endtime;
 	MCStringRef userCallbackStr;  //string contains user movie callbacks
 	uint2 formattedwidth;
 	uint2 formattedheight;
 	uint2 loudness;
-	int4 lasttime;
+    MCPlayerDuration lasttime;
+    Boolean dontuseqt;
+    Boolean usingqt;
     
 public:
     MCPlayerInterface(){};
@@ -87,10 +92,10 @@ public:
     
 	virtual bool getversion(MCStringRef& r_string) = 0;
 	virtual void freetmp() = 0;
-	virtual uint4 getduration() = 0;    //get movie duration/length
-	virtual uint4 gettimescale() = 0;  //get movie time scale
-	virtual uint4 getmoviecurtime() = 0;//get movie current time
-	virtual void setcurtime(uint4 curtime, bool notify) = 0;
+	virtual MCPlayerDuration getduration() = 0;    //get movie duration/length
+	virtual MCPlayerDuration gettimescale() = 0;  //get movie time scale
+	virtual MCPlayerDuration getmoviecurtime() = 0;//get movie current time
+	virtual void setcurtime(MCPlayerDuration curtime, bool notify) = 0;
 	virtual void setselection(bool notify) = 0;                  //set movie selection
 	virtual void setlooping(Boolean loop) = 0;        //to loop or not to loop a movie
 	virtual void setplayrate() = 0;                   //set the movie playing rate
@@ -105,15 +110,7 @@ public:
 	virtual MCRectangle getpreferredrect() = 0;
 	virtual uint2 getloudness() = 0;
 	virtual void setloudness() = 0;
-	virtual Boolean setenabledtracks(MCStringRef s) = 0;
     
-#ifdef LEGACY_EXEC
-	void gettracks(MCExecPoint &ep);
-	void getenabledtracks(MCExecPoint &ep);
-	void getnodes(MCExecPoint &ep);
-	void gethotspots(MCExecPoint &ep);
-#endif
-
     Boolean isdisposable()
     {
         return disposable;
@@ -124,6 +121,9 @@ public:
 		scale = s;
 	}
     
+    virtual void setdontuseqt(bool p_dont_use_qt) { dontuseqt = p_dont_use_qt; }
+    virtual void getdontuseqt(bool &r_dont_use_qt) { r_dont_use_qt = dontuseqt; }
+    
 	virtual Boolean prepare(MCStringRef options) = 0;
 	virtual Boolean playstart(MCStringRef options) = 0;
 	virtual Boolean playpause(Boolean on) = 0;
@@ -133,22 +133,22 @@ public:
 	virtual void setvolume(uint2 tloudness) = 0;
 	virtual void setfilename(MCStringRef vcname, MCStringRef fname, Boolean istmp) = 0;
     
-	uint4 getstarttime()
+	MCPlayerDuration getstarttime()
 	{
 		return starttime;
 	}
-	uint4 getendtime()
+	MCPlayerDuration getendtime()
 	{
 		return endtime;
 	}
-	int4 getlasttime()
+	MCPlayerDuration getlasttime()
 	{
 		return lasttime;
 	}
     
-	virtual void setstarttime(uint4 stime) = 0;
-	virtual void setendtime(uint4 etime) = 0;
-	virtual void setlasttime(int4 ltime) = 0;
+	virtual void setstarttime(MCPlayerDuration stime) = 0;
+	virtual void setendtime(MCPlayerDuration etime) = 0;
+	virtual void setlasttime(MCPlayerDuration ltime) = 0;
     
     
 	virtual void syncbuffering(MCContext *dc) = 0;
@@ -178,20 +178,17 @@ public:
     virtual void gethotspots(MCStringRef &r_nodes) = 0;
     virtual void getconstraints(MCMultimediaQTVRConstraints &r_constraints) = 0;
     virtual void getenabledtracks(uindex_t &r_count, uint32_t *&r_tracks_id) = 0;
+    virtual void setenabledtracks(uindex_t p_count, uint32_t *p_tracks_id) = 0;
+    
     virtual void updatevisibility() = 0;
     virtual void updatetraversal() = 0;
-    
-    // SN-2014-07-03: [[ PlatformPlayer ]]
-    // New properties P_FORE_COLOR and P_HILITE_COLOR added for the player
-    virtual void setforegroundcolor(const MCInterfaceNamedColor& p_color) = 0;
-    virtual void getforegrouncolor(MCInterfaceNamedColor& r_color) = 0;
-    virtual void sethilitecolor(const MCInterfaceNamedColor& p_color) = 0;
-    virtual void gethilitecolor(MCInterfaceNamedColor& r_color) = 0;
+
+    // SN-2015-01-06: [[ Merge-6.7.2-rc-1 ]] Update to MCStringRef
+    virtual bool resolveplayerfilename(MCStringRef p_filename, MCStringRef &r_filename) = 0;
     
 	////////// PROPERTY SUPPORT METHODS
     
 	virtual void Redraw(void) = 0;
-    virtual void SetVisibility(MCExecContext& ctxt, uinteger_t part, bool setting, bool visible) = 0;
     
 	////////// PROPERTY ACCESSORS
     
@@ -199,11 +196,11 @@ public:
 	virtual void SetFileName(MCExecContext& ctxt, MCStringRef p_name) = 0;
 	virtual void GetDontRefresh(MCExecContext& ctxt, bool& r_setting) = 0;
 	virtual void SetDontRefresh(MCExecContext& ctxt, bool setting) = 0;
-	virtual void GetCurrentTime(MCExecContext& ctxt, uinteger_t& r_time) = 0;
-	virtual void SetCurrentTime(MCExecContext& ctxt, uinteger_t p_time) = 0;
-	virtual void GetDuration(MCExecContext& ctxt, uinteger_t& r_duration) = 0;
+	virtual void GetCurrentTime(MCExecContext& ctxt, double& r_time) = 0;
+	virtual void SetCurrentTime(MCExecContext& ctxt, double p_time) = 0;
+	virtual void GetDuration(MCExecContext& ctxt, double& r_duration) = 0;
     // PM-2014-11-03: [[ Bug 13920 ]] Make sure we support loadedTime property
-    virtual void GetLoadedTime(MCExecContext& ctxt, uinteger_t& r_loaded_time) = 0;
+    virtual void GetLoadedTime(MCExecContext& ctxt, double& r_loaded_time) = 0;
 	virtual void GetLooping(MCExecContext& ctxt, bool& r_setting) = 0;
 	virtual void SetLooping(MCExecContext& ctxt, bool setting) = 0;
 	virtual void GetPaused(MCExecContext& ctxt, bool& r_setting) = 0;
@@ -212,10 +209,10 @@ public:
 	virtual void SetAlwaysBuffer(MCExecContext& ctxt, bool setting) = 0;
 	virtual void GetPlayRate(MCExecContext& ctxt, double& r_rate) = 0;
 	virtual void SetPlayRate(MCExecContext& ctxt, double p_rate) = 0;
-	virtual void GetStartTime(MCExecContext& ctxt, uinteger_t*& r_time) = 0;
-	virtual void SetStartTime(MCExecContext& ctxt, uinteger_t* p_time) = 0;
-	virtual void GetEndTime(MCExecContext& ctxt, uinteger_t*& r_time) = 0;
-	virtual void SetEndTime(MCExecContext& ctxt, uinteger_t* p_time) = 0;
+	virtual void GetStartTime(MCExecContext& ctxt, double*& r_time) = 0;
+	virtual void SetStartTime(MCExecContext& ctxt, double* p_time) = 0;
+	virtual void GetEndTime(MCExecContext& ctxt, double*& r_time) = 0;
+	virtual void SetEndTime(MCExecContext& ctxt, double* p_time) = 0;
 	virtual void GetShowBadge(MCExecContext& ctxt, bool& r_setting) = 0;
 	virtual void SetShowBadge(MCExecContext& ctxt, bool setting) = 0;
 	virtual void GetShowController(MCExecContext& ctxt, bool& r_setting) = 0;
@@ -226,7 +223,7 @@ public:
 	virtual void SetShowSelection(MCExecContext& ctxt, bool setting) = 0;
 	virtual void GetCallbacks(MCExecContext& ctxt, MCStringRef& r_callbacks) = 0;
 	virtual void SetCallbacks(MCExecContext& ctxt, MCStringRef p_callbacks) = 0;
-	virtual void GetTimeScale(MCExecContext& ctxt, uinteger_t& r_scale) = 0;
+	virtual void GetTimeScale(MCExecContext& ctxt, double& r_scale) = 0;
 	virtual void GetFormattedHeight(MCExecContext& ctxt, integer_t& r_height) = 0;
 	virtual void GetFormattedWidth(MCExecContext& ctxt, integer_t& r_width) = 0;
 	virtual void GetMovieControllerId(MCExecContext& ctxt, integer_t& r_id) = 0;
@@ -253,15 +250,13 @@ public:
     virtual void SetShowBorder(MCExecContext& ctxt, bool setting) = 0;
     virtual void SetBorderWidth(MCExecContext& ctxt, uinteger_t width) = 0;
     virtual void SetVisible(MCExecContext& ctxt, uinteger_t part, bool setting) = 0;
-    virtual void SetInvisible(MCExecContext& ctxt, uinteger_t part, bool setting) = 0;
     virtual void SetTraversalOn(MCExecContext& ctxt, bool setting) = 0;
     
     virtual void GetEnabledTracks(MCExecContext& ctxt, uindex_t& r_count, uinteger_t*& r_tracks) = 0;
+    virtual void SetEnabledTracks(MCExecContext& ctxt, uindex_t p_count, uinteger_t* p_tracks) = 0;
     
-    virtual void SetForeColor(MCExecContext& ctxt, const MCInterfaceNamedColor& p_color) = 0;
-    virtual void GetForeColor(MCExecContext& ctxt, MCInterfaceNamedColor& r_color) = 0;
-    virtual void SetHiliteColor(MCExecContext& ctxt, const MCInterfaceNamedColor& p_color) = 0;
-    virtual void GetHiliteColor(MCExecContext& ctxt, MCInterfaceNamedColor& r_color) = 0;
+    virtual void GetDontUseQT(MCExecContext& ctxt, bool &p_dont_use_qt) = 0;
+    virtual void SetDontUseQT(MCExecContext& ctxt, bool r_dont_use_qt) = 0;
 };
 
 

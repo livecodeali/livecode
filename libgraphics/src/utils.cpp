@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -230,7 +230,7 @@ bool MCGDashesCreate(MCGFloat p_phase, const MCGFloat *p_lengths, uindex_t p_ari
 	if (t_success)
 		t_success = MCMemoryNew(t_dashes);	
 	
-	MCGFloat *t_lengths;
+	MCGFloat *t_lengths = NULL;
 	if (t_success)
 		t_success = MCMemoryNewArray(p_arity, t_lengths);
 	
@@ -284,18 +284,23 @@ bool MCGDashesToSkDashPathEffect(MCGDashesRef self, SkDashPathEffect*& r_path_ef
 	bool t_success;
 	t_success = true;
 	
+    // Skia won't except odd numbers of dashes, so we must replicate in that case.
+    uint32_t t_dash_count;
+    if (t_success)
+        t_dash_count = (self -> count % 2) == 0 ? self -> count : self -> count * 2;
+        
 	SkScalar *t_dashes;
 	if (t_success)
-		t_success = MCMemoryNewArray(self -> count, t_dashes);
+		t_success = MCMemoryNewArray(t_dash_count, t_dashes);
 	
 	SkDashPathEffect *t_dash_effect;
 	t_dash_effect = NULL;
 	if (t_success)
 	{
-		for (uint32_t i = 0; i < self -> count; i++)
-			t_dashes[i] = MCGFloatToSkScalar(self -> lengths[i]);	
+		for (uint32_t i = 0; i < t_dash_count; i++)
+			t_dashes[i] = MCGFloatToSkScalar(self -> lengths[i % self -> count]);
 	
-		t_dash_effect = new SkDashPathEffect(t_dashes, self -> count, MCGFloatToSkScalar(self -> phase));
+		t_dash_effect = new SkDashPathEffect(t_dashes, (int)t_dash_count, MCGFloatToSkScalar(self -> phase));
 		t_success = t_dash_effect != NULL;
 	}
 	
@@ -505,14 +510,14 @@ bool MCGRasterToSkBitmap(const MCGRaster& p_raster, MCGPixelOwnershipType p_owne
                 if (t_success)
                     t_success = r_bitmap  . asImageInfo(&t_image_info);
                 
-                SkData *t_data;
+                SkData *t_data = NULL;
                 if (t_success)
                 {
                     t_data = SkData::NewFromMalloc(p_raster . pixels, p_raster . stride * p_raster . height);
                     t_success = t_data != NULL;
                 }
                 
-				SkMallocPixelRef *t_pixelref;
+				SkMallocPixelRef *t_pixelref = NULL;
                 if (t_success)
                 {
                     t_pixelref = SkMallocPixelRef::NewWithData(t_image_info, p_raster . stride, NULL, t_data, 0);
@@ -684,6 +689,27 @@ MCGRectangle MCGRectangleIntersection(const MCGRectangle &p_rect_1, const MCGRec
 	return t_intersection;
 }
 
+MCGRectangle MCGRectangleUnion(const MCGRectangle &p_rect_1, const MCGRectangle &p_rect_2)
+{
+	if (MCGRectangleIsEmpty(p_rect_1))
+		return p_rect_2;
+	else if (MCGRectangleIsEmpty(p_rect_2))
+		return p_rect_1;
+	
+	MCGRectangle t_union;
+	t_union . origin . x = MCMin(p_rect_1 . origin . x, p_rect_2 . origin . x);
+	t_union . origin . y = MCMin(p_rect_1 . origin . y, p_rect_2 . origin . y);
+	
+	MCGFloat t_right, t_bottom;
+	t_right = MCMax(p_rect_1 . origin . x + p_rect_1 . size . width, p_rect_2 . origin . x + p_rect_2 . size . width);
+	t_bottom = MCMax(p_rect_1 . origin . y + p_rect_1 . size . height, p_rect_2 . origin . y + p_rect_2 . size . height);
+	
+	t_union . size . width = t_right - t_union . origin . x;
+	t_union . size . height = t_bottom - t_union . origin . y;
+	
+	return t_union;
+}
+
 MCGIntegerRectangle MCGIntegerRectangleIntersection(const MCGIntegerRectangle &p_rect_1, const MCGIntegerRectangle &p_rect_2)
 {
 	int32_t t_left, t_top;
@@ -803,6 +829,11 @@ MCGAffineTransform MCGAffineTransformMakeScale(MCGFloat p_xscale, MCGFloat p_ysc
 	return t_transform;
 }
 
+MCGAffineTransform MCGAffineTransformMakeSkew(MCGFloat p_xskew, MCGFloat p_yskew)
+{
+	return MCGAffineTransformMake(1, p_yskew, p_xskew, 1, 0, 0);
+}
+
 MCGAffineTransform MCGAffineTransformConcat(const MCGAffineTransform& p_transform_1, const MCGAffineTransform& p_transform_2)
 {
 	MCGAffineTransform t_result;
@@ -815,19 +846,44 @@ MCGAffineTransform MCGAffineTransformConcat(const MCGAffineTransform& p_transfor
 	return t_result;
 }
 
-MCGAffineTransform MCGAffineTransformRotate(const MCGAffineTransform &p_transform, MCGFloat p_angle)
+MCGAffineTransform MCGAffineTransformPreRotate(const MCGAffineTransform &p_transform, MCGFloat p_angle)
 {
 	return MCGAffineTransformConcat(MCGAffineTransformMakeRotation(p_angle), p_transform);
 }
 
-MCGAffineTransform MCGAffineTransformTranslate(const MCGAffineTransform &p_transform, MCGFloat p_xoffset, MCGFloat p_yoffset)
+MCGAffineTransform MCGAffineTransformPostRotate(const MCGAffineTransform &p_transform, MCGFloat p_angle)
+{
+	return MCGAffineTransformConcat(p_transform, MCGAffineTransformMakeRotation(p_angle));
+}
+
+MCGAffineTransform MCGAffineTransformPreTranslate(const MCGAffineTransform &p_transform, MCGFloat p_xoffset, MCGFloat p_yoffset)
 {
 	return MCGAffineTransformConcat(MCGAffineTransformMakeTranslation(p_xoffset, p_yoffset), p_transform);
 }
 
-MCGAffineTransform MCGAffineTransformScale(const MCGAffineTransform &p_transform, MCGFloat p_xscale, MCGFloat p_yscale)
+MCGAffineTransform MCGAffineTransformPostTranslate(const MCGAffineTransform &p_transform, MCGFloat p_xoffset, MCGFloat p_yoffset)
+{
+	return MCGAffineTransformConcat(p_transform, MCGAffineTransformMakeTranslation(p_xoffset, p_yoffset));
+}
+
+MCGAffineTransform MCGAffineTransformPreScale(const MCGAffineTransform &p_transform, MCGFloat p_xscale, MCGFloat p_yscale)
 {
 	return MCGAffineTransformConcat(MCGAffineTransformMakeScale(p_xscale, p_yscale), p_transform);
+}
+
+MCGAffineTransform MCGAffineTransformPostScale(const MCGAffineTransform &p_transform, MCGFloat p_xscale, MCGFloat p_yscale)
+{
+	return MCGAffineTransformConcat(p_transform, MCGAffineTransformMakeScale(p_xscale, p_yscale));
+}
+
+MCGAffineTransform MCGAffineTransformPreSkew(const MCGAffineTransform &p_transform, MCGFloat p_xskew, MCGFloat p_yskew)
+{
+	return MCGAffineTransformConcat(MCGAffineTransformMakeSkew(p_xskew, p_yskew), p_transform);
+}
+
+MCGAffineTransform MCGAffineTransformPostSkew(const MCGAffineTransform &p_transform, MCGFloat p_xskew, MCGFloat p_yskew)
+{
+	return MCGAffineTransformConcat(p_transform, MCGAffineTransformMakeSkew(p_xskew, p_yskew));
 }
 
 MCGAffineTransform MCGAffineTransformInvert(const MCGAffineTransform& p_transform)
@@ -871,6 +927,79 @@ MCGAffineTransform MCGAffineTransformFromRectangles(const MCGRectangle &p_a, con
 	t_dy = p_b.origin.y - (p_a.origin.y * t_y_scale);
 	
 	return MCGAffineTransformMake(t_x_scale, 0, 0, t_y_scale, t_dx, t_dy);
+}
+
+// solve simultaneous eqations in the form ax + by + k = 0. Equation input values are {x, y, k}. returns false if no unique solution found.
+bool solve_simul_eq_2_vars(const MCGFloat p_eq_1[3], const MCGFloat p_eq_2[3], MCGFloat &r_a, MCGFloat &r_b)
+{
+	MCGFloat a, b, c;
+	b = p_eq_1[1] * p_eq_2[0] - p_eq_2[1] * p_eq_1[0];
+	c = p_eq_1[2] * p_eq_2[0] - p_eq_2[2] * p_eq_1[0];
+	
+	if (b == 0)
+		return false;
+	
+	b = -c / b;
+	
+	MCGFloat a1, a2;
+	if (p_eq_1[0] != 0)
+	{
+		a1 = -(b * p_eq_1[1] + p_eq_1[2]) / p_eq_1[0];
+		if (a1 * p_eq_2[0] + b * p_eq_2[1] + p_eq_2[2] != 0)
+			return false;
+		a = a1;
+	}
+	else if (p_eq_2[0] != 0)
+	{
+		a2 = -(b * p_eq_2[1] + p_eq_2[2]) / p_eq_2[0];
+		if (a2 * p_eq_1[0] + b * p_eq_2[1] + p_eq_2[2] != 0)
+			return false;
+        
+        a = a2;
+	}
+	else
+		return false;
+	
+	r_a = a;
+	r_b = b;
+	
+	return true;
+}
+
+bool MCGAffineTransformFromPoints(const MCGPoint p_src[3], const MCGPoint p_dst[3], MCGAffineTransform &r_transform)
+{
+	MCGFloat a, b, c, d, tx, ty;
+	
+	MCGFloat t_eq1[3], t_eq2[3];
+	t_eq1[0] = p_src[0].x - p_src[1].x;
+	t_eq1[1] = p_src[0].y - p_src[1].y;
+	t_eq1[2] = -(p_dst[0].x - p_dst[1].x);
+	
+	t_eq2[0] = p_src[0].x - p_src[2].x;
+	t_eq2[1] = p_src[0].y - p_src[2].y;
+	t_eq2[2] = -(p_dst[0].x - p_dst[2].x);
+	
+	if (!solve_simul_eq_2_vars(t_eq1, t_eq2, a, c))
+		return false;
+	
+	t_eq1[2] = -(p_dst[0].y - p_dst[1].y);
+	t_eq2[2] = -(p_dst[0].y - p_dst[2].y);
+	
+	if (!solve_simul_eq_2_vars(t_eq1, t_eq2, b, d))
+		return false;
+	
+	tx = p_dst[0].x - a * p_src[0].x - c * p_src[0].y;
+	ty = p_dst[0].y - b * p_src[0].x - d * p_src[0].y;
+	
+	if (tx != p_dst[1].x - a * p_src[1].x - c * p_src[1].y ||
+		tx != p_dst[2].x - a * p_src[2].x - c * p_src[2].y ||
+		ty != p_dst[1].y - b * p_src[1].x - d * p_src[1].y ||
+		ty != p_dst[2].y - b * p_src[2].x - d * p_src[2].y)
+		return false;
+	
+	r_transform = MCGAffineTransformMake(a, b, c, d, tx, ty);
+	
+	return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

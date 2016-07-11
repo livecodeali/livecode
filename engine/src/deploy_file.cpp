@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -21,7 +21,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "parsedef.h"
 #include "filedefs.h"
 
-//#include "execpt.h"
+
 #include "handler.h"
 #include "scriptpt.h"
 #include "variable.h"
@@ -246,13 +246,15 @@ const char *MCDeployErrorToString(MCDeployError p_error)
 		case kMCDeployErrorNoStackfile:
 			return "could not open stackfile";
 		case kMCDeployErrorNoAuxStackfile:
-			return "could not open auxillary stackfile";
+			return "could not open auxiliary stackfile";
 		case kMCDeployErrorNoOutput:
 			return "could not open output file";
 		case kMCDeployErrorNoSpill:
 			return "could not open spill file";
 		case kMCDeployErrorNoPayload:
 			return "could not open payload file";
+        case kMCDeployErrorNoModule:
+            return "could not open module file";
 		case kMCDeployErrorBadFile:
 		case kMCDeployErrorBadRead:
 		case kMCDeployErrorBadWrite:
@@ -308,6 +310,12 @@ const char *MCDeployErrorToString(MCDeployError p_error)
 		case kMCDeployErrorMacOSXBadCpuType:
 		case kMCDeployErrorMacOSXBadTarget:
 			return "invalid mac/ios standalone engine file";
+
+		case kMCDeployErrorEmscriptenBadStack:
+			return "could not prepare startup stack";
+		
+		case kMCDeployErrorTrialBannerError:
+			return "could not create trial banner";
 
 		case kMCDeployErrorNoCertificate:
 			return "could not load certificate";

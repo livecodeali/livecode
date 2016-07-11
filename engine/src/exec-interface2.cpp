@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -366,7 +366,6 @@ void MCInterfaceNamedColorParse(MCExecContext& ctxt, MCStringRef p_input, MCInte
 	}
 	
 	r_output . color = t_color;
-    r_output . color . flags = DoRed | DoGreen | DoBlue;
 	r_output . name = t_color_name;
 }
 
@@ -466,7 +465,12 @@ static void MCInterfaceBackdropParse(MCExecContext& ctxt, MCStringRef p_input, M
 		if (r_backdrop . pattern == 0)
 			r_backdrop . type = kMCInterfaceBackdropTypeNone;
 		else
+        {
 			r_backdrop . type = kMCInterfaceBackdropTypePattern;
+            
+            if (r_backdrop . pattern <= PI_END - PI_PATTERNS)
+                r_backdrop . pattern += PI_PATTERNS;
+        }
 
 		return;
 	}
@@ -493,7 +497,13 @@ static void MCInterfaceBackdropFormat(MCExecContext& ctxt, const MCInterfaceBack
 		MCInterfaceNamedColorFormat(ctxt, p_backdrop . named_color, r_output);
 		return;
 	case kMCInterfaceBackdropTypePattern:
-		if (ctxt . FormatUnsignedInteger(p_backdrop . pattern, r_output))
+        uinteger_t t_backdrop;
+        t_backdrop = p_backdrop . pattern;
+        
+        if (t_backdrop <= PI_END && t_backdrop >= PI_PATTERNS)
+            t_backdrop -= PI_PATTERNS;
+        
+		if (ctxt . FormatUnsignedInteger(t_backdrop, r_output))
 			return;
 		break;
 	}
@@ -554,13 +564,14 @@ void MCInterfaceStackFileVersionParse(MCExecContext& ctxt, MCStringRef p_input, 
 	char *t_version;
 	/* UNCHECKED */ MCStringConvertToCString(p_input, t_version);
     count = sscanf(t_version, "%d.%d.%d", &major, &minor, &revision);
-	delete t_version;
+    MCMemoryDeleteArray(t_version);
 	
 	version = major * 1000 + minor * 100 + revision * 10;
 	
 	// MW-2012-03-04: [[ StackFile5500 ]] Allow versions up to 5500 to be set.
 	// MW-2013-12-05: [[ UnicodeFileFormat ]] Allow versions up to 7000 to be set.
-	if (count < 2 || version < 2400 || version > 7000)
+    // MW-2014-12-17: [[ Widgets ]] Allow versions up to 8000 to be set.
+	if (count < 2 || version < 2400 || version > 8000)
 	{
 		ctxt . LegacyThrow(EE_PROPERTY_STACKFILEBADVERSION);
 		return;
@@ -783,6 +794,7 @@ void MCInterfaceSetLookAndFeel(MCExecContext& ctxt, intenum_t p_value)
 				if (oldtheme != NULL)
 					oldtheme -> unload();
 				delete oldtheme;
+				oldtheme = NULL;
 				MClook = MCcurtheme->getthemefamilyid();
 			}
 			else
@@ -973,7 +985,6 @@ void MCInterfaceSetBrushColor(MCExecContext& ctxt, const MCInterfaceNamedColor& 
 	MCeditingimage = nil;
 	MCpatternlist->freepat(MCbrushpattern);
 	set_interface_color(MCbrushcolor, MCbrushcolorname, p_color);
-	MCscreen -> alloccolor(MCbrushcolor);
 }
 
 void MCInterfaceGetPenColor(MCExecContext& ctxt, MCInterfaceNamedColor& r_color)
@@ -986,53 +997,79 @@ void MCInterfaceSetPenColor(MCExecContext& ctxt, const MCInterfaceNamedColor& p_
 	MCeditingimage = nil;
 	MCpatternlist->freepat(MCpenpattern);
 	set_interface_color(MCpencolor, MCpencolorname, p_color);
-	MCscreen -> alloccolor(MCpencolor);
 }
 
-void MCInterfaceGetBrushPattern(MCExecContext& ctxt, uinteger_t& r_pattern)
+void MCInterfaceGetBrushPattern(MCExecContext& ctxt, uinteger_t*& r_pattern)
 {
-	if (MCbrushpmid < PI_END && MCbrushpmid > PI_PATTERNS)
-		r_pattern = MCbrushpmid - PI_PATTERNS;
-	else
-		
-		r_pattern = MCbrushpmid;
+    // PI_PATTERNS should return empty
+    if (MCbrushpmid == PI_PATTERNS)
+        r_pattern = nil;
+    else if (MCbrushpmid <= PI_END && MCbrushpmid > PI_PATTERNS)
+        *r_pattern = MCbrushpmid - PI_PATTERNS;
+    else
+        *r_pattern = MCbrushpmid;
 }
 
-void MCInterfaceSetBrushPattern(MCExecContext& ctxt, uinteger_t pattern)
+void MCInterfaceSetBrushPattern(MCExecContext& ctxt, uinteger_t* pattern)
 {
-	MCPatternRef newpm;
-	if (MCbrushpmid < PI_END)
-		MCbrushpmid += PI_PATTERNS;
-	newpm = MCpatternlist->allocpat(MCbrushpmid, ctxt . GetObject());
-	if (newpm == None)
-	{
-		ctxt . LegacyThrow(EE_PROPERTY_BRUSHPATNOIMAGE);
-		return;
-	}
+    MCPatternRef newpm;
+    newpm = nil;
+    
+    // Setting to 0 should clear
+    if (pattern != nil && *pattern != 0)
+    {
+        if (*pattern <= PI_END - PI_PATTERNS)
+            *pattern += PI_PATTERNS;
+        
+        newpm = MCpatternlist->allocpat(*pattern, ctxt . GetObject());
+        if (newpm == None)
+        {
+            ctxt . LegacyThrow(EE_PROPERTY_BRUSHPATNOIMAGE);
+            return;
+        }
+        MCbrushpmid = *pattern;
+    }
+    else
+        MCbrushpmid = PI_PATTERNS;
+    
 	MCeditingimage = nil;
 	MCpatternlist->freepat(MCbrushpattern);
 	MCbrushpattern = newpm;
 }
 
-void MCInterfaceGetPenPattern(MCExecContext& ctxt, uinteger_t& r_pattern)
+void MCInterfaceGetPenPattern(MCExecContext& ctxt, uinteger_t*& r_pattern)
 {
-	if (MCpenpmid < PI_END && MCpenpmid > PI_PATTERNS)
-		r_pattern = MCpenpmid - PI_PATTERNS;
-	else
-		r_pattern = MCpenpmid;
+    // PI_PATTERNS should return empty
+    if (MCpenpmid == PI_PATTERNS)
+        r_pattern = nil;
+    else if (MCpenpmid <= PI_END && MCpenpmid > PI_PATTERNS)
+        *r_pattern = MCpenpmid - PI_PATTERNS;
+    else
+        *r_pattern = MCpenpmid;
 }
 
-void MCInterfaceSetPenPattern(MCExecContext& ctxt, uinteger_t pattern)
+void MCInterfaceSetPenPattern(MCExecContext& ctxt, uinteger_t* pattern)
 {
-	MCPatternRef newpm;
-	if (MCpenpmid < PI_END)
-		MCpenpmid += PI_PATTERNS;
-	newpm = MCpatternlist->allocpat(MCpenpmid, ctxt . GetObject());
-	if (newpm == nil)
-	{
-		ctxt . LegacyThrow(EE_PROPERTY_PENPATNOIMAGE);
-		return;
-	}
+    MCPatternRef newpm;
+    newpm = nil;
+    
+    // Setting to 0 should clear
+    if (pattern != nil && *pattern != 0)
+    {
+        if (*pattern <= PI_END - PI_PATTERNS)
+            *pattern += PI_PATTERNS;
+        
+        newpm = MCpatternlist->allocpat(*pattern, ctxt . GetObject());
+        if (newpm == nil)
+        {
+            ctxt . LegacyThrow(EE_PROPERTY_PENPATNOIMAGE);
+            return;
+        }
+        MCpenpmid = *pattern;
+    }
+    else
+        MCpenpmid = PI_PATTERNS;
+    
 	MCeditingimage = nil;
 	MCpatternlist->freepat(MCpenpattern);
 	MCpenpattern = newpm;
@@ -1233,7 +1270,8 @@ void MCInterfaceSetLinkColor(MCExecContext& ctxt, const MCInterfaceNamedColor& p
 
 void MCInterfaceGetLinkHiliteColor(MCExecContext& ctxt, MCInterfaceNamedColor& r_color)
 {
-	get_interface_color(MClinkatts . color, MClinkatts . colorname, r_color);
+	// PM-2015-10-26: [[ Bug 16280 ]] Make sure the correct color is returned
+	get_interface_color(MClinkatts . hilitecolor, MClinkatts . hilitecolorname, r_color);
 }
 
 void MCInterfaceSetLinkHiliteColor(MCExecContext& ctxt, const MCInterfaceNamedColor& p_color)
@@ -1427,7 +1465,7 @@ void MCInterfaceSetCursor(MCExecContext& ctxt, uinteger_t& r_id, bool p_is_defau
 		if (!p_is_default && r_id == PI_BUSY)
 		{
 			r_id = PI_BUSY1 + MCbusycount;
-			MCbusycount = MCbusycount + 1 & 0x7;
+			MCbusycount = (MCbusycount + 1) & 0x7;
 		}
 		r_cursor = MCcursors[r_id];
 	}
@@ -1457,20 +1495,31 @@ void MCInterfaceSetCursor(MCExecContext& ctxt, uinteger_t& r_id, bool p_is_defau
 	}
 }
 
-
-void MCInterfaceGetCursor(MCExecContext& ctxt, uinteger_t& r_value)
+// SN-2015-07-29: [[ Bug 15649 ]] The cursor can be empty - it is optional
+void MCInterfaceGetCursor(MCExecContext& ctxt, uinteger_t*& r_value)
 {
-	r_value = MCcursorid;
+    if (MCcursor != None)
+        *r_value = MCcursorid;
+    else
+        r_value = NULL;
 }
 
-void MCInterfaceSetCursor(MCExecContext& ctxt, uinteger_t p_value)
+void MCInterfaceSetCursor(MCExecContext& ctxt, uinteger_t* p_value)
 {
 	MCCursorRef t_cursor;
-	MCInterfaceSetCursor(ctxt, p_value, false, t_cursor);
-	if (t_cursor != nil)
+
+    uinteger_t t_cursor_id;
+    if (p_value == NULL)
+        t_cursor_id = 0;
+    else
+        t_cursor_id = *p_value;
+
+    MCInterfaceSetCursor(ctxt, t_cursor_id, false, t_cursor);
+    // PM-2015-03-17: [[ Bug 14965 ]] Error check to prevent a crash if cursor image not found
+	if (t_cursor != nil && !ctxt.HasError())
 	{
 		MCcursor = t_cursor;
-		MCcursorid = p_value;
+        MCcursorid = t_cursor_id;
 		if (MCmousestackptr != NULL)
 			MCmousestackptr->resetcursor(True);
 		else
@@ -1487,15 +1536,15 @@ void MCInterfaceSetDefaultCursor(MCExecContext& ctxt, uinteger_t p_value)
 {
 	MCCursorRef t_cursor;
 	MCInterfaceSetCursor(ctxt, p_value, true, t_cursor);
-	if (t_cursor != nil)
-	{
-		MCdefaultcursor = t_cursor;
-		MCdefaultcursorid = p_value;
-		if (MCmousestackptr != NULL)
-			MCmousestackptr->resetcursor(True);
-		else
-			MCdefaultstackptr->resetcursor(True);
-	}
+	
+    // PM-2015-06-17: [[ Bug 15200 ]] Default cursor should reset when set to empty, thus t_cursor *can* be nil
+    MCdefaultcursor = t_cursor;
+    MCdefaultcursorid = p_value;
+    if (MCmousestackptr != NULL)
+        MCmousestackptr->resetcursor(True);
+    else
+        MCdefaultstackptr->resetcursor(True);
+
 }
 void MCInterfaceGetDefaultStack(MCExecContext& ctxt, MCStringRef& r_value)
 {
@@ -1977,7 +2026,7 @@ void MCInterfaceSetRelayerGroupedControls(MCExecContext& ctxt, bool p_value)
 void MCInterfaceSetBrush(MCExecContext& ctxt, Properties p_which, uinteger_t p_value)
 {
 	uint4 t_newbrush = p_value;
-	if (t_newbrush < PI_PATTERNS)
+	if (t_newbrush <= (PI_PATTERNS-PI_BRUSHES))
 		t_newbrush += PI_BRUSHES;
 
 	// MW-2009-02-02: [[ Improved image search ]]
@@ -2014,7 +2063,7 @@ void MCInterfaceSetBrush(MCExecContext& ctxt, Properties p_which, uinteger_t p_v
 
 void MCInterfaceGetBrush(MCExecContext& ctxt, uinteger_t& r_value)
 {
-	r_value = MCbrush < PI_PATTERNS ? MCbrush - PI_BRUSHES : MCbrush;
+	r_value = MCbrush > PI_BRUSHES && MCbrush <= PI_PATTERNS ? MCbrush - PI_BRUSHES : MCbrush;
 }
 
 void MCInterfaceSetBrush(MCExecContext& ctxt, uinteger_t p_value)
@@ -2024,7 +2073,7 @@ void MCInterfaceSetBrush(MCExecContext& ctxt, uinteger_t p_value)
 
 void MCInterfaceGetEraser(MCExecContext& ctxt, uinteger_t& r_value)
 {
-	r_value = MCeraser < PI_PATTERNS ? MCeraser - PI_BRUSHES : MCeraser;
+	r_value = MCeraser > PI_BRUSHES && MCeraser <= PI_PATTERNS ? MCeraser - PI_BRUSHES : MCeraser;
 }
 
 void MCInterfaceSetEraser(MCExecContext& ctxt, uinteger_t p_value)
@@ -2034,7 +2083,7 @@ void MCInterfaceSetEraser(MCExecContext& ctxt, uinteger_t p_value)
 
 void MCInterfaceGetSpray(MCExecContext& ctxt, uinteger_t& r_value)
 {
-	r_value = MCspray < PI_PATTERNS ? MCspray - PI_BRUSHES : MCspray;
+	r_value = MCspray > PI_BRUSHES && MCspray <= PI_PATTERNS ? MCspray - PI_BRUSHES : MCspray;
 }
 
 void MCInterfaceSetSpray(MCExecContext& ctxt, uinteger_t p_value)
@@ -2142,7 +2191,15 @@ void MCInterfaceGetScreenRect(MCExecContext& ctxt, bool p_working, bool p_effect
 	const MCDisplay *t_displays;
 	MCscreen -> getdisplays(t_displays, p_effective);
 
-	r_value = p_working ? t_displays[0] . workarea : t_displays[0] . viewport;
+    if (t_displays)
+    {
+        r_value = p_working ? t_displays[0] . workarea : t_displays[0] . viewport;
+    }
+    else
+    {
+        // No-UI mode
+        r_value = MCRectangleMake(0, 0, 0, 0);
+    }
 }
 
 void MCInterfaceGetScreenRects(MCExecContext& ctxt, bool p_working, bool p_effective, MCStringRef& r_value)
@@ -3325,12 +3382,7 @@ void MCInterfaceEvalOptionalStackWithBackgroundByName(MCExecContext& ctxt, MCObj
     t_stack = nil;
     
     if (p_stack . object != nil)
-    {
-        MCGroup *t_background;
-        
         t_stack = static_cast<MCStack *>(p_stack . object);
-        t_background = t_stack -> getbackgroundbyname(p_name);
-    }
         
     r_stack . object = t_stack;
     r_stack . part_id = p_stack . part_id;
@@ -3428,6 +3480,7 @@ void MCInterfaceMarkObject(MCExecContext& ctxt, MCObjectPtr p_object, Boolean wh
     }
     // AL-2014-08-04: [[ Bug 13081 ]] Prevent crash when evaluating non-container chunk
     r_mark . text = MCValueRetain(kMCEmptyString);
+    r_mark . start = r_mark . finish = 0;
 }
 
 void MCInterfaceMarkContainer(MCExecContext& ctxt, MCObjectPtr p_container, Boolean wholechunk, MCMarkedText& r_mark)
@@ -3451,6 +3504,7 @@ void MCInterfaceMarkContainer(MCExecContext& ctxt, MCObjectPtr p_container, Bool
     
     // AL-2014-08-04: [[ Bug 13081 ]] Prevent crash when evaluating non-container chunk
     r_mark . text = MCValueRetain(kMCEmptyString);
+    r_mark . start = r_mark . finish = 0;
     ctxt . LegacyThrow(EE_CHUNK_OBJECTNOTCONTAINER);
 }
 
@@ -3509,6 +3563,9 @@ void MCInterfaceMarkFunction(MCExecContext& ctxt, MCObjectPtr p_object, Function
         case F_MOUSE_LINE:
             if (!t_field->locmark(wholeline, wholeword, False, True, p_whole_chunk, start, end))
                 start = end = 0;
+            break;
+        case F_DROP_CHUNK:
+            start = end = MCdropchar;
             break;
         default:
             start = 0;
@@ -3710,10 +3767,10 @@ void MCInterfaceDoRelayer(MCExecContext& ctxt, int p_relation, MCObjectPtr p_sou
 	{
 		// As we call handlers that might invoke messages, we need to take
 		// object handles here.
-		MCObjectHandle *t_source_handle, *t_new_owner_handle, *t_new_target_handle;
-		t_source_handle = p_source . object -> gethandle();
-		t_new_owner_handle = t_new_owner -> gethandle();
-		t_new_target_handle = t_new_target != nil ? t_new_target -> gethandle() : nil;
+		MCObjectHandle t_source_handle, t_new_owner_handle, t_new_target_handle;
+		t_source_handle = p_source . object -> GetHandle();
+		t_new_owner_handle = t_new_owner -> GetHandle();
+		t_new_target_handle = t_new_target != NULL ? t_new_target -> GetHandle() : MCObjectHandle(NULL);
         
 		// Make sure we remove focus from the control.
 		bool t_was_mfocused, t_was_kfocused;
@@ -3726,9 +3783,11 @@ void MCInterfaceDoRelayer(MCExecContext& ctxt, int p_relation, MCObjectPtr p_sou
         
 		// Check the source and new owner objects exist, and if we have a target object
 		// that that exists and is still a child of new owner.
-		if (t_source_handle -> Exists() &&
-			t_new_owner_handle -> Exists() &&
-			(t_new_target == nil || t_new_target_handle -> Exists() && t_new_target -> getparent() == t_new_owner))
+		if (t_source_handle.IsValid() &&
+			t_new_owner_handle.IsValid() &&
+		    (t_new_target == nil ||
+		     (t_new_target_handle.IsValid() &&
+		      t_new_target -> getparent() == t_new_owner)))
 		{
 			p_source . object -> getparent() -> relayercontrol_remove(static_cast<MCControl *>(p_source . object));
 			t_new_owner -> relayercontrol_insert(static_cast<MCControl *>(p_source . object), t_new_target);
@@ -3747,11 +3806,6 @@ void MCInterfaceDoRelayer(MCExecContext& ctxt, int p_relation, MCObjectPtr p_sou
 			t_card -> kfocus();
 		if (t_was_mfocused)
 			t_card -> mfocus(MCmousex, MCmousey);
-        
-		t_source_handle -> Release();
-		t_new_owner_handle -> Release();
-		if (t_new_target != nil)
-			t_new_target_handle -> Release();
 	}
     
 	if (t_success)
@@ -3798,7 +3852,7 @@ void MCInterfaceExecResolveImageById(MCExecContext& ctxt, MCObject *p_object, ui
     if (t_found_image != nil)
     {
         
-        t_found_image -> GetLongId(ctxt, &t_long_id);
+        t_found_image -> GetLongId(ctxt, 0, &t_long_id);
         if (!ctxt . HasError())
             ctxt . SetItToValue(*t_long_id);
     }
@@ -3816,7 +3870,7 @@ void MCInterfaceExecResolveImageByName(MCExecContext& ctxt, MCObject *p_object, 
     
     if (t_found_image != nil)
     {
-        t_found_image -> GetLongId(ctxt, &t_long_id);
+        t_found_image -> GetLongId(ctxt, 0, &t_long_id);
         if (!ctxt . HasError())
             ctxt . SetItToValue(*t_long_id);
     }

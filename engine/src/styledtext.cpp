@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -27,7 +27,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "line.h"
 #include "field.h"
 #include "paragraf.h"
-//#include "execpt.h"
+
 #include "util.h"
 #include "styledtext.h"
 
@@ -72,13 +72,15 @@ MCParagraph *MCStyledText::grabparagraphs(MCField *p_field)
 	return t_result;
 }
 
-bool MCStyledText::visit(MCVisitStyle p_style, uint32_t p_part, MCObjectVisitor *p_visitor)
+bool MCStyledText::visit_self(MCObjectVisitor *p_visitor)
+{
+	return p_visitor->OnStyledText(this);
+}
+
+bool MCStyledText::visit_children(MCObjectVisitorOptions p_options, uint32_t p_part, MCObjectVisitor *p_visitor)
 {
 	bool t_continue;
 	t_continue = true;
-
-	if (p_style == VISIT_STYLE_DEPTH_LAST)
-		t_continue = p_visitor -> OnStyledText(this);
 
 	if (t_continue && m_paragraphs != NULL)
 	{
@@ -86,21 +88,18 @@ bool MCStyledText::visit(MCVisitStyle p_style, uint32_t p_part, MCObjectVisitor 
 		MCParagraph *tpgptr = pgptr;
 		do
 		{
-			t_continue = tpgptr -> visit(p_style, p_part, p_visitor);
+			t_continue = tpgptr -> visit(p_options, p_part, p_visitor);
 			tpgptr = tpgptr->next();
 		}
 		while(t_continue && tpgptr != pgptr);
 	}
-
-	if (p_style == VISIT_STYLE_DEPTH_FIRST)
-		t_continue = p_visitor -> OnStyledText(this);
 
 	return t_continue;
 }
 
 // MW-2011-01-13: As styledtext is an internal (not published in anyway) format
 //   we can change it to include the paragraph style for now.
-IO_stat MCStyledText::save(IO_handle p_stream, uint4 p_part, bool p_force_ext)
+IO_stat MCStyledText::save(IO_handle p_stream, uint4 p_part, bool p_force_ext, uint32_t p_version)
 {
 	IO_stat stat;
 
@@ -111,7 +110,7 @@ IO_stat MCStyledText::save(IO_handle p_stream, uint4 p_part, bool p_force_ext)
 	if (tptr != NULL)
 		do
 		{
-			if ((stat = tptr->save(p_stream, p_part)) != IO_NORMAL)
+			if ((stat = tptr->save(p_stream, p_part, p_version)) != IO_NORMAL)
 				return stat;
 
 			tptr = (MCParagraph *)tptr->next();
@@ -129,7 +128,7 @@ IO_stat MCStyledText::load(IO_handle p_stream, uint32_t p_version)
 	{
 		uint1 type;
 		if ((stat = IO_read_uint1(&type, p_stream)) != IO_NORMAL)
-			return stat;
+			return checkloadstat(stat);
 		switch (type)
 		{
 		// MW-2012-03-04: [[ StackFile5500 ]] Handle both the paragraph and extended
@@ -145,7 +144,7 @@ IO_stat MCStyledText::load(IO_handle p_stream, uint32_t p_version)
 				if ((stat = newpar->load(p_stream, p_version, type == OT_PARAGRAPH_EXT)) != IO_NORMAL)
 				{
 					delete newpar;
-					return stat;
+					return checkloadstat(stat);
 				}
 
 				newpar->appendto(paragraphs);

@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -28,7 +28,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "stacklst.h"
 #include "sellst.h"
 #include "util.h"
-//#include "execpt.h"
+
 #include "debug.h"
 #include "param.h"
 
@@ -37,6 +37,10 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "globals.h"
 
 #include "w32dc.h"
+
+#include <shobjidl.h>
+#include <shlobj.h>
+#include <shlwapi.h>
 
 #ifdef FEATURE_RELAUNCH_SUPPORT
 
@@ -453,7 +457,8 @@ bool relaunch_startup(MCStringRef p_stack_name)
 			t_message . window = t_existing_instances[t_instance] . message_window;
 			t_message . id = CWM_RELAUNCH;
 			t_message . data = *t_cmdline_wstr;
-			t_message . data_length = MCStringGetLength(MCcmdline);
+			// SN-2014-11-19: [[ Bug 14058 ]] We pass the number of bytes, not the numbers of wchars 
+			t_message . data_length = MCStringGetLength(MCcmdline) * 2;
 			t_message . timeout = 1 << 30;
 
 			unsigned int t_reply;

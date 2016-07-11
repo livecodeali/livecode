@@ -1,18 +1,18 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
- 
- This file is part of LiveCode.
- 
- LiveCode is free software; you can redistribute it and/or modify it under
- the terms of the GNU General Public License v3 as published by the Free
- Software Foundation.
- 
- LiveCode is distributed in the hope that it will be useful, but WITHOUT ANY
- WARRANTY; without even the implied warranty of MERCHANTABILITY or
- FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
- for more details.
- 
- You should have received a copy of the GNU General Public License
- along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
+/* Copyright (C) 2003-2015 LiveCode Ltd.
+
+This file is part of LiveCode.
+
+LiveCode is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License v3 as published by the Free
+Software Foundation.
+
+LiveCode is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "prefix.h"
 
@@ -21,7 +21,7 @@
 #include "objdefs.h"
 #include "parsedef.h"
 
-//#include "execpt.h"
+
 #include "globals.h"
 #include "stack.h"
 #include "card.h"
@@ -227,10 +227,6 @@ bool MCSystemSetReachabilityTarget(MCStringRef p_hostname)
 
 bool MCSystemGetReachabilityTarget(MCStringRef& r_reach_target)
 {
-#ifdef /* MCHandleReachabilityTarget */ LEGACY_EXEC
-	MCresult -> copysvalue(MCReachabilityGetTarget());
-	return ES_NORMAL;
-#endif /* MCHandleReachabilityTarget */
     r_reach_target = MCValueRetain(s_reach_target);
     
 	return true;

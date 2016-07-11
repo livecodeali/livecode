@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -38,6 +38,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "image.h"
 #include "redraw.h"
 #include "scrolbar.h"
+#include "mctheme.h"
 
 #include "exec-interface.h"
 
@@ -148,7 +149,7 @@ void MCScrollbar::GetThumbPos(MCExecContext& ctxt, double& r_pos)
     // AL-2014-07-22: [[ Bug 12843 ]] Round thumbpos according to scrollbar number format
     MCAutoStringRef t_formatted_thumbpos;
     if (MCU_r8tos(thumbpos, nffw, nftrailing, nfforce, &t_formatted_thumbpos) &&
-        MCU_stor8(*t_formatted_thumbpos, r_pos))
+        MCTypeConvertStringToReal(*t_formatted_thumbpos, r_pos))
         return;
     
     ctxt . Throw();
@@ -236,7 +237,7 @@ void MCScrollbar::SetStartValue(MCExecContext& ctxt, MCStringRef p_value)
 		return;
 	}
 
-	if (!MCU_stor8(p_value, startvalue))
+	if (!MCTypeConvertStringToReal(p_value, startvalue))
 	{
 		ctxt . LegacyThrow(EE_OBJECT_NAN);
 		return;
@@ -268,7 +269,7 @@ void MCScrollbar::SetEndValue(MCExecContext& ctxt, MCStringRef p_value)
 		return;
 	}
 	
-	if (!MCU_stor8(p_value, endvalue))
+	if (!MCTypeConvertStringToReal(p_value, endvalue))
 	{
 		ctxt . LegacyThrow(EE_OBJECT_NAN);
 		return;
@@ -299,4 +300,24 @@ void MCScrollbar::SetShowValue(MCExecContext& ctxt, bool setting)
 		flags &= ~F_SHOW_VALUE;
 
 	Redraw(t_dirty);
+}
+
+MCPlatformControlType MCScrollbar::getcontroltype()
+{
+    MCPlatformControlType t_type;
+    t_type = MCObject::getcontroltype();
+    
+    if (t_type != kMCPlatformControlTypeGeneric)
+        return t_type;
+    else
+        t_type = kMCPlatformControlTypeScrollBar;
+    
+    if ((flags & F_SB_STYLE) == F_SCALE)
+        t_type = kMCPlatformControlTypeSlider;
+    else if ((flags & F_SB_STYLE) == F_PROGRESS)
+        t_type = kMCPlatformControlTypeProgressBar;
+    else if (getwidgetthemetype() == WTHEME_TYPE_SMALLSCROLLBAR)
+        t_type = kMCPlatformControlTypeSpinArrows;
+    
+    return t_type;
 }

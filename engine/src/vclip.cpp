@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -22,7 +22,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "parsedef.h"
 #include "mcio.h"
 
-//#include "execpt.h"
+
 #include "util.h"
 #include "date.h"
 #include "sellst.h"
@@ -92,99 +92,16 @@ const char *MCVideoClip::gettypestring()
 	return MCvideostring;
 }
 
-#ifdef LEGACY_EXEC
-Exec_stat MCVideoClip::getprop_legacy(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
+Boolean MCVideoClip::del(bool p_check_flag)
 {
-	switch (which)
-	{
-#ifdef /* MCVideoClip::getprop */ LEGACY_EXEC
-	case P_DONT_REFRESH:
-		ep.setboolean(getflag(F_DONT_REFRESH));
-		break;
-	case P_FRAME_RATE:
-		if (flags & F_FRAME_RATE)
-			ep.setint(framerate);
-		else
-			ep.clear();
-		break;
-	case P_SCALE:
-		ep.setnvalue(scale);
-		break;
-	case P_SIZE:
-		ep.setint(size);
-		break;
-	case P_TEXT:
-		{
-			MCString s((const char *)frames, size);
-			ep.setsvalue(s);
-		}
-		break;
-#endif /* MCVideoClip::getprop */
-	default:
-		return MCObject::getprop_legacy(parid, which, ep, effective);
-	}
-	return ES_NORMAL;
-}
-#endif
-
-#ifdef LEGACY_EXEC
-Exec_stat MCVideoClip::setprop_legacy(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
-{
-	MCString data = ep.getsvalue();
-
-	Boolean dirty = False;
-	switch (p)
-	{
-#ifdef /* MCVideoClip::setprop */ LEGACY_EXEC
-	case P_DONT_REFRESH:
-		if (!MCU_matchflags(data, flags, F_DONT_REFRESH, dirty))
-		{
-			MCeerror->add
-			(EE_OBJECT_NAB, 0, 0, data);
-			return ES_ERROR;
-		}
-		return ES_NORMAL;
-	case P_FRAME_RATE:
-		if (data.getlength() == 0)
-			flags &= ~F_FRAME_RATE;
-		else
-		{
-			if (!MCU_stoui2(data, framerate))
-			{
-				MCeerror->add
-				(EE_OBJECT_NAN, 0, 0, data);
-				return ES_ERROR;
-			}
-			flags |= F_FRAME_RATE;
-		}
-		return ES_NORMAL;
-	case P_SCALE:
-		if (!MCU_stor8(data, scale))
-		{
-			MCeerror->add
-			(EE_OBJECT_NAN, 0, 0, data);
-			return ES_ERROR;
-		}
-		flags |= F_SCALE_FACTOR;
-		return ES_NORMAL;
-	case P_TEXT:
-		delete frames;
-		size = data.getlength();
-		frames = new uint1[size];
-		memcpy(frames, data.getstring(), size);
-		return ES_NORMAL;
-#endif /* MCVideoClip::setprop */
-	default:
-		break;
-	}
-	return MCObject::setprop_legacy(parid, p, ep, effective);
-}
-#endif
-
-Boolean MCVideoClip::del()
-{
-	getstack()->removevclip(this);
-	return True;
+    if (!isdeletable(p_check_flag))
+        return False;
+    
+    getstack()->removevclip(this);
+    
+    // MCObject now does things on del(), so we must make sure we finish by
+    // calling its implementation.
+    return MCObject::del(p_check_flag);
 }
 
 void MCVideoClip::paste(void)
@@ -240,9 +157,9 @@ Boolean MCVideoClip::import(MCStringRef fname, IO_handle fstream)
 	return True;
 }
 
-IO_stat MCVideoClip::extendedsave(MCObjectOutputStream& p_stream, uint4 p_part)
+IO_stat MCVideoClip::extendedsave(MCObjectOutputStream& p_stream, uint4 p_part, uint32_t p_version)
 {
-	return defaultextendedsave(p_stream, p_part);
+	return defaultextendedsave(p_stream, p_part, p_version);
 }
 
 IO_stat MCVideoClip::extendedload(MCObjectInputStream& p_stream, uint32_t p_version, uint4 p_length)
@@ -250,13 +167,13 @@ IO_stat MCVideoClip::extendedload(MCObjectInputStream& p_stream, uint32_t p_vers
 	return defaultextendedload(p_stream, p_version, p_length);
 }
 
-IO_stat MCVideoClip::save(IO_handle stream, uint4 p_part, bool p_force_ext)
+IO_stat MCVideoClip::save(IO_handle stream, uint4 p_part, bool p_force_ext, uint32_t p_version)
 {
 	IO_stat stat;
 
 	if ((stat = IO_write_uint1(OT_VIDEO_CLIP, stream)) != IO_NORMAL)
 		return stat;
-	if ((stat = MCObject::save(stream, p_part, p_force_ext)) != IO_NORMAL)
+	if ((stat = MCObject::save(stream, p_part, p_force_ext, p_version)) != IO_NORMAL)
 		return stat;
 	if ((stat = IO_write_uint4(size, stream)) != IO_NORMAL)
 		return stat;
@@ -268,7 +185,7 @@ IO_stat MCVideoClip::save(IO_handle stream, uint4 p_part, bool p_force_ext)
 	if (flags & F_SCALE_FACTOR)
 		if ((stat = IO_write_int4(MCU_r8toi4(scale), stream)) != IO_NORMAL)
 			return stat;
-	return savepropsets(stream);
+	return savepropsets(stream, p_version);
 }
 
 IO_stat MCVideoClip::load(IO_handle stream, uint32_t version)
@@ -276,23 +193,23 @@ IO_stat MCVideoClip::load(IO_handle stream, uint32_t version)
 	IO_stat stat;
 
 	if ((stat = MCObject::load(stream, version)) != IO_NORMAL)
-		return stat;
+		return checkloadstat(stat);
 	if ((stat = IO_read_uint4(&size, stream)) != IO_NORMAL)
-		return stat;
+		return checkloadstat(stat);
 	if (size != 0)
 	{
 		frames = new uint1[size];
 		if ((stat = IO_read(frames, size, stream)) != IO_NORMAL)
-			return stat;
+			return checkloadstat(stat);
 	}
 	if (flags & F_FRAME_RATE)
 		if ((stat = IO_read_uint2(&framerate, stream)) != IO_NORMAL)
-			return stat;
+			return checkloadstat(stat);
 	if (flags & F_SCALE_FACTOR)
 	{
 		int4 i;
 		if ((stat = IO_read_int4(&i, stream)) != IO_NORMAL)
-			return stat;
+			return checkloadstat(stat);
 		scale = MCU_i4tor8(i);
 	}
 	return loadpropsets(stream, version);

@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -23,7 +23,7 @@
 #include "parsedef.h"
 #include "objdefs.h"
 
-//#include "execpt.h"
+
 #include "globals.h"
 #include "exec.h"
 #include "stack.h"
@@ -321,7 +321,7 @@ bool MCA_color(MCStringRef p_title, MCColor p_initial, bool as_sheet, bool& r_ch
 // MERG-2013-08-18: Stubs for colorDialogColors. Possibly implement when color dialog moves to Cocoa
 void MCA_getcolordialogcolors(MCColor*& r_list, uindex_t& r_count)
 {
-    
+    r_count = 0;
 }
 
 void MCA_setcolordialogcolors(MCColor* p_list, uindex_t p_count)

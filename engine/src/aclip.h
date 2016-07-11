@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -79,13 +79,7 @@ public:
 	
 	virtual void timer(MCNameRef mptr, MCParameter *params);
 
-#ifdef LEGACY_EXEC
-    virtual Exec_stat getprop_legacy(uint4 parid, Properties which, MCExecPoint &, Boolean effective);
-    virtual Exec_stat setprop_legacy(uint4 parid, Properties which, MCExecPoint &, Boolean effective);
-#endif
-
-
-	virtual Boolean del();
+	virtual Boolean del(bool p_check_flag);
 	virtual void paste(void);
 
 	// MCAudioClip functions
@@ -108,11 +102,11 @@ public:
 	Boolean import(MCStringRef fname, IO_handle stream);
 	Boolean open_audio();
 	Boolean play();
-	void stop(Boolean abort);
-	void setloudness(uint2 p_loudness);
+    void stop(Boolean abort);
+    bool isPlaying();
 
-	IO_stat save(IO_handle stream, uint4 p_part, bool p_force_ext);
-	IO_stat extendedsave(MCObjectOutputStream& p_stream, uint4 p_part);
+    IO_stat save(IO_handle stream, uint4 p_part, bool p_force_ext, uint32_t p_version);
+    IO_stat extendedsave(MCObjectOutputStream& p_stream, uint4 p_part, uint32_t p_version);
 	IO_stat load(IO_handle stream, uint32_t version);
 	IO_stat extendedload(MCObjectInputStream& p_stream, uint32_t version, uint4 p_length);
 

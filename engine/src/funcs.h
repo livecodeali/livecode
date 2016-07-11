@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -232,7 +232,6 @@ public:
 
 class MCBase64Encode : public MCUnaryFunctionCtxt<MCDataRef, MCStringRef, MCFiltersEvalBase64Encode, EE_BASE64ENCODE_BADSOURCE, PE_BASE64ENCODE_BADPARAM, kMCFiltersEvalBase64EncodeMethodInfo>
 {
-	MCExpression *source;
 public:
     MCBase64Encode(){}
     virtual ~MCBase64Encode(){}
@@ -343,7 +342,7 @@ public:
 	virtual void compile(MCSyntaxFactoryRef);
 };
 
-class MCClipboard : public MCConstantFunctionCtxt<MCNameRef, MCPasteboardEvalClipboard>
+class MCClipboardFunc : public MCConstantFunctionCtxt<MCNameRef, MCPasteboardEvalClipboard>
 {
 public:
 	// virtual Exec_stat eval(MCExecPoint &);
@@ -497,6 +496,21 @@ public:
 	virtual MCExecMethodInfo *getmethodinfo(void) const { return kMCInterfaceEvalClickLineMethodInfo; }
 };
 
+class MCCommandArguments : public MCFunction
+{
+    MCExpression* argument_index;
+public:
+    MCCommandArguments() { argument_index = NULL; }
+    virtual Parse_stat parse(MCScriptPoint &sp, Boolean the);
+    virtual void eval_ctxt(MCExecContext& ctxt, MCExecValue& r_value);
+};
+
+class MCCommandName : public MCFunction
+{
+public:
+    virtual void eval_ctxt(MCExecContext& ctxt, MCExecValue& r_value);
+};
+
 class MCClickLoc : public MCConstantFunctionCtxt<MCStringRef, MCInterfaceEvalClickLoc>
 {
 public:
@@ -578,12 +592,16 @@ public:
     virtual ~MCDecompress(){}
 };
 
-class MCDirectories : public MCConstantFunctionCtxt<MCStringRef, MCFilesEvalDirectories>
+class MCDirectories : public MCFunction
 {
 public:
-	// virtual Exec_stat eval(MCExecPoint &);
-	virtual MCExecMethodInfo *getmethodinfo(void) const { return kMCFilesEvalDirectoriesMethodInfo; }
-
+	MCDirectories() : m_folder(nil) {}
+	virtual ~MCDirectories();
+	virtual Parse_stat parse(MCScriptPoint &, Boolean p_is_the);
+	virtual void eval_ctxt(MCExecContext &, MCExecValue &);
+	virtual void compile(MCSyntaxFactoryRef);
+private:
+	MCExpression *m_folder;
 };
 
 class MCDiskSpace : public MCConstantFunctionCtxt<double, MCFilesEvalDiskSpace>
@@ -695,6 +713,36 @@ public:
     virtual ~MCEncrypt(){}
 };
 
+class MCEventCapsLockKey : public MCConstantFunctionCtxt<MCNameRef, MCInterfaceEvalEventCapsLockKey>
+{
+public:
+    virtual MCExecMethodInfo *getmethodinfo(void) const { return kMCInterfaceEvalEventCapsLockKeyMethodInfo; }
+};
+
+class MCEventCommandKey : public MCConstantFunctionCtxt<MCNameRef, MCInterfaceEvalEventCommandKey>
+{
+public:
+    virtual MCExecMethodInfo *getmethodinfo(void) const { return kMCInterfaceEvalEventCommandKeyMethodInfo; }
+};
+
+class MCEventControlKey : public MCConstantFunctionCtxt<MCNameRef, MCInterfaceEvalEventControlKey>
+{
+public:
+    virtual MCExecMethodInfo *getmethodinfo(void) const { return kMCInterfaceEvalEventControlKeyMethodInfo; }
+};
+
+class MCEventOptionKey : public MCConstantFunctionCtxt<MCNameRef, MCInterfaceEvalEventOptionKey>
+{
+public:
+    virtual MCExecMethodInfo *getmethodinfo(void) const { return kMCInterfaceEvalEventOptionKeyMethodInfo; }
+};
+
+class MCEventShiftKey : public MCConstantFunctionCtxt<MCNameRef, MCInterfaceEvalEventShiftKey>
+{
+public:
+    virtual MCExecMethodInfo *getmethodinfo(void) const { return kMCInterfaceEvalEventShiftKeyMethodInfo; }
+};
+
 class MCExists : public MCFunction
 {
 	MCChunk *object;
@@ -717,12 +765,16 @@ public:
     virtual ~MCExtents(){}
 };
 
-class MCTheFiles : public MCConstantFunctionCtxt<MCStringRef, MCFilesEvalFiles>
+class MCTheFiles : public MCFunction
 {
 public:
-	// virtual Exec_stat eval(MCExecPoint &);
-	virtual MCExecMethodInfo *getmethodinfo(void) const { return kMCFilesEvalFilesMethodInfo; }
-
+	MCTheFiles() : m_folder(nil) {}
+	virtual ~MCTheFiles();
+	virtual Parse_stat parse(MCScriptPoint &, Boolean p_is_the);
+	virtual void eval_ctxt(MCExecContext &, MCExecValue &);
+	virtual void compile(MCSyntaxFactoryRef);
+private:
+	MCExpression *m_folder;
 };
 
 class MCFlushEvents : public MCUnaryFunctionCtxt<MCNameRef, MCStringRef, MCInterfaceEvalFlushEvents, EE_FLUSHEVENTS_BADTYPE, PE_FLUSHEVENTS_BADPARAM, kMCInterfaceEvalFlushEventsMethodInfo>
@@ -1487,9 +1539,6 @@ public:
 
 	virtual void eval_ctxt(MCExecContext &, MCExecValue &);
 	virtual void compile(MCSyntaxFactoryRef);
-#ifdef LEGACY_EXEC
-	static void evaluate(MCExecPoint&, bool working, bool plural, bool effective);
-#endif
 };
 
 class MCScreenType : public MCConstantFunctionCtxt<MCNameRef, MCLegacyEvalScreenType>
@@ -2293,6 +2342,22 @@ public:
 	virtual void compile(MCSyntaxFactoryRef);
 };
 
+class MCVectorDotProduct : public MCFunction
+{
+	MCExpression *first;
+	MCExpression *second;
+public:
+	MCVectorDotProduct(void)
+	{
+		first = NULL;
+		second = NULL;
+	}
+	virtual ~MCVectorDotProduct();
+	virtual Parse_stat parse(MCScriptPoint &, Boolean the);
+	virtual void eval_ctxt(MCExecContext &, MCExecValue &);
+	virtual void compile(MCSyntaxFactoryRef);
+};
+
 class MCMaxFunction : public MCParamFunctionCtxt<MCMathEvalMax, EE_MAX_BADSOURCE, PE_MAX_BADPARAM, kMCMathEvalMaxMethodInfo>
 {
 public:
@@ -2437,6 +2502,15 @@ public:
 	virtual ~MCTranspose(){}
 };
 
+/*
+class MCMathOperator : public MCUnaryFunctionCtxt<double, double, MCExecValueTraits, Exec_errors, Parse_errors, MCExecMethodInfo>
+{
+public:
+    MCMathOperator(){}
+    virtual ~MCMathOperator(){}
+};
+*/
+
 class MCTrunc : public MCUnaryFunctionCtxt<double, double, MCMathEvalTrunc, EE_TRUNC_BADSOURCE, PE_TRUNC_BADPARAM, kMCMathEvalTruncMethodInfo>
 {
 public:
@@ -2444,13 +2518,27 @@ public:
     virtual ~MCTrunc(){}
 };
 
+// MDW-2014-08-23 : [[ feature_floor ]]
+class MCFloor : public MCUnaryFunctionCtxt<double, double, MCMathEvalFloor, EE_FLOOR_BADSOURCE, PE_FLOOR_BADPARAM, kMCMathEvalFloorMethodInfo>
+{
+public:
+	MCFloor(){}
+	virtual ~MCFloor(){}
+};
+
+class MCCeil : public MCUnaryFunctionCtxt<double, double, MCMathEvalCeil, EE_CEIL_BADSOURCE, PE_CEIL_BADPARAM, kMCMathEvalCeilMethodInfo>
+{
+public:
+	MCCeil(){}
+	virtual ~MCCeil(){}
+};
+// MDW-2014-08-23 : [[ feature_floor ]]
+
 class MCHTTPProxyForURL: public MCFunction
 {
 	MCExpression *url;
 	MCExpression *host;
 	MCExpression *pac;
-
-	static MCScriptEnvironment *pac_engine;
 
 public:
 	MCHTTPProxyForURL(void)
@@ -2465,10 +2553,6 @@ public:
 	virtual Parse_stat parse(MCScriptPoint& sp, Boolean the);
 	virtual void eval_ctxt(MCExecContext &, MCExecValue &);
 	virtual void compile(MCSyntaxFactoryRef);
-
-private:
-	static char *PACdnsResolve(const char* const* p_arguments, unsigned int p_argument_count);
-	static char *PACmyIpAddress(const char* const* p_arguments, unsigned int p_argument_count);
 };
 
 class MCRandomBytes: public MCUnaryFunctionCtxt<uinteger_t, MCDataRef, MCSecurityEvalRandomBytes, EE_RANDOMBYTES_BADCOUNT, PE_RANDOMBYTES_BADPARAM, kMCSecurityEvalRandomBytesMethodInfo>

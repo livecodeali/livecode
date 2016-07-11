@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -24,7 +24,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "param.h"
 #include "mcerror.h"
-//#include "execpt.h"
+
 #include "util.h"
 #include "object.h"
 #include "stack.h"
@@ -50,6 +50,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/utsname.h>
+#include <mach-o/dyld.h>
 
 #include <CoreServices/CoreServices.h>
 #include <ApplicationServices/ApplicationServices.h>
@@ -448,6 +449,21 @@ struct MCMacSystem: public MCSystemInterface
 	
 	//////////
 	
+	virtual bool GetExecutablePath(MCStringRef& r_path)
+	{
+		uint32_t bufsize = 0;
+		_NSGetExecutablePath(NULL, &bufsize);
+		char* buf = new char[bufsize];
+		if (_NSGetExecutablePath(buf, &bufsize) != 0) {
+			delete buf;
+			return False;
+		}
+
+		MCAutoStringRef t_path;
+		MCStringCreateWithCStringAndRelease(buf, *t_path);
+		return ResolvePath(*t_path, r_path);
+	}
+
 	bool PathToNative(MCStringRef p_path, MCStringRef& r_native)
 	{
 		CFStringRef t_cf_path;
@@ -555,14 +571,20 @@ struct MCMacSystem: public MCSystemInterface
 	}
 	
 #define CATALOG_MAX_ENTRIES 16
-	bool ListFolderEntries(MCSystemListFolderEntriesCallback p_callback, void *p_context)
+	bool ListFolderEntries(MCStringRef p_folder, MCSystemListFolderEntriesCallback p_callback, void *p_context)
 	{
 		OSStatus t_os_status;
 		
 		Boolean t_is_folder;
 		FSRef t_current_fsref;
-		
-		t_os_status = FSPathMakeRef((const UInt8 *)".", &t_current_fsref, &t_is_folder);
+
+		MCAutoStringRefAsUTF8String t_path;
+		if (p_folder == nil)
+			/* UNCHECKED */ t_path . Lock(MCSTR("."));
+		else
+			/* UNCHECKED */ t_path . Lock(p_folder);
+
+		t_os_status = FSPathMakeRef((const UInt8 *) *t_path, &t_current_fsref, &t_is_folder
 		if (t_os_status != noErr || !t_is_folder)
 			return false;
 		

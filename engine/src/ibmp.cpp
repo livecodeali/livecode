@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -823,6 +823,8 @@ bool bmp_read_image(IO_handle p_stream, uindex_t &x_bytes_read, MCImageBitmap *p
 	if (t_success)
 		x_bytes_read += t_src_stride * p_bitmap->height;
 
+	MCMemoryDeleteArray (t_src_buffer);
+
 	return t_success;
 }
 
@@ -943,7 +945,7 @@ public:
 	virtual MCImageLoaderFormat GetFormat() { return kMCImageFormatBMP; }
 
 protected:
-	virtual bool LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count);
+	virtual bool LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count, MCImageMetadata &r_metadata);
 	virtual bool LoadFrames(MCBitmapFrame *&r_frames, uint32_t &r_count);
 	
 private:
@@ -952,7 +954,7 @@ private:
 	bool m_is_os2;
 };
 
-bool MCBitmapStructImageLoader::LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count)
+bool MCBitmapStructImageLoader::LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count, MCImageMetadata &r_metadata)
 {
 	bool t_success;
 	t_success = true;
@@ -1103,6 +1105,7 @@ bool MCImageDecodeBMPStruct(IO_handle p_stream, uindex_t &x_bytes_read, MCImageB
 	t_success = true;
 
 	MCBitmapStructImageLoader *t_loader;
+    t_loader = NULL;
 	if (t_success)
 		t_success = nil != (t_loader = new MCBitmapStructImageLoader(p_stream));
 
@@ -1137,12 +1140,12 @@ public:
 	virtual MCImageLoaderFormat GetFormat() { return kMCImageFormatBMP; }
 
 protected:
-	virtual bool LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count);
+	virtual bool LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count, MCImageMetadata &r_metadata);
 
 private:
 };
 
-bool MCBitmapImageLoader::LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count)
+bool MCBitmapImageLoader::LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count, MCImageMetadata &r_metadata)
 {
 	bool t_success;
 	t_success = true;
@@ -1157,7 +1160,7 @@ bool MCBitmapImageLoader::LoadHeader(uint32_t &r_width, uint32_t &r_height, uint
 		t_success = bmp_read_file_header(GetStream(), t_bytes_read, t_file_type, t_file_size, t_reserved_1, t_reserved_2, t_image_offset);
 
 	if (t_success)
-		t_success = MCBitmapStructImageLoader::LoadHeader(r_width, r_height, r_xhot, r_yhot, r_name, r_frame_count);
+		t_success = MCBitmapStructImageLoader::LoadHeader(r_width, r_height, r_xhot, r_yhot, r_name, r_frame_count, r_metadata);
 
 	if (t_success)
 	{
@@ -1469,7 +1472,7 @@ public:
 	virtual MCImageLoaderFormat GetFormat() { return kMCImageFormatNetPBM; }
 	
 protected:
-	virtual bool LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count);
+	virtual bool LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count, MCImageMetadata &r_metadata);
 	virtual bool LoadFrames(MCBitmapFrame *&r_frames, uint32_t &r_count);
 	
 private:
@@ -1490,7 +1493,7 @@ MCNetPBMImageLoader::~MCNetPBMImageLoader()
 		delete m_reader;
 }
 
-bool MCNetPBMImageLoader::LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count)
+bool MCNetPBMImageLoader::LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count, MCImageMetadata &r_metadata)
 {
 	bool t_success = true;
 
@@ -1834,7 +1837,7 @@ public:
 	virtual MCImageLoaderFormat GetFormat() { return kMCImageFormatXBM; }
 	
 protected:
-	virtual bool LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count);
+	virtual bool LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count, MCImageMetadata &r_metadata);
 	virtual bool LoadFrames(MCBitmapFrame *&r_frames, uint32_t &r_count);
 	
 private:
@@ -1849,7 +1852,7 @@ MCXBMImageLoader::~MCXBMImageLoader()
 {
 }
 
-bool MCXBMImageLoader::LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count)
+bool MCXBMImageLoader::LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count, MCImageMetadata &r_metadata)
 {
 	bool t_success = true;
 	
@@ -1941,10 +1944,10 @@ bool MCXBMImageLoader::LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_
 	}
 	else
     {
-		MCCStringFree(t_name);
         r_name = MCValueRetain(kMCEmptyString);
     }
 
+	MCCStringFree(t_name);
 	return t_success;
 }
 
@@ -1976,11 +1979,11 @@ bool MCXBMImageLoader::LoadFrames(MCBitmapFrame *&r_frames, uint32_t &r_count)
 	if (t_success)
 		t_success = IO_ERROR != IO_fgets(m_line, XBM_MAX_LINE, t_stream);
 
-	uint8_t *t_dst_ptr = nil;
-	uindex_t t_stride = (t_width + 7) / 8;
+    uint8_t *t_dst_ptr = nil;
 
 	if (t_success)
-	{
+    {
+        uindex_t t_stride = (t_width + 7) / 8;
 		t_dst_ptr = (uint8_t*)t_frame->image->data;
 		t_success = MCMemoryAllocate(t_stride, t_row_buffer);
 	}
@@ -2409,19 +2412,20 @@ static bool xpm_read_v1_header(IO_handle p_stream, char x_line[XPM_MAX_LINE], ui
 
 			t_success = t_name != nil && t_width != 0 && t_height != 0;
 
-			if (MCCStringFirstIndexOf(x_line, t_name, t_colors_index))
+			if (t_success && MCCStringFirstIndexOf(x_line, t_name, t_colors_index))
 			{
 				t_colors_index += MCCStringLength(t_name);
 				// may be a monochrome table, in which case we keep looking
 				if (MCCStringEqualSubstring(x_line + t_colors_index, "_colors[] = {", 13))
 				{
-					bool t_at_color_table = true;
+					t_at_color_table = true;
 					break;
 				}
 			}
 		}
 
-		t_success = IO_NORMAL == IO_fgets(x_line, XPM_MAX_LINE, p_stream);
+		if (t_success)
+			t_success = IO_NORMAL == IO_fgets(x_line, XPM_MAX_LINE, p_stream);
 	}
 
 	if (t_success)
@@ -2484,7 +2488,7 @@ public:
 	virtual MCImageLoaderFormat GetFormat() { return kMCImageFormatXPM; }
 	
 protected:
-	virtual bool LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count);
+	virtual bool LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count, MCImageMetadata &r_metadata);
 	virtual bool LoadFrames(MCBitmapFrame *&r_frames, uint32_t &r_count);
 	
 private:
@@ -2509,7 +2513,7 @@ MCXPMImageLoader::~MCXPMImageLoader()
 	MCMemoryDeleteArray(m_color_chars);
 }
 
-bool MCXPMImageLoader::LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count)
+bool MCXPMImageLoader::LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count, MCImageMetadata &r_metadata)
 {
 	bool t_success = true;
 	
@@ -2673,7 +2677,7 @@ public:
 	virtual MCImageLoaderFormat GetFormat() { return kMCImageFormatXWD; }
 	
 protected:
-	virtual bool LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count);
+	virtual bool LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count, MCImageMetadata &r_metadata);
 	virtual bool LoadFrames(MCBitmapFrame *&r_frames, uint32_t &r_count);
 	
 private:
@@ -2688,7 +2692,7 @@ MCXWDImageLoader::~MCXWDImageLoader()
 {
 }
 
-bool MCXWDImageLoader::LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count)
+bool MCXWDImageLoader::LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_t &r_xhot, uint32_t &r_yhot, MCStringRef &r_name, uint32_t &r_frame_count, MCImageMetadata &r_metadata)
 {
 	bool t_success = true;
 	
@@ -2711,8 +2715,9 @@ bool MCXWDImageLoader::LoadHeader(uint32_t &r_width, uint32_t &r_height, uint32_
 	char *newname = nil;
 
 	if (t_success)
-		t_success = nil != (newname = new char[namesize]) &&
-		IO_read(newname, namesize, stream) == IO_NORMAL;
+        // SN-2015-06-19: [[ CID 48071 ]] Use MCMemoryNewArray for consistency
+        t_success = MCMemoryNewArray(namesize, newname)
+            && IO_read(newname, namesize, stream) == IO_NORMAL;
 
 	if (t_success)
 	{
@@ -2746,12 +2751,14 @@ bool MCXWDImageLoader::LoadFrames(MCBitmapFrame *&r_frames, uint32_t &r_count)
 
 	for (uint32_t i = 0 ; t_success && i < (uint2)m_fh.ncolors ; i++)
 	{
-		t_success = IO_read_uint4(&colors[i].pixel, stream) == IO_NORMAL &&
+		uint32_t t_pixel;
+		uint8_t t_flags, t_pad;
+		t_success = IO_read_uint4(&t_pixel, stream) == IO_NORMAL &&
 			IO_read_uint2(&colors[i].red, stream) == IO_NORMAL &&
 			IO_read_uint2(&colors[i].green, stream) == IO_NORMAL &&
 			IO_read_uint2(&colors[i].blue, stream) == IO_NORMAL &&
-			IO_read_uint1((uint1 *)&colors[i].flags, stream) == IO_NORMAL &&
-			IO_read_uint1((uint1 *)&colors[i].pad, stream) == IO_NORMAL;
+			IO_read_uint1(&t_flags, stream) == IO_NORMAL &&
+			IO_read_uint1(&t_pad, stream) == IO_NORMAL;
 	}
 
 	char *t_newimage_data = nil;
@@ -2815,13 +2822,11 @@ bool MCXWDImageLoader::LoadFrames(MCBitmapFrame *&r_frames, uint32_t &r_count)
 					break;
 				case 4:
 					pixel = oneptr[x >> 1] >> 4 * (x & 1) & 0x0F;
-					*dptr++ = MCGPixelPackNative(colors[pixel].red >> 8, colors[pixel].green >> 8,
-										   colors[pixel].blue >> 8, 255);
+					*dptr++ = MCColorGetPixel(colors[pixel]);
 					break;
 				case 8:
 					pixel = oneptr[x];
-					*dptr++ = MCGPixelPackNative(colors[pixel].red >> 8, colors[pixel].green >> 8,
-										   colors[pixel].blue >> 8, 255);
+					*dptr++ = MCColorGetPixel(colors[pixel]);
 					break;
 				case 16:
 					pixel = twoptr[x];

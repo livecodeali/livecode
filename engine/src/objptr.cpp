@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -23,7 +23,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "mcio.h"
 
 #include "object.h"
-#include "control.h"
+#include "mccontrol.h"
 #include "stack.h"
 #include "objptr.h"
 
@@ -40,14 +40,14 @@ MCObjptr::~MCObjptr()
 {
 }
 
-bool MCObjptr::visit(MCVisitStyle p_style, uint32_t p_part, MCObjectVisitor *p_visitor)
+bool MCObjptr::visit(MCObjectVisitorOptions p_options, uint32_t p_part, MCObjectVisitor *p_visitor)
 {
-	return getref() -> visit(p_style, p_part, p_visitor);
+	return getref() -> visit(p_options, p_part, p_visitor);
 }
 
 IO_stat MCObjptr::load(IO_handle stream)
 {
-	return IO_read_uint4(&id, stream);
+	return checkloadstat(IO_read_uint4(&id, stream));
 }
 
 IO_stat MCObjptr::save(IO_handle stream, uint4 p_part)

@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -467,16 +467,16 @@ void MCMetaContext::drawtext_substring(coord_t x, int2 y, MCStringRef p_string, 
             t_mark -> text . data = new_array<char>(t_length);
             t_mark -> text . length = t_length;
             if (t_mark -> text . data != NULL)
-                memcpy(t_mark -> text . data, MCStringGetNativeCharPtr(p_string) + p_range.offset , t_length);
+                MCStringGetNativeChars(p_string, p_range, (char_t *)t_mark -> text . data);
             t_mark -> text . unicode_override = false;
         }
         else
         {
             t_mark -> text . data = new_array<unichar_t>(t_length);
             t_mark -> text . length = t_length;
+            // SN-2014-06-17 [[ Bug 12595 ]] Printing to PDF does not yield all information
             if (t_mark -> text . data != NULL)
-                // SN-2014-06-17 [[ Bug 12595 ]] Printing to PDF does not yield all information
-                memcpy(t_mark -> text . data, MCStringGetCharPtr(p_string) + p_range.offset, t_length * 2);
+                MCStringGetChars(p_string, p_range, (unichar_t *)t_mark -> text . data);
             t_mark -> text . unicode_override = true;
         }
 	}
@@ -663,8 +663,7 @@ void MCMetaContext::clear(const MCRectangle *rect)
 
 MCRegionRef MCMetaContext::computemaskregion(void)
 {
-	MCUnreachable();
-	return NULL;
+    MCUnreachableReturn(NULL);
 }
 
 
@@ -955,7 +954,8 @@ void MCMetaContext::executegroup(MCMark *p_group_mark)
 					
 					// Render all marks from the bottom up to and including the current mark - clipped
 					// by the dst bounds.
-					for(MCMark *t_raster_mark = f_state_stack -> root -> group . head; t_raster_mark != t_mark -> next; t_raster_mark = t_raster_mark -> next)
+                    // PM-2014-11-25: [[ Bug 14093 ]] nil-check to prevent a crash
+					for(MCMark *t_raster_mark = f_state_stack -> root -> group . head; t_raster_mark != t_mark -> next && t_raster_mark != NULL; t_raster_mark = t_raster_mark -> next)
 						if (mark_indirect(t_gfx_context, t_raster_mark, t_mark, t_dst_clip))
 							break;
 				}

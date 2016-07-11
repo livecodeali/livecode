@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -91,8 +91,10 @@ public:
 	virtual MCSysModuleHandle ResolveModuleSymbol(MCSysModuleHandle p_module, MCStringRef p_symbol);
 	virtual void UnloadModule(MCSysModuleHandle p_module);
 	
-	virtual bool ListFolderEntries(MCSystemListFolderEntriesCallback p_callback, void *x_context);
+	virtual bool ListFolderEntries(MCStringRef p_folder, MCSystemListFolderEntriesCallback p_callback, void *x_context);
     
+    // ST-2014-12-18: [[ Bug 14259 ]] Returns the executable from the system tools, not from argv[0]
+    virtual bool GetExecutablePath(MCStringRef& r_path);
 	virtual bool PathToNative(MCStringRef p_path, MCStringRef& r_native);
 	virtual bool PathFromNative(MCStringRef p_native, MCStringRef& r_path);
 	virtual bool ResolvePath(MCStringRef p_path, MCStringRef& r_resolved_path);
@@ -127,6 +129,9 @@ public:
     virtual bool AlternateLanguages(MCListRef& r_list);
     
     virtual bool GetDNSservers(MCListRef& r_list);
+    
+    virtual void ShowMessageDialog(MCStringRef title,
+                                   MCStringRef message);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

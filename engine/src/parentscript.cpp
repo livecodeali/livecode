@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -27,7 +27,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "field.h"
 #include "handler.h"
 #include "hndlrlst.h"
-//#include "execpt.h"
+
 #include "scriptpt.h"
 #include "mcerror.h"
 #include "util.h"
@@ -154,7 +154,7 @@ void MCParentScriptUse::ClearVars(void)
 		delete m_locals[i];
 
 	// Finally delete the locals array
-	delete m_locals;
+	delete[] m_locals; /* Allocated with new[] */
 	
 	m_locals = NULL;
 	m_local_count = 0;
@@ -367,9 +367,8 @@ void MCParentScript::Resolve(MCObject *p_object)
 	// Unblock this
 	m_blocked = false;
 
-	// Mark the object as being used as a parent script - note that this is a
-	// button state flag since we currently restrict parentScripts to buttons.
-	m_object -> setstate(True, CS_IS_PARENTSCRIPT);
+	// Mark the object as being used as a parent script.
+	m_object -> setisparentscript(true);
 
 	// Mark the object's stack as having an object which is a parent script.
 	MCStack *t_stack;
@@ -622,7 +621,7 @@ void MCParentScript::Detach(MCParentScriptUse *p_use)
 		// Unset the object's IS_PARENTSCRIPT state as it is no longer being used as
 		// one.
 		if (m_object != NULL)
-			m_object -> setstate(False, CS_IS_PARENTSCRIPT);
+			m_object -> setisparentscript(false);
 
 		// Now delete our state
 		delete this;

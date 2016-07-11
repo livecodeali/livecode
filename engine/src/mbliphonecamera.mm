@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -37,7 +37,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 ////////////////////////////////////////////////////////////////////////////////
 
 // MM-2013-09-23: [[ iOS7 Support ]] Added missing delegates implemented in order to appease llvm 5.0.
-@interface MCIPhoneImagePickerDialog : UIImagePickerController<UIImagePickerControllerDelegate, UIPopoverControllerDelegate, UINavigationControllerDelegate>
+@interface com_runrev_livecode_MCIPhoneImagePickerDialog : UIImagePickerController<UIImagePickerControllerDelegate, UIPopoverControllerDelegate, UINavigationControllerDelegate>
 {
 	bool m_cancelled;
 	bool m_running;
@@ -52,9 +52,9 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 }
 @end
 
-static MCIPhoneImagePickerDialog *s_image_picker = nil;
+static com_runrev_livecode_MCIPhoneImagePickerDialog *s_image_picker = nil;
 
-@implementation MCIPhoneImagePickerDialog
+@implementation com_runrev_livecode_MCIPhoneImagePickerDialog
 
 - (void)setMaxWidth:(int32_t)mwidth maxHeight:(int32_t)mheight
 {
@@ -70,8 +70,14 @@ static MCIPhoneImagePickerDialog *s_image_picker = nil;
 	return t_data;
 }
 
+// PM-2015-02-17: [[ Bug 11544 ]] Make sure the visibility of the status bar is respected when presenting a UIImagePickerController
+- (void)navigationController:(UINavigationController *)navigationController willShowViewController:(UIViewController *)viewController animated:(BOOL)animated
+{
+    [[UIApplication sharedApplication] setStatusBarHidden:m_status_bar_hidden];
+}
+
 // MW-2011-01-18: [[ Bug 9303 ]] Make sure we take account of scale and orientation of the UIImage.
-- imagePickerController: (UIImagePickerController*)controller didFinishPickingImage: (UIImage *)p_image editingInfo: (NSDictionary*)info
+- (void)imagePickerController: (UIImagePickerController*)controller didFinishPickingImage: (UIImage *)p_image editingInfo: (NSDictionary*)info
 {
 	uint32_t t_width, t_height;
 	t_width = [p_image size] . width * [p_image scale];
@@ -113,7 +119,7 @@ static MCIPhoneImagePickerDialog *s_image_picker = nil;
 	MCscreen -> pingwait();
 }
 
-- imagePickerControllerDidCancel: (UIImagePickerController*)controller
+- (void)imagePickerControllerDidCancel: (UIImagePickerController*)controller
 {
 	m_running = false;
 	
@@ -121,7 +127,7 @@ static MCIPhoneImagePickerDialog *s_image_picker = nil;
 	MCscreen -> pingwait();
 }
 
-- popoverControllerDidDismissPopover: (UIPopoverController *)popoverController
+- (void)popoverControllerDidDismissPopover: (UIPopoverController *)popoverController
 {
 	m_running = false;
 	
@@ -129,7 +135,7 @@ static MCIPhoneImagePickerDialog *s_image_picker = nil;
 	MCscreen -> pingwait();
 }
 
-- preWait
+- (void)preWait
 {	
 	// MM-2012-03-01: [[ BUG 10033 ]] Store the status bar style as it appears on iOS 5, this is overwittern by album picker
     m_status_bar_hidden = [[UIApplication sharedApplication] isStatusBarHidden];
@@ -148,7 +154,8 @@ static MCIPhoneImagePickerDialog *s_image_picker = nil;
     // AL-2013-10-04 [[ Bug 11255 ]] Uninitialised variable can cause crash in iPhonePickPhoto
     id t_popover = nil;
     uint32_t t_orientations;
-    t_orientations = [[MCIPhoneApplication sharedApplication] allowedOrientations];
+	// PM-2016-02-23: [[ Bug 16972 ]] Fix crash when accessing photo lib
+    t_orientations = [MCIPhoneGetApplication() allowedOrientations];
     bool t_allowed_landscape = false;
     bool t_allowed_portrait_upside_down = false;
     
@@ -173,10 +180,10 @@ static MCIPhoneImagePickerDialog *s_image_picker = nil;
 		t_main_controller = MCIPhoneGetViewController();
 		
 		CGRect t_rect;
-		if (MCtargetptr != nil)
+		if (MCtargetptr . object != nil)
 		{
 			MCRectangle t_mc_rect;
-			t_mc_rect = MCtargetptr -> getrect();
+			t_mc_rect = MCtargetptr . object -> getrect();
 			t_rect = MCUserRectToLogicalCGRect(t_mc_rect);
 		}
 		else
@@ -191,7 +198,7 @@ static MCIPhoneImagePickerDialog *s_image_picker = nil;
 		[ MCIPhoneGetViewController() presentModalViewController: self animated: YES ];
 }
 
-- postWait
+- (void)postWait
 {
 	if (m_popover_controller != nil)
 	{
@@ -207,7 +214,7 @@ static MCIPhoneImagePickerDialog *s_image_picker = nil;
     [[UIApplication sharedApplication] setStatusBarStyle: m_status_bar_style animated: NO];
 }
 
-+ prepare
++ (void)prepare
 {
 	// MM-2011-12-09: [[ Bug 9902 ]] Destroy previous picker.  Fixes bug with iOS 5 where 
 	//		cameraDevice is ignored on second running of pickPhoto.
@@ -218,13 +225,13 @@ static MCIPhoneImagePickerDialog *s_image_picker = nil;
     }
     
 	if (s_image_picker == nil)
-		s_image_picker = [[MCIPhoneImagePickerDialog alloc] init];
+		s_image_picker = [[com_runrev_livecode_MCIPhoneImagePickerDialog alloc] init];
 	
 }
 
 + (NSData *)showModalForSource: (UIImagePickerControllerSourceType)sourceType deviceType: (UIImagePickerControllerCameraDevice)deviceType maxWidth: (int32_t)maxWidth maxHeight: (int32_t)maxHeight
 {
-	MCIPhoneCallSelectorOnMainFiber([MCIPhoneImagePickerDialog class], @selector(prepare));
+	MCIPhoneCallSelectorOnMainFiber([com_runrev_livecode_MCIPhoneImagePickerDialog class], @selector(prepare));
 	
 	s_image_picker -> m_running = true;
 	s_image_picker -> m_cancelled = true;
@@ -296,7 +303,7 @@ bool MCSystemAcquirePhoto(MCPhotoSourceType p_source, int32_t p_max_width, int32
 	map_photo_source_to_source_and_device(p_source, t_source_type, t_device_type);
 	
 	NSData *t_ns_image_data;
-	t_ns_image_data = [MCIPhoneImagePickerDialog showModalForSource: t_source_type deviceType: t_device_type maxWidth: p_max_width maxHeight: p_max_height];
+	t_ns_image_data = [com_runrev_livecode_MCIPhoneImagePickerDialog showModalForSource: t_source_type deviceType: t_device_type maxWidth: p_max_width maxHeight: p_max_height];
 	
 	if (t_ns_image_data != nil)
 	{
@@ -355,6 +362,8 @@ MCCamerasFeaturesType MCSystemGetAllCameraFeatures()
     
     t_features |= t_front_features;
     t_features |= (t_rear_features << kMCCameraFeatureRearShift);
+    
+    return t_features;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -32,7 +32,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "util.h"
 #include "date.h"
 #include "param.h"
-//#include "execpt.h"
+
 #include "notify.h"
 #include "eventqueue.h"
 #include "region.h"
@@ -51,7 +51,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #define WM_TITLE_HEIGHT 16
 
 // IM-2014-01-29: [[ HiDPI ]] Placeholder method for Linux HiDPI support
-void MCScreenDC::platform_boundrect(MCRectangle &rect, Boolean title, Window_mode m)
+void MCScreenDC::platform_boundrect(MCRectangle &rect, Boolean title, Window_mode m, Boolean resizable)
 {
 	device_boundrect(rect, title, m);
 }
@@ -138,8 +138,9 @@ Boolean MCScreenDC::abortkey()
 			if (tptr->event->type == GDK_KEY_PRESS)
 			{
 				GdkEventKey *kpevent = (GdkEventKey*)tptr->event;
-                if (kpevent->state & GDK_CONTROL_MASK
-                    && kpevent->keyval == XK_Break || kpevent->keyval == 0x2e /*XK_period*/)
+				if ((kpevent->state & GDK_CONTROL_MASK
+				     && kpevent->keyval == XK_Break) ||
+				    kpevent->keyval == 0x2e /*XK_period*/)
 				{
 					abort = True;
 					tptr->remove
@@ -309,7 +310,7 @@ Boolean MCScreenDC::getmouseclick(uint2 button, Boolean& r_abort)
 			{
 				GdkEventButton *bpevent = (GdkEventButton *)tptr->event;
 				if (button == 0
-				        || bpevent->state >> 8 & 0x1F & ~(0x1L << button - 1))
+				    || bpevent->state >> 8 & 0x1F & ~(0x1L << (button - 1)))
 				{
 					setmods(bpevent->state, 0, bpevent->button, False);
 					
@@ -338,7 +339,7 @@ Boolean MCScreenDC::getmouseclick(uint2 button, Boolean& r_abort)
 			{
 				GdkEventButton *brevent = (GdkEventButton *)tptr->event;
 				if (button == 0
-				        || brevent->state >> 8 & 0x1F & ~(0x1L << button - 1))
+				    || brevent->state >> 8 & 0x1F & ~(0x1L << (button - 1)))
 				{
 					setmods(brevent->state, 0, brevent->button, False);
 					releaseptr = tptr;
@@ -369,6 +370,8 @@ Boolean MCScreenDC::getmouseclick(uint2 button, Boolean& r_abort)
 
 Boolean MCScreenDC::wait(real8 duration, Boolean dispatch, Boolean anyevent)
 {
+    MCDeletedObjectsEnterWait(dispatch);
+    
 	MCwaitdepth++;
 	real8 curtime = MCS_time();
 	if (duration < 0.0)
@@ -395,11 +398,12 @@ Boolean MCScreenDC::wait(real8 duration, Boolean dispatch, Boolean anyevent)
 			IO_cleanprocesses();
 
 		if (modalclosed ||
-			(MCNotifyDispatch(dispatch == True) ||
-			 dispatch && MCEventQueueDispatch() ||
-			 handle(dispatch, anyevent, abort, reset) ||
-			 donepending) && anyevent ||
-			 abort)
+		    ((MCNotifyDispatch(dispatch == True) ||
+		      (dispatch && MCEventQueueDispatch()) ||
+		      handle(dispatch, anyevent, abort, reset) ||
+		      donepending) &&
+		     anyevent) ||
+		    abort)
 			break;
 
 		if (MCquit)
@@ -410,7 +414,16 @@ Boolean MCScreenDC::wait(real8 duration, Boolean dispatch, Boolean anyevent)
 		MCRedrawUpdateScreen();
 
 		if (curtime < eventtime)
-			done = MCS_poll(donepending ? 0 : eventtime - curtime, x11::XConnectionNumber(x11::gdk_x11_display_get_xdisplay(dpy)));
+        {
+            // If there are run loop actions, ensure they are run occasionally
+            real64_t t_sleep;
+            t_sleep = eventtime - curtime;
+            if (HasRunloopActions())
+                t_sleep = MCMin(t_sleep, 0.01);
+            
+            gdk_display_sync(dpy);
+            done = MCS_poll(donepending ? 0 : t_sleep, x11::XConnectionNumber(x11::gdk_x11_display_get_xdisplay(dpy)));
+        }
 		curtime = MCS_time();
 	}
 	while (curtime < exittime && !(anyevent && (done || donepending)));
@@ -422,6 +435,8 @@ Boolean MCScreenDC::wait(real8 duration, Boolean dispatch, Boolean anyevent)
 	//   any engine event handling methods need us to.
 	MCRedrawUpdateScreen();
 
+    MCDeletedObjectsLeaveWait(dispatch);
+    
 	return abort;
 }
 

@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -50,7 +50,7 @@ public:
 	MCRegexMatcher(MCStringRef p, MCStringRef s, MCStringOptions o) : MCPatternMatcher(p, s, o)
 	{
         // if appropriate, normalize the pattern string.
-        if (options == kMCStringOptionCompareNonliteral || kMCStringOptionCompareCaseless)
+		if (options & kMCStringOptionNormalizeBit)
         {
             MCAutoStringRef normalized_pattern;
             MCStringNormalizedCopyNFC(pattern, &normalized_pattern);

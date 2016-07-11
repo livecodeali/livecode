@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -27,6 +27,7 @@ enum MCNativeControlType
 	kMCNativeControlTypePlayer,
 	kMCNativeControlTypeInput,
 	kMCNativeControlTypeMultiLineInput,
+    kMCNativeControlType_Last,
 };
 
 enum MCNativeControlProperty
@@ -43,6 +44,8 @@ enum MCNativeControlProperty
 	kMCNativeControlPropertyOpaque,
 	kMCNativeControlPropertyAlpha,
 	kMCNativeControlPropertyBackgroundColor,
+    kMCNativeControlPropertyIgnoreVoiceOverSensitivity,
+    
 	
 	// Browser / Text view properties
 	kMCNativeControlPropertyDataDetectorTypes,
@@ -86,6 +89,7 @@ enum MCNativeControlProperty
 	kMCNativeControlPropertyDuration,
 	kMCNativeControlPropertyPlayableDuration,
 	kMCNativeControlPropertyLoadState,
+	kMCNativeControlPropertyReadyForDisplay,
 	kMCNativeControlPropertyPlaybackState,
 	kMCNativeControlPropertyStartTime,
 	kMCNativeControlPropertyEndTime,
@@ -130,6 +134,8 @@ enum MCNativeControlProperty
     
     // Android specific properties
     kMCNativeControlPropertyMultiLine,
+    
+    kMCNativeControlProperty_Last,
 };
 
  
@@ -165,6 +171,8 @@ enum MCNativeControlAction
 	
 	// TextView-specific actions
 	kMCNativeControlActionScrollRangeToVisible,
+    
+    kMCNativeControlAction_Last,
 };
 
 class MCNativeControl;
@@ -318,7 +326,7 @@ enum MCNativeControlInputContentType
 
 enum MCNativeControlInputDataDetectorType
 {
-    kMCNativeControlInputDataDetectorTypeNone = 0,
+    kMCNativeControlInputDataDetectorTypeNoneBit = 0,
     kMCNativeControlInputDataDetectorTypeWebUrlBit,
     kMCNativeControlInputDataDetectorTypeEmailAddressBit,
     kMCNativeControlInputDataDetectorTypePhoneNumberBit,
@@ -326,6 +334,7 @@ enum MCNativeControlInputDataDetectorType
     kMCNativeControlInputDataDetectorTypeCalendarEventBit,
     kMCNativeControlInputDataDetectorTypeAllBit,
 	
+	kMCNativeControlInputDataDetectorTypeNone = 1 << kMCNativeControlInputDataDetectorTypeNoneBit,
     kMCNativeControlInputDataDetectorTypeWebUrl = 1 << kMCNativeControlInputDataDetectorTypeWebUrlBit,
     kMCNativeControlInputDataDetectorTypeEmailAddress = 1 << kMCNativeControlInputDataDetectorTypeEmailAddressBit,
     kMCNativeControlInputDataDetectorTypePhoneNumber = 1 << kMCNativeControlInputDataDetectorTypePhoneNumberBit,
@@ -364,9 +373,21 @@ enum MCNativeControlInputVerticalAlign
     kMCNativeControlInputVerticalAlignBottom,
 };
 
+enum MCNativeControlActionSignature
+{
+    kMCNativeControlActionSignature_Void,
+    kMCNativeControlActionSignature_String,
+    kMCNativeControlActionSignature_OptInteger,
+    kMCNativeControlActionSignature_String_String,
+    kMCNativeControlActionSignature_Integer_Integer,
+    kMCNativeControlActionSignature_Integer_OptInteger_OptInteger,
+};
+
 struct MCNativeControlActionInfo
 {
+	bool waitable;
     MCNativeControlAction action;
+    MCNativeControlActionSignature signature;
     void *exec_method;
 };
 
@@ -436,13 +457,6 @@ public:
 	
 	// Set the owning object of the instance
 	void SetOwner(MCObject *owner);
-#ifdef LEGACY_EXEC	
-	// Set property/get property/do verb.
-	virtual Exec_stat Set(MCNativeControlProperty property, MCExecPoint& ep) = 0;
-	virtual Exec_stat Get(MCNativeControlProperty property, MCExecPoint& ep) = 0;	
-    virtual Exec_stat Do(MCNativeControlAction action, MCParameter *parameters) = 0;
-#endif
-
     virtual const MCObjectPropertyTable *getpropertytable(void) const { return &kPropertyTable; }
     virtual const MCNativeControlActionTable *getactiontable(void) const { return &kActionTable; }
     
@@ -474,34 +488,6 @@ public:
 
 
 	// Various helper functions
-#ifdef LEGACY_EXEC
-	static bool ParseColor(MCExecPoint& ep, uint16_t &r_red, uint16_t &r_green, uint16_t &r_blue, uint16_t &r_alpha);
-	static bool FormatColor(MCExecPoint& ep, uint16_t p_red, uint16_t p_green, uint16_t p_blue, uint16_t p_alpha);
-    
-	static bool ParseBoolean(MCExecPoint& ep, bool& r_value);
-	static bool FormatBoolean(MCExecPoint& ep, bool value);
-	
-	static bool ParseInteger(MCExecPoint& ep, int32_t& r_value);
-	static bool FormatInteger(MCExecPoint& ep, int32_t value);
-	
-	static bool ParseUnsignedInteger(MCExecPoint& ep, uint32_t& r_value);
-	static bool FormatUnsignedInteger(MCExecPoint& ep, uint32_t value);
-	
-	static bool ParseReal(MCExecPoint& ep, double& r_real);
-	static bool FormatReal(MCExecPoint& ep, double real);
-	
-    static bool ParseEnum(MCExecPoint& ep, MCNativeControlEnumEntry *p_entries, int32_t& r_value);
-    static bool FormatEnum(MCExecPoint& ep, MCNativeControlEnumEntry *p_entries, int32_t p_value);
-
-	static bool ParseSet(MCExecPoint& ep, MCNativeControlEnumEntry *entries, int32_t& r_value);
-	static bool FormatSet(MCExecPoint& ep, MCNativeControlEnumEntry *entries, int32_t value);
-	
-	static bool ParseRectangle(MCExecPoint& ep, MCRectangle& r_rect);
-	static bool ParseRectangle32(MCExecPoint& ep, MCRectangle32& r_rect);
-    
-    static bool ParseRange(MCExecPoint &ep, uint32_t &r_start, uint32_t &r_length);
-    static bool FormatRange(MCExecPoint &ep, uint32_t p_start, uint32_t p_length);
-#endif
     // MM-2012-02-22: Clean up all controls
     static void Finalize(void);
 
@@ -524,15 +510,11 @@ private:
 	// The name of the instance
 	MCStringRef m_name;
 	// The instance's owning object (handle)
-	MCObjectHandle *m_object;    
+	MCObjectHandle m_object;
 };
 
 void MCNativeControlInitialize(void);
 void MCNativeControlFinalize(void);
-
-#ifdef LEGACY_EXEC
-bool MCExecPointSetRect(MCExecPoint &ep, int2 p_left, int2 p_top, int2 p_right, int2 p_bottom);
-#endif
 
 // MM-2013-11-26: [[ Bug 11485 ]] Added functions for converting between user and device space.
 MCGAffineTransform MCNativeControlUserToDeviceTransform();

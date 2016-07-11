@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -29,7 +29,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "image.h"
 #include "stack.h"
 #include "util.h"
-//#include "execpt.h"
+
 #include "stacklst.h"
 
 #include "sellst.h"
@@ -351,9 +351,9 @@ Boolean MCScreenDC::open()
 					uint4 bmsk = (1 << bluebits) - 1;
 					for(int i = 0 ; i < gdk_visual_get_colormap_size(vis) ; i++)
 					{
-						defs[i].pixel = i << redshift & t_redmask
-                        | i << greenshift & t_greenmask
-                        | i << blueshift & t_bluemask;
+						defs[i].pixel = (i << redshift & t_redmask)
+							| (i << greenshift & t_greenmask)
+							| (i << blueshift & t_bluemask);
 						defs[i].red   = (i & rmsk) * r_scale;
 						defs[i].green = (i & gmsk) * g_scale;
 						defs[i].blue  = (i & bmsk) * b_scale;
@@ -460,9 +460,7 @@ Boolean MCScreenDC::open()
     gdk_gc_set_background(gc, &t_color);
 
 	black_pixel.red = black_pixel.green = black_pixel.blue = 0;
-	black_pixel.pixel = 0xff000000;
 	white_pixel.red = white_pixel.green = white_pixel.blue = MAXUINT2;
-	white_pixel.pixel = 0xffffffff;
 
 	MCdpy = dpy;
 
@@ -484,20 +482,12 @@ Boolean MCScreenDC::open()
     //g_object_unref(cmask);
     
 	MConecolor.red = MConecolor.green = MConecolor.blue = 0xFFFF;
-	MConecolor.pixel = 1;
 	MCselectioncolor = MCpencolor = black_pixel;
-	alloccolor(MCselectioncolor);
-	alloccolor(MCpencolor);
 	MCbrushcolor = white_pixel;
-	alloccolor(MCbrushcolor);
-	alloccolor(MChilitecolor);
 	MCaccentcolor = MChilitecolor;
-	alloccolor(MCaccentcolor);
 	gray_pixel.red = gray_pixel.green = gray_pixel.blue = 0x8080;
-	alloccolor(gray_pixel);
 
 	background_pixel.red = background_pixel.green = background_pixel.blue = 0xdcdc;
-	alloccolor(background_pixel);
 	if (MCcurtheme && MCcurtheme->getthemeid() == LF_NATIVEGTK)
 		MCcurtheme->load();
 	opened = True;
@@ -552,16 +542,12 @@ Boolean MCScreenDC::open()
 		MCuselibgnome = initialise_weak_link_libgnome();
 		gnome_vfs_init();
 	}
-	
-	// Create the various Transfer data stores....
-	m_DND_store = new MCGdkTransferStore(dpy);
-	m_Clipboard_store = new MCGdkTransferStore(dpy);
-	m_Selection_store = new MCGdkTransferStore(dpy);
     
     // There are also some atoms that we need to set up
     MCworkareaatom = gdk_atom_intern_static_string("_NET_WORKAREA");
     MCclientlistatom = gdk_atom_intern_static_string("_NET_CLIENT_LIST");
     MCstrutpartialatom = gdk_atom_intern_static_string("_NET_WM_STRUT_PARTIAL");
+    MCdndselectionatom = gdk_atom_intern_static_string("XdndSelection");
 
 	return True; 
 }
@@ -578,7 +564,7 @@ Atom  MCScreenDC::make_atom ( char * p_atom_name )
 }
 
 //XDND
-void shutdown_xdnd(void) ;
+extern void MCLinuxDragAndDropFinalize();
 
 Boolean MCScreenDC::close(Boolean force)
 {
@@ -591,7 +577,7 @@ Boolean MCScreenDC::close(Boolean force)
     g_object_unref(gc);
 
 	//XDND
-	shutdown_xdnd();
+	MCLinuxDragAndDropFinalize();
 	
     gdk_display_close(dpy);
 	
@@ -766,10 +752,6 @@ void MCScreenDC::flush(Window w)
 
 void MCScreenDC::beep()
 {
-	bool t_use_internal = false ; 
-	if ( m_sound_internal != NULL)
-		if ( strcmp(m_sound_internal, "internal") == 0 )
-			t_use_internal = true ;
 	gdk_beep();
 }
 
@@ -1003,13 +985,13 @@ void MCScreenDC::setfunction(uint4 rop)
         gdk_gc_set_function(getgc(), XOpToGdkOp(rop));
 }
 
-uint4 MCScreenDC::dtouint4(Drawable d)
+uintptr_t MCScreenDC::dtouint(Drawable d)
 {
 	// Return the XID
     return d != DNULL ? x11::gdk_x11_drawable_get_xid(d) : 0;
 }
 
-Boolean MCScreenDC::uint4towindow(uint4 id, Window &w)
+Boolean MCScreenDC::uinttowindow(uintptr_t id, Window &w)
 {
     // Look up the XID in GDK's window table
     w = x11::gdk_x11_window_lookup_for_display(dpy, id);
@@ -1224,6 +1206,10 @@ MCImageBitmap *MCScreenDC::snapshot(MCRectangle &r, uint4 window, MCStringRef di
                 case GDK_GRAB_BROKEN:
                     t_done = true;
                     break;
+
+				default:
+					/* Ignore this event */
+					break;
             }
             
             // The event needs to be released
@@ -1231,7 +1217,7 @@ MCImageBitmap *MCScreenDC::snapshot(MCRectangle &r, uint4 window, MCStringRef di
         }
         
         // Release the grabs and other resources that were acquired
-        gdk_pointer_ungrab(GDK_CURRENT_TIME);
+        gdk_display_pointer_ungrab(dpy, GDK_CURRENT_TIME);
         gdk_cursor_unref(t_cursor);
         g_object_unref(t_gc);
         gdk_display_flush(t_display);
@@ -1355,7 +1341,8 @@ MCImageBitmap *MCScreenDC::snapshot(MCRectangle &r, uint4 window, MCStringRef di
     
     // Do any scaling that is required to satisfy the specified size
 	if (size != nil && 
-		(size -> x != t_bitmap -> width || size -> y != t_bitmap -> height))
+	    ((uint32_t) size -> x != t_bitmap -> width ||
+	     (uint32_t) size -> y != t_bitmap -> height))
 	{
 		MCImageBitmap *t_new_bitmap;
 		MCImageScaleBitmap(t_bitmap, size -> x, size -> y, INTERPOLATION_BILINEAR, t_new_bitmap);
@@ -1480,10 +1467,9 @@ void MCScreenDC::configurebackdrop(const MCColor& p_colour, MCPatternRef p_patte
     if (m_backdrop_pixmap == nil)
     {
         backdropcolor = p_colour;
-		alloccolor(backdropcolor);
     }
 	else
-		backdropcolor.pixel = 0;
+		MCColorSetPixel(backdropcolor, 0);
 	
     if (backdrop == DNULL)
         return;
@@ -1567,7 +1553,6 @@ void MCScreenDC::destroybackdrop()
 		gdk_window_hide(backdrop);
         gdk_window_destroy(backdrop);
 		backdrop = DNULL;
-		backdropcolor.pixel = 0;
 	}
 	
 	freepixmap(m_backdrop_pixmap);

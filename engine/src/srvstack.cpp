@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -21,7 +21,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "objdefs.h"
 #include "parsedef.h"
 
-//#include "execpt.h"
+
 #include "dispatch.h"
 #include "stack.h"
 #include "card.h"
@@ -199,3 +199,21 @@ void MCStack::redrawicon(void)
 void MCStack::enablewindow(bool enable)
 {
 }
+
+// MERG-2015-10-12: [[ DocumentFilename ]] Stub for documentFilename.
+void MCStack::updatedocumentfilename(void)
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool MCStack::configure_window_buffer()
+{
+	return true;
+}
+
+void MCStack::release_window_buffer()
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////

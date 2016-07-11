@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -20,6 +20,10 @@
 #include "foundation-private.h"
 
 
+////////////////////////////////////////////////////////////////////////////////
+
+// An array of all possible (256) single byte DataRefs.
+static MCDataRef *__kMCSingleBytes;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -52,8 +56,19 @@ static bool __MCDataCopyMutable(__MCData *self, __MCData*& r_new_data);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+MC_DLLEXPORT_DEF
 bool MCDataCreateWithBytes(const byte_t *p_bytes, uindex_t p_byte_count, MCDataRef& r_data)
 {
+	/* Special case for empty data */
+	if ((p_byte_count == 0 || nil == p_bytes) && nil != kMCEmptyData)
+	{
+		r_data = MCValueRetain(kMCEmptyData);
+		return true;
+	}
+
+	/* Check that if the byte count is non-zero, the source pointer is valid */
+	MCAssert(p_byte_count == 0 || nil != p_bytes);
+
 	bool t_success;
 	t_success = true;
     
@@ -67,7 +82,10 @@ bool MCDataCreateWithBytes(const byte_t *p_bytes, uindex_t p_byte_count, MCDataR
     
 	if (t_success)
 	{
-        MCMemoryCopy(self -> bytes, p_bytes, p_byte_count);
+		if (nil != p_bytes)
+		{
+			MCMemoryCopy(self -> bytes, p_bytes, p_byte_count);
+		}
         self -> byte_count = p_byte_count;
 		r_data = self;
 	}
@@ -82,52 +100,175 @@ bool MCDataCreateWithBytes(const byte_t *p_bytes, uindex_t p_byte_count, MCDataR
 	return t_success;
 }
 
+MC_DLLEXPORT_DEF
 bool MCDataCreateWithBytesAndRelease(byte_t *p_bytes, uindex_t p_byte_count, MCDataRef& r_data)
 {
-    if (MCDataCreateWithBytes(p_bytes, p_byte_count, r_data))
-    {
-        MCMemoryDeallocate(p_bytes);
-        return true;
-    }
+	MCAssert(nil != p_bytes);
+
+    // AL-2014-11-17: Create with bytes and release should just take the bytes.
     
-    return false;
+    bool t_success;
+    t_success = true;
+    
+    __MCData *self;
+    self = nil;
+    if (t_success)
+        t_success = __MCValueCreate(kMCValueTypeCodeData, self);
+    
+    if (t_success)
+    {
+        self -> bytes = p_bytes;
+        self -> byte_count = p_byte_count;
+        r_data = self;
+    }
+    else
+        MCMemoryDelete(self);
+    
+    return t_success;
 }
 
+MC_DLLEXPORT_DEF
+bool
+MCDataCreateWithData(MCDataRef& r_data, MCDataRef p_one, MCDataRef p_two)
+{
+	__MCAssertIsData(p_one);
+	__MCAssertIsData(p_two);
+
+    // Resolve any indirection
+    if (__MCDataIsIndirect(p_one))
+        p_one = p_one->contents;
+    if (__MCDataIsIndirect(p_two))
+        p_two = p_two->contents;
+    
+    // Calculate how much output space is required
+    uindex_t t_length = p_one->byte_count + p_two->byte_count;
+    
+    // Create the new data object
+    __MCData *self = nil;
+    if (!__MCValueCreate(kMCValueTypeCodeData, self))
+        return false;
+    
+    // Allocate memory for the output
+    if (!MCMemoryNewArray(t_length, self->bytes))
+    {
+        MCValueRelease(self);
+        return false;
+    }
+    
+    // Copy the bytes to the object
+    MCMemoryCopy(self->bytes, p_one->bytes, p_one->byte_count);
+    MCMemoryCopy(self->bytes + p_one->byte_count, p_two->bytes, p_two->byte_count);
+    
+    // Set the byte count
+    self->byte_count = p_one->byte_count + p_two->byte_count;
+    
+    // Done
+    r_data = self;
+    return true;
+}
+
+MC_DLLEXPORT_DEF
+bool MCDataConvertStringToData(MCStringRef string, MCDataRef& r_data)
+{
+	__MCAssertIsString(string);
+
+    // AL-2014-12-12: [[ Bug 14208 ]] Implement MCDataConvertStringToData reduce the overhead in
+    //  converting from non-native string to data.
+    
+    MCStringRef t_native_copy;
+    t_native_copy = nil;
+    if (!MCStringNativeCopy(string, t_native_copy))
+        return false;
+
+    if (t_native_copy -> references != 1 || MCStringIsMutable(t_native_copy))
+    {
+        uindex_t t_native_length;
+        const byte_t *t_data = (const byte_t *)MCStringGetNativeCharPtrAndLength(t_native_copy, t_native_length);
+        if (MCDataCreateWithBytes(t_data, t_native_length, r_data))
+        {
+            MCValueRelease(t_native_copy);
+            return true;
+        }
+        
+        return false;
+    }
+    
+    bool t_success;
+    t_success = true;
+    
+    __MCData *self;
+    self = nil;
+    if (t_success)
+        t_success = __MCValueCreate(kMCValueTypeCodeData, self);
+    
+    if (t_success)
+    {
+        self -> bytes = (byte_t *)t_native_copy -> native_chars;
+        self -> byte_count = t_native_copy -> char_count;
+        r_data = self;
+        
+        t_native_copy -> native_chars = nil;
+        t_native_copy -> char_count = 0;
+    }
+    else
+        MCMemoryDelete(self);
+    
+    if (t_success)
+        MCValueRelease(t_native_copy);
+    
+    return t_success;
+}
+
+MC_DLLEXPORT_DEF
 bool MCDataIsEmpty(MCDataRef p_data)
 {
+	__MCAssertIsData(p_data);
+
     if (__MCDataIsIndirect(p_data))
         p_data = p_data -> contents;
     
 	return p_data -> byte_count == 0;
 }
 
+MC_DLLEXPORT_DEF
 uindex_t MCDataGetLength(MCDataRef p_data)
 {
+	__MCAssertIsData(p_data);
+
     if (__MCDataIsIndirect(p_data))
         p_data = p_data -> contents;
     
     return p_data->byte_count;
 }
 
+MC_DLLEXPORT_DEF
 const byte_t *MCDataGetBytePtr(MCDataRef p_data)
 {
+	__MCAssertIsData(p_data);
+
     if (__MCDataIsIndirect(p_data))
         p_data = p_data -> contents;
     
     return p_data->bytes;
 }
 
+MC_DLLEXPORT_DEF
 byte_t MCDataGetByteAtIndex(MCDataRef p_data, uindex_t p_index)
 {
+	__MCAssertIsData(p_data);
+
     if (__MCDataIsIndirect(p_data))
         p_data = p_data -> contents;
     
     return p_data->bytes[p_index];
 }
 
-hash_t MCDataHash(MCDataRef p_data);
+MC_DLLEXPORT_DEF
 bool MCDataIsEqualTo(MCDataRef p_left, MCDataRef p_right)
 {
+	__MCAssertIsData(p_left);
+	__MCAssertIsData(p_right);
+
     if (__MCDataIsIndirect(p_left))
         p_left = p_left -> contents;
 
@@ -140,10 +281,9 @@ bool MCDataIsEqualTo(MCDataRef p_left, MCDataRef p_right)
     return MCMemoryCompare(p_left -> bytes, p_right -> bytes, p_left -> byte_count) == 0;
 }
 
-compare_t MCDataCompareTo(MCDataRef p_left, MCDataRef p_right);
-
 // Mutable data methods
 
+MC_DLLEXPORT_DEF
 bool MCDataCreateMutable(uindex_t p_initial_capacity, MCDataRef& r_data)
 {
 	bool t_success;
@@ -162,12 +302,19 @@ bool MCDataCreateMutable(uindex_t p_initial_capacity, MCDataRef& r_data)
         self->flags |= kMCDataFlagIsMutable;
 		r_data = self;
 	}
+	else
+	{
+		MCValueRelease (self);
+	}
     
 	return t_success;
 }
 
+MC_DLLEXPORT_DEF
 bool MCDataCopy(MCDataRef p_data, MCDataRef& r_new_data)
 {
+	__MCAssertIsData(p_data);
+
     if (!MCDataIsMutable(p_data))
     {
         MCValueRetain(p_data);
@@ -187,8 +334,11 @@ bool MCDataCopy(MCDataRef p_data, MCDataRef& r_new_data)
     return __MCDataCopyMutable(p_data, r_new_data);
 }
 
+MC_DLLEXPORT_DEF
 bool MCDataCopyAndRelease(MCDataRef p_data, MCDataRef& r_new_data)
 {
+	__MCAssertIsData(p_data);
+
     // If the MCData is immutable we just pass it through (as we are releasing it).
     if (!MCDataIsMutable(p_data))
     {
@@ -223,8 +373,11 @@ bool MCDataCopyAndRelease(MCDataRef p_data, MCDataRef& r_new_data)
     return true;
 }
 
+MC_DLLEXPORT_DEF
 bool MCDataMutableCopy(MCDataRef p_data, MCDataRef& r_mutable_data)
 {
+	__MCAssertIsData(p_data);
+
     // If p_data is immutable, then the new mutable data ref will be indirect
     // referencing it.
     if (!MCDataIsMutable(p_data))
@@ -242,8 +395,11 @@ bool MCDataMutableCopy(MCDataRef p_data, MCDataRef& r_mutable_data)
     return __MCDataCreateIndirect(p_data -> contents, r_mutable_data);
 }
 
+MC_DLLEXPORT_DEF
 bool MCDataMutableCopyAndRelease(MCDataRef p_data, MCDataRef& r_mutable_data)
 {
+	__MCAssertIsData(p_data);
+
     if (p_data -> references == 1)
     {
         if (!MCDataIsMutable(p_data))
@@ -260,16 +416,28 @@ bool MCDataMutableCopyAndRelease(MCDataRef p_data, MCDataRef& r_mutable_data)
     return true;
 }
 
+MC_DLLEXPORT_DEF
 bool MCDataCopyRange(MCDataRef self, MCRange p_range, MCDataRef& r_new_data)
 {
+	__MCAssertIsData(self);
+
     if (__MCDataIsIndirect(self))
         self = self -> contents;
     
     __MCDataClampRange(self, p_range);
     
+    // We special-case when the length of the range to be copied is 1. Rather
+    // than create a brand new DataRef, we use one of the pre-allocated ones.
+    if (p_range . length == 1)
+    {
+        r_new_data = MCValueRetain(__kMCSingleBytes[self -> bytes[p_range . offset]]);
+        return true;
+    }
+    
     return MCDataCreateWithBytes(self -> bytes + p_range . offset, p_range . length, r_new_data);
 }
 
+MC_DLLEXPORT_DEF
 bool MCDataCopyRangeAndRelease(MCDataRef self, MCRange p_range, MCDataRef& r_new_data)
 {
     if (MCDataCopyRange(self, p_range, r_new_data))
@@ -281,14 +449,19 @@ bool MCDataCopyRangeAndRelease(MCDataRef self, MCRange p_range, MCDataRef& r_new
     return false;
 }
 
+MC_DLLEXPORT_DEF
 bool MCDataIsMutable(const MCDataRef p_data)
 {
+	__MCAssertIsData(p_data);
+
     return (p_data->flags & kMCDataFlagIsMutable) != 0;
 }
 
+MC_DLLEXPORT_DEF
 bool MCDataAppend(MCDataRef r_data, MCDataRef p_suffix)
 {
     MCAssert(MCDataIsMutable(r_data));
+    __MCAssertIsData(p_suffix);
     
     if (__MCDataIsIndirect(p_suffix))
         p_suffix = p_suffix -> contents;
@@ -307,9 +480,11 @@ bool MCDataAppend(MCDataRef r_data, MCDataRef p_suffix)
     return MCDataAppendBytes(r_data, p_suffix -> bytes, p_suffix -> byte_count);
 }
 
+MC_DLLEXPORT_DEF
 bool MCDataAppendBytes(MCDataRef self, const byte_t *p_bytes, uindex_t p_byte_count)
 {
     MCAssert(MCDataIsMutable(self));
+    MCAssert(nil != p_bytes);
     
     // Ensure the data ref is not indirect.
     if (__MCDataIsIndirect(self))
@@ -325,14 +500,17 @@ bool MCDataAppendBytes(MCDataRef self, const byte_t *p_bytes, uindex_t p_byte_co
     return true;
 }
 
+MC_DLLEXPORT_DEF
 bool MCDataAppendByte(MCDataRef r_data, byte_t p_byte)
 {
     return MCDataAppendBytes(r_data, &p_byte, 1);
 }
 
+MC_DLLEXPORT_DEF
 bool MCDataPrepend(MCDataRef r_data, MCDataRef p_prefix)
 {
     MCAssert(MCDataIsMutable(r_data));
+    __MCAssertIsData(p_prefix);
     
     if (__MCDataIsIndirect(p_prefix))
         p_prefix = p_prefix -> contents;
@@ -351,9 +529,11 @@ bool MCDataPrepend(MCDataRef r_data, MCDataRef p_prefix)
     return MCDataPrependBytes(r_data, p_prefix -> bytes, p_prefix -> byte_count);
 }
 
+MC_DLLEXPORT_DEF
 bool MCDataPrependBytes(MCDataRef self, const byte_t *p_bytes, uindex_t p_byte_count)
 {
     MCAssert(MCDataIsMutable(self));
+    MCAssert(nil != p_bytes);
     
     // Ensure the data ref is not indirect.
     if (__MCDataIsIndirect(self))
@@ -369,14 +549,17 @@ bool MCDataPrependBytes(MCDataRef self, const byte_t *p_bytes, uindex_t p_byte_c
     return true;
 }
 
+MC_DLLEXPORT_DEF
 bool MCDataPrependByte(MCDataRef r_data, byte_t p_byte)
 {
     return MCDataPrependBytes(r_data, &p_byte, 1);
 }
 
+MC_DLLEXPORT_DEF
 bool MCDataInsert(MCDataRef r_data, uindex_t p_at, MCDataRef p_new_data)
 {
     MCAssert(MCDataIsMutable(r_data));
+    __MCAssertIsData(p_new_data);
     
     if (__MCDataIsIndirect(p_new_data))
         p_new_data = p_new_data -> contents;
@@ -395,9 +578,11 @@ bool MCDataInsert(MCDataRef r_data, uindex_t p_at, MCDataRef p_new_data)
     return MCDataInsertBytes(r_data, p_at, p_new_data -> bytes, p_new_data -> byte_count);
 }
 
+MC_DLLEXPORT_DEF
 bool MCDataInsertBytes(MCDataRef self, uindex_t p_at, const byte_t *p_bytes, uindex_t p_byte_count)
 {
     MCAssert(MCDataIsMutable(self));
+    MCAssert(nil != p_bytes);
     
     // Ensure the data ref is not indirect.
     if (__MCDataIsIndirect(self))
@@ -413,6 +598,7 @@ bool MCDataInsertBytes(MCDataRef self, uindex_t p_at, const byte_t *p_bytes, uin
     return true;
 }
 
+MC_DLLEXPORT_DEF
 bool MCDataRemove(MCDataRef self, MCRange p_range)
 {
 	MCAssert(MCDataIsMutable(self));
@@ -431,9 +617,11 @@ bool MCDataRemove(MCDataRef self, MCRange p_range)
 	return true;
 }
 
+MC_DLLEXPORT_DEF
 bool MCDataReplace(MCDataRef r_data, MCRange p_range, MCDataRef p_new_data)
 {
 	MCAssert(MCDataIsMutable(r_data));
+	__MCAssertIsData(p_new_data);
     
     if (__MCDataIsIndirect(p_new_data))
         p_new_data = p_new_data -> contents;
@@ -451,9 +639,11 @@ bool MCDataReplace(MCDataRef r_data, MCRange p_range, MCDataRef p_new_data)
     return MCDataReplaceBytes(r_data, p_range, p_new_data -> bytes, p_new_data -> byte_count);
 }
 
+MC_DLLEXPORT_DEF
 bool MCDataReplaceBytes(MCDataRef self, MCRange p_range, const byte_t *p_bytes, uindex_t p_byte_count)
 {
     MCAssert(MCDataIsMutable(self));
+    MCAssert(nil != p_bytes);
     
     // Ensure the data ref is not indirect.
     if (__MCDataIsIndirect(self))
@@ -486,6 +676,7 @@ bool MCDataReplaceBytes(MCDataRef self, MCRange p_range, const byte_t *p_bytes, 
     return true;
 }
 
+MC_DLLEXPORT_DEF
 bool MCDataPad(MCDataRef self, byte_t p_byte, uindex_t p_count)
 {
     MCAssert(MCDataIsMutable(self));
@@ -502,8 +693,12 @@ bool MCDataPad(MCDataRef self, byte_t p_byte, uindex_t p_count)
 	return true;
 }
 
+MC_DLLEXPORT_DEF
 compare_t MCDataCompareTo(MCDataRef p_left, MCDataRef p_right)
 {
+	__MCAssertIsData(p_left);
+	__MCAssertIsData(p_right);
+
     if (__MCDataIsIndirect(p_left))
         p_left = p_left -> contents;
     
@@ -519,9 +714,151 @@ compare_t MCDataCompareTo(MCDataRef p_left, MCDataRef p_right)
     return p_left -> byte_count - p_right -> byte_count;
 }
 
+MC_DLLEXPORT_DEF
+bool MCDataContains(MCDataRef p_data, MCDataRef p_needle)
+{
+	__MCAssertIsData(p_data);
+	__MCAssertIsData(p_needle);
+
+    uindex_t t_needle_byte_count, t_byte_count;
+    t_needle_byte_count = p_needle -> byte_count;
+    t_byte_count = p_data -> byte_count;
+    
+    if (t_needle_byte_count > t_byte_count)
+        return false;
+    
+    const byte_t *t_bytes;
+    t_bytes = p_data -> bytes;
+    
+    bool t_found = false;
+    for (uindex_t i = 0; i < t_byte_count - t_needle_byte_count + 1; i++)
+        if (MCMemoryCompare(t_bytes++, p_needle -> bytes, sizeof(byte_t) * t_needle_byte_count) == 0)
+        {
+            t_found = true;
+            break;
+        }
+    
+    return t_found;
+}
+
+MC_DLLEXPORT_DEF
+bool MCDataBeginsWith(MCDataRef p_data, MCDataRef p_needle)
+{
+	__MCAssertIsData(p_data);
+	__MCAssertIsData(p_needle);
+
+    uindex_t t_needle_byte_count, t_byte_count;
+    t_needle_byte_count = p_needle -> byte_count;
+    t_byte_count = p_data -> byte_count;
+    
+    if (t_needle_byte_count > t_byte_count)
+        return false;
+    
+    return MCMemoryCompare(p_data -> bytes, p_needle -> bytes, sizeof(byte_t) * t_needle_byte_count) == 0;
+}
+
+MC_DLLEXPORT_DEF
+bool MCDataEndsWith(MCDataRef p_data, MCDataRef p_needle)
+{
+	__MCAssertIsData(p_data);
+	__MCAssertIsData(p_needle);
+
+    uindex_t t_needle_byte_count, t_byte_count;
+    t_needle_byte_count = p_needle -> byte_count;
+    t_byte_count = p_data -> byte_count;
+    
+    if (t_needle_byte_count > t_byte_count)
+        return false;
+    
+    return MCMemoryCompare(p_data -> bytes + t_byte_count - t_needle_byte_count, p_needle -> bytes, sizeof(byte_t) * t_needle_byte_count) == 0;
+}
+
+MC_DLLEXPORT_DEF
+bool MCDataFirstIndexOf(MCDataRef p_data, MCDataRef p_chunk, MCRange p_range, uindex_t& r_index)
+{
+	__MCAssertIsData(p_data);
+	__MCAssertIsData(p_chunk);
+	
+	__MCDataClampRange(p_data, p_range);
+	
+	if (p_range.length == 0)
+		return false;
+    
+    uindex_t t_limit, t_chunk_byte_count;
+    t_chunk_byte_count = MCDataGetLength(p_chunk);
+	if (t_chunk_byte_count == 0)
+		return false;
+    t_limit = p_range . offset + p_range . length - t_chunk_byte_count + 1;
+    
+    const byte_t *t_bytes = MCDataGetBytePtr(p_data);
+    const byte_t *t_chunk_bytes = MCDataGetBytePtr(p_chunk);
+    
+    uindex_t t_offset, t_result;
+    t_result = 0;
+    
+    bool t_found;
+    t_found = false;
+    
+    for (t_offset = p_range . offset; t_offset < t_limit; t_offset++)
+        if (MCMemoryCompare(t_bytes + t_offset, t_chunk_bytes, sizeof(byte_t) * t_chunk_byte_count) == 0)
+        {
+            t_result = t_offset - p_range . offset;
+            t_found = true;
+            break;
+        }
+    
+    r_index = t_result;
+    return t_found;
+}
+
+MC_DLLEXPORT_DEF bool
+MCDataLastIndexOf (MCDataRef self,
+                   MCDataRef p_needle,
+                   MCRange p_range,
+                   uindex_t & r_offset)
+{
+	const byte_t *t_needle = MCDataGetBytePtr (p_needle);
+	uindex_t t_needle_len = MCDataGetLength (p_needle);
+
+	/* Empty data is never found */
+	if (0 == t_needle_len)
+		return false;
+
+	__MCDataClampRange (self, p_range);
+
+	/* If the range is too short to contain the needle, the needle clearly
+	 * can't be found. */
+	if (p_range.length < t_needle_len)
+		return false;
+
+	const byte_t *t_haystack = MCDataGetBytePtr (self);
+
+	for (uindex_t t_roffset = t_needle_len - 1;
+	     t_roffset < p_range.length;
+	     ++t_roffset)
+	{
+		/* Offset of first byte of match, relative to start of range
+		 * (i.e. t_offset = 0 for the first byte) */
+		uindex_t t_offset = p_range.length - t_roffset - 1;
+
+		uindex_t t_haystack_offset = p_range.offset + t_offset;
+
+		if (0 == MCMemoryCompare (t_haystack + t_haystack_offset, t_needle,
+		                          sizeof(byte_t) * t_needle_len))
+		{
+			r_offset = t_offset;
+			return true;
+		}
+	}
+	return false;
+}
+
 #if defined(__MAC__) || defined (__IOS__)
+MC_DLLEXPORT_DEF
 bool MCDataConvertToCFDataRef(MCDataRef p_data, CFDataRef& r_cfdata)
 {
+	__MCAssertIsData(p_data);
+
     if (__MCDataIsIndirect(p_data))
         p_data = p_data -> contents;
     
@@ -607,25 +944,50 @@ static bool __MCDataMakeImmutable(__MCData *self)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-MCDataRef kMCEmptyData;
+MC_DLLEXPORT_DEF MCDataRef kMCEmptyData;
 
 bool __MCDataInitialize(void)
 {
     if (!MCDataCreateWithBytes(nil, 0, kMCEmptyData))
         return false;
     
+    // Allocate the array for the 256 single byte DataRefs.
+    if (!MCMemoryNewArray(256, __kMCSingleBytes))
+        return false;
+    
+    // Create each single byte DataRef.
+    for(uindex_t i = 0; i < 256; i++)
+    {
+        byte_t t_byte;
+        t_byte = (byte_t)i;
+        if (!MCDataCreateWithBytes(&t_byte, 1, __kMCSingleBytes[i]))
+            return false;
+    }
+    
     return true;
 }
 
 void __MCDataFinalize(void)
 {
+    // Deallocate all the single byte DataRefs and their holding array.
+    for(uindex_t i = 0; i < 256; i++)
+        MCValueRelease(__kMCSingleBytes[i]);
+    MCMemoryDeleteArray(__kMCSingleBytes);
+    
     MCValueRelease(kMCEmptyData);
 }
 
 void __MCDataDestroy(__MCData *self)
 {
-    if (self -> bytes != nil)
-        MCMemoryDeleteArray(self -> bytes);
+    if (__MCDataIsIndirect(self))
+    {
+        MCValueRelease(self -> contents);
+    }
+    else
+    {
+        if (self -> bytes != nil)
+            MCMemoryDeleteArray(self -> bytes);
+    }
 }
 
 bool __MCDataImmutableCopy(__MCData *self, bool p_release, __MCData *&r_immutable_value)
@@ -647,7 +1009,8 @@ hash_t __MCDataHash(__MCData *self)
 
 bool __MCDataCopyDescription(__MCData *self, MCStringRef &r_description)
 {
-    return false;
+	return MCStringFormat (r_description, "<data: %u B>",
+	                       MCDataGetLength (self));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

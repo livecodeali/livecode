@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -31,13 +31,12 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #define MC_WIN_CLASS_NAME		"MCWinClass"
 #define MC_WIN_CLASS_NAME_W L"MCWinClassW"
 #define MC_VIDEO_WIN_CLASS_NAME		"MCVideoWinClass"
-#define MC_QTVIDEO_WIN_CLASS_NAME	"MCQTVideoWinClass"
 #define MC_POPUP_WIN_CLASS_NAME		"MCPopupWinClass"
 #define MC_MENU_WIN_CLASS_NAME		"MCMenuWinClass"
 #define MC_SNAPSHOT_WIN_CLASS_NAME	"MCSnapshotWinClass"
 #define MC_BACKDROP_WIN_CLASS_NAME      "MCBackdropWinClass"
-#define MC_APP_NAME			"Revolution"
-#define MC_APP_NAME_W		L"Revolution"
+#define MC_APP_NAME			"LiveCode"
+#define MC_APP_NAME_W		L"LiveCode"
 
 #define REFRESH_RATE			10.0
 #define SELECTION_WAIT			5000
@@ -49,8 +48,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #define fixmaskrop(a) ((a == GXand || a == GXor)?(a == GXand?GXor:GXand):(a == GXandInverted?GXorInverted:GXandInverted))//DEBUG
 #define fixmaskcolor(a) (a.pixel == 0 ? MConecolor:MCzerocolor)//DEBUG
 
-extern LRESULT CALLBACK MCQTPlayerWindowProc(HWND hwnd, UINT msg, WPARAM wParam,
-	        LPARAM lParam);
 
 extern LRESULT CALLBACK MCPlayerWindowProc(HWND hwnd, UINT msg, WPARAM wParam,
 	        LPARAM lParam);
@@ -145,7 +142,6 @@ class MCScreenDC : public MCUIDC
 	Boolean owndnd;
 	HWND invisiblehwnd;
 	UINT mousetimer;
-	LPDATAOBJECT dnddata;
 
 	bool backdrop_active;
 	bool backdrop_hard;
@@ -164,8 +160,6 @@ class MCScreenDC : public MCUIDC
 	HDC m_printer_dc;
 	bool m_printer_dc_locked;
 	bool m_printer_dc_changed;
-
-	IDataObject *m_clipboard;
 
 	HANDLE m_srgb_profile;
 
@@ -216,7 +210,7 @@ public:
 	virtual bool platform_getdisplays(bool p_effective, MCDisplay *&r_displays, uint32_t &r_count);
 	virtual bool platform_displayinfocacheable(void);
 	virtual bool platform_getwindowgeometry(Window w, MCRectangle &drect);
-	virtual void platform_boundrect(MCRectangle &rect, Boolean title, Window_mode m);
+	virtual void platform_boundrect(MCRectangle &rect, Boolean title, Window_mode m, Boolean resizable);
 	virtual void platform_querymouse(int16_t &r_x, int16_t &r_y);
 	virtual void platform_setmouse(int16_t p_x, int16_t p_y);
 	virtual MCStack *platform_getstackatpoint(int32_t x, int32_t y);
@@ -226,6 +220,8 @@ public:
 	MCPoint screentologicalpoint(const MCPoint &p_point);
 	MCRectangle logicaltoscreenrect(const MCRectangle &p_rect);
 	MCRectangle screentologicalrect(const MCRectangle &p_rect);
+
+	virtual void *GetNativeWindowHandle(Window p_window);
 
 	virtual void openwindow(Window w, Boolean override);
 	virtual void closewindow(Window window);
@@ -245,7 +241,7 @@ public:
 	virtual void setgraphicsexposures(Boolean on, MCStack *sptr);
 	virtual void copyarea(Drawable source, Drawable dest, int2 depth,
 	                      int2 sx, int2 sy, uint2 sw, uint2 sh,
-	                      int2 dx, int2 dy, uint4 rop);
+                          int2 dx, int2 dy, uint4 rop);
 																	
 	virtual MCColorTransformRef createcolortransform(const MCColorSpaceInfo& info);
 	virtual void destroycolortransform(MCColorTransformRef transform);
@@ -254,9 +250,9 @@ public:
 	virtual MCCursorRef createcursor(MCImageBitmap *image, int2 xhot, int2 yhot);
 	virtual void freecursor(MCCursorRef c);
 
-	virtual uint4 dtouint4(Drawable d);
-	virtual Boolean uint4towindow(uint4, Window &w);
-	virtual void getbeep(uint4 property, int4& r_value);
+    virtual uintptr_t dtouint(Drawable d);
+    virtual Boolean uinttowindow(uintptr_t, Window &w);
+    virtual void getbeep(uint4 property, int4& r_value);
 	virtual void setbeep(uint4 property, int4 beep);
 	virtual MCNameRef getvendorname(void);
 	virtual uint2 getpad();
@@ -310,11 +306,6 @@ public:
 
 	//
 
-	virtual void flushclipboard(void);
-	virtual bool ownsclipboard(void);
-	virtual bool setclipboard(MCPasteboard *p_pasteboard);
-	virtual MCPasteboard *getclipboard(void);
-    
     // TD-2013-07-01: [[ DynamicFonts ]]
     virtual bool loadfont(MCStringRef p_path, bool p_globally, void*& r_loaded_font_handle);
     virtual bool unloadfont(MCStringRef p_path, bool p_globally, void *r_loaded_font_handle);
@@ -322,7 +313,7 @@ public:
 	//
 
 	// SN-2014-07-11: [[ Bug 12769 ]] Update the signature - the non-implemented UIDC dodragdrop was called otherwise
-	virtual MCDragAction dodragdrop(Window w, MCPasteboard *p_pasteboard, MCDragActionSet p_allowed_actions, MCImage *p_image, const MCPoint* p_image_offset);
+	virtual MCDragAction dodragdrop(Window w, MCDragActionSet p_allowed_actions, MCImage *p_image, const MCPoint* p_image_offset);
 
 	//
 

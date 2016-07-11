@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -26,7 +26,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "paragraf.h"
 #include "text.h"
 #include "osspec.h"
-//#include "execpt.h"
+
 #include "mcstring.h"
 #include "uidc.h"
 #include "globals.h"
@@ -354,7 +354,7 @@ static const char *export_html_hexcolor(uint32_t p_pixel)
 	static char s_color[8];
 	uint8_t r, g, b, a;
 	MCGPixelUnpackNative(p_pixel, r, g, b, a);
-	sprintf(s_color, "#%02.2X%02.2X%02.2X", r, g, b);
+	sprintf(s_color, "#%2.2X%2.2X%2.2X", r, g, b);
 	
 	return s_color;
 }
@@ -516,7 +516,8 @@ static bool export_html_emit_paragraphs(void *p_context, MCFieldExportEventType 
 			/* UNCHECKED */ MCStringAppendFormat(ctxt.m_text, "<p");
 			if (t_style . has_metadata)
 			{
-				/* UNCHECKED */ MCStringAppendFormat(ctxt.m_text, " metadata=`\"");
+                // SN-2014-11-24: [[ Bug 14064 ]] Remove the additionnal '`'
+				/* UNCHECKED */ MCStringAppendFormat(ctxt.m_text, " metadata=\"");
                 export_html_emit_cstring(ctxt.m_text, t_style.metadata, kExportHtmlEscapeTypeAttribute);
 				/* UNCHECKED */ MCStringAppendFormat(ctxt.m_text, "\"");
 			}
@@ -608,23 +609,6 @@ static bool export_html_emit_paragraphs(void *p_context, MCFieldExportEventType 
 	
 	return true;
 }
-
-#ifdef LEGACY_EXEC
-void MCField::exportashtmltext(MCExecPoint& ep, MCParagraph *p_paragraphs, int32_t p_start_index, int32_t p_finish_index, bool p_effective)
-{
-	MCAutoStringRef t_string;
-
-	if (exportashtmltext(p_paragraphs, p_start_index, p_finish_index, p_effective, &t_string))
-		/* UNCHECKED */ ep . setvalueref(*t_string);
-	else
-		ep . clear();
-}
-
-void MCField::exportashtmltext(uint32_t p_part_id, MCExecPoint& ep, int32_t p_start_index, int32_t p_finish_index, bool p_effective)
-{
-	exportashtmltext(ep, resolveparagraphs(p_part_id), p_start_index, p_finish_index, p_effective);
-}
-#endif
 
 bool MCField::exportashtmltext(uint32_t p_part_id, int32_t p_start_index, int32_t p_finish_index, bool p_effective, MCDataRef& r_text)
 {
@@ -1445,7 +1429,7 @@ static void import_html_append_unicode_char(import_html_t& ctxt, uint32_t p_code
 	
 	// If the text is currently native (and there is some) or if the styling has changed
 	// then flush.
-	if (!ctxt . is_unicode && ctxt . byte_count > 0 ||
+	if ((!ctxt . is_unicode && ctxt . byte_count > 0) ||
 		!import_html_equal_style(ctxt . last_used_style, ctxt . styles[ctxt . style_index] . style))
 		import_html_flush_chars(ctxt);
 	
@@ -1615,7 +1599,7 @@ static void import_html_change_style(import_html_t& ctxt, const import_html_tag_
 			for(uint32_t i = 0; i < p_tag . attr_count; i++)
 			{
 				// MW-2012-03-16: [[ Bug ]] LinkText without link style is encoded with a 'name' attr.
-				if (p_tag . attrs[i] . type == kImportHtmlAttrName || p_tag . attrs[i] . type == kImportHtmlAttrHref)
+				if (p_tag . attrs[i] . value != nil && (p_tag . attrs[i] . type == kImportHtmlAttrName || p_tag . attrs[i] . type == kImportHtmlAttrHref))
 				{
 					MCValueRelease(t_linktext);
 					/* UNCHECKED */ MCStringCreateWithNativeChars((const char_t *)p_tag . attrs[i] . value, strlen(p_tag . attrs[i] . value), t_linktext);
@@ -1642,8 +1626,13 @@ static void import_html_change_style(import_html_t& ctxt, const import_html_tag_
 			for(uint32_t i = 0; i < p_tag . attr_count; i++)
 				if (p_tag . attrs[i] . type == kImportHtmlAttrSrc)
 				{
-					MCValueRelease(t_src);
-					/* UNCHECKED */ MCStringCreateWithNativeChars((const char_t *)p_tag . attrs[i] . value, strlen(p_tag . attrs[i] . value), t_src);
+					// PM-2015-02-05: [[ Bug 16853 ]] Allow spaces between <atribute_name> and "=" sign
+					// Nil-check before passing it to strlen
+					if (p_tag . attrs[i] . value != nil)
+					{
+						MCValueRelease(t_src);
+						/* UNCHECKED */ MCStringCreateWithNativeChars((const char_t *)p_tag . attrs[i] . value, strlen(p_tag . attrs[i] . value), t_src);
+					}
 				}
 			
 			if (t_src != nil)
@@ -1698,10 +1687,8 @@ static void import_html_change_style(import_html_t& ctxt, const import_html_tag_
 							/* UNCHECKED */ MCStringCreateWithCString(p_tag . attrs[i] . value, &t_value);
 							if (p_tag . attrs[i] . value != nil && MCscreen -> parsecolor(*t_value, t_color, nil))
 							{
-								MCscreen -> alloccolor(t_color);
-								
 								t_style . has_text_color = true;
-								t_style . text_color = t_color . pixel;
+								t_style . text_color = MCColorGetPixel(t_color);
 							}
 						}
 						break;
@@ -1712,12 +1699,12 @@ static void import_html_change_style(import_html_t& ctxt, const import_html_tag_
 							MCColor t_color;
 							if (p_tag . attrs[i] . value != nil && MCscreen -> parsecolor(*t_value, t_color, nil))
 							{
-								MCscreen -> alloccolor(t_color);
-								
 								t_style . has_background_color = true;
-								t_style . background_color = t_color . pixel;
+								t_style . background_color = MCColorGetPixel(t_color);
 							}
 						}
+						break;
+					default:
 						break;
 					}
 				}
@@ -1749,7 +1736,7 @@ static void import_html_change_style(import_html_t& ctxt, const import_html_tag_
 			MCStringRef t_metadata;
 			t_metadata = nil;
 			for(uint32_t i = 0; i < p_tag . attr_count; i++)
-				if (p_tag . attrs[i] . type == kImportHtmlAttrMetadata)
+				if (p_tag . attrs[i] . value != nil && p_tag . attrs[i] . type == kImportHtmlAttrMetadata)
 				{
 					MCValueRelease(t_metadata);
 					MCStringCreateWithCString(p_tag . attrs[i] . value, t_metadata);
@@ -1788,6 +1775,8 @@ static void import_html_change_style(import_html_t& ctxt, const import_html_tag_
 			break;
 		case kImportHtmlTagThreeDBox:
 			import_html_add_textstyle_to_style(t_style, FA_3D_BOX);
+			break;
+		default:
 			break;
 	}
 	
@@ -1883,9 +1872,8 @@ static void import_html_parse_paragraph_attrs(import_html_tag_t& p_tag, MCFieldP
 				MCColor t_color;
 				if (MCscreen -> parsecolor(*t_value_str, t_color, nil))
 				{
-					MCscreen -> alloccolor(t_color);
 					r_style . has_background_color = true;
-					r_style . background_color = t_color . pixel;
+					r_style . background_color = MCColorGetPixel(t_color);
 				}
             }
 			break;
@@ -1901,9 +1889,8 @@ static void import_html_parse_paragraph_attrs(import_html_tag_t& p_tag, MCFieldP
 				MCColor t_color;
 				if (MCscreen -> parsecolor(*t_value_str, t_color, nil))
 				{
-					MCscreen -> alloccolor(t_color);
 					r_style . has_border_color = true;
-					r_style . border_color = t_color . pixel;
+					r_style . border_color = MCColorGetPixel(t_color);
 				}
             }
 			break;
@@ -1929,6 +1916,8 @@ static void import_html_parse_paragraph_attrs(import_html_tag_t& p_tag, MCFieldP
 			case kImportHtmlAttrHidden:
 				r_style . hidden = true;
 			break;
+			default:
+				break;
 		}
 	}
 }
@@ -2205,6 +2194,9 @@ MCParagraph *MCField::importhtmltext(MCValueRef p_text)
                                 case kImportHtmlTagH6:
                                     t_font_size = 10, t_font_style = FA_BOLD;
                                     break;
+								default:
+									MCUnreachable();
+									break;
                             }
                             
                             if (t_font_style != 0)
@@ -2269,6 +2261,8 @@ MCParagraph *MCField::importhtmltext(MCValueRef p_text)
                         else
                             import_html_change_style(ctxt, t_tag);
                         break;
+					default:
+						break;
 				}
                 
 				t_saw_start_tag = !t_tag . is_terminator;

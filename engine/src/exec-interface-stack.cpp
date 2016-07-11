@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -46,6 +46,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "external.h"
 
 #include "exec-interface.h"
+#include "osspec.h"
 
 //////////
 
@@ -344,6 +345,8 @@ void MCStack::SetFullscreen(MCExecContext& ctxt, bool setting)
         // IM-2014-01-16: [[ StackScale ]] Save the old rect here as view_setfullscreen() will update the stack rect
         if (setting)
             old_rect = rect;
+        else
+            rect = old_rect;
         
         // IM-2014-02-12: [[ Bug 11783 ]] We may also need to reset the fonts on Windows when
         //   fullscreen is changed
@@ -436,9 +439,6 @@ void MCStack::SetName(MCExecContext& ctxt, MCStringRef p_name)
 			// If the name has changed process...
 			if (!hasname(*t_old_name))
 			{
-				bool t_is_mainstack;
-				t_is_mainstack = MCdispatcher -> ismainstack(this) == True;
-
 				// First flush any references to parentScripts on this stack
 				MCParentScript::FlushStack(this);
 				setextendedstate(false, ECS_HAS_PARENTSCRIPTS);
@@ -628,10 +628,12 @@ void MCStack::SetCantModify(MCExecContext& ctxt, bool setting)
 			return;
 		}
 		if (mode == WM_TOP_LEVEL || mode == WM_TOP_LEVEL_LOCKED)
+		{
 			if (flags & F_CANT_MODIFY || !MCdispatcher->cut(True))
 				mode = WM_TOP_LEVEL_LOCKED;
 			else
 				mode = WM_TOP_LEVEL;
+		}
 		stopedit();
 		dirtywindowname();
 		resetcursor(True);
@@ -836,12 +838,12 @@ void MCStack::SetMetal(MCExecContext& ctxt, bool setting)
 	SetDecoration(P_METAL, setting);
 }
 
-void MCStack::GetShadow(MCExecContext& ctxt, bool& r_setting)
+void MCStack::GetWindowShadow(MCExecContext& ctxt, bool& r_setting)
 {
 	r_setting = (flags & F_DECORATIONS && decorations & WD_NOSHADOW) == False;
 }
 
-void MCStack::SetShadow(MCExecContext& ctxt, bool setting)
+void MCStack::SetWindowShadow(MCExecContext& ctxt, bool setting)
 {
 	SetDecoration(P_SHADOW, setting);
 }
@@ -999,7 +1001,7 @@ void MCStack::SetIcon(MCExecContext& ctxt, uinteger_t p_id)
 void MCStack::GetOwner(MCExecContext& ctxt, MCStringRef& r_owner)
 {
 	if (parent != nil && !MCdispatcher -> ismainstack(this))
-		parent -> GetLongId(ctxt, r_owner);
+		parent -> GetLongId(ctxt, 0, r_owner);
 }
 
 void MCStack::GetMainStack(MCExecContext& ctxt, MCStringRef& r_main_stack)
@@ -1073,6 +1075,9 @@ void MCStack::SetMainStack(MCExecContext& ctxt, MCStringRef p_main_stack)
 			parent = stackptr;
 		}
 
+        // Any inherited properties have changed so force a redraw
+        dirtyall();
+        
 		// OK-2008-04-10 : Added parameters to mainstackChanged message to specify the new
 		// and old mainstack names.
 		message_with_valueref_args(MCM_main_stack_changed, t_old_stackptr -> getname(), stackptr -> getname());
@@ -1413,7 +1418,7 @@ void MCStack::SetWmPlace(MCExecContext& ctxt, bool setting)
 
 void MCStack::GetWindowId(MCExecContext& ctxt, uinteger_t& r_id)
 {
-	r_id = MCscreen -> dtouint4((Drawable)window);
+    r_id = MCscreen -> dtouint((Drawable)window);
 }
 
 void MCStack::GetPixmapId(MCExecContext& ctxt, uinteger_t& r_id)
@@ -1480,7 +1485,7 @@ void MCStack::SetStackFiles(MCExecContext& ctxt, MCStringRef p_files)
 		MCValueRelease(stackfiles[nstackfiles].stackname);
 		MCValueRelease(stackfiles[nstackfiles].filename);
 	}
-	delete stackfiles;
+	delete[] stackfiles; /* Allocated with new[] */
 
     if (stringtostackfiles(p_files, &stackfiles, nstackfiles))
         return;
@@ -1490,7 +1495,7 @@ void MCStack::SetStackFiles(MCExecContext& ctxt, MCStringRef p_files)
 
 void MCStack::GetMenuBar(MCExecContext& ctxt, MCStringRef& r_menubar)
 {
-	r_menubar = (MCStringRef)MCValueRetain(getmenubar());
+	r_menubar = MCValueRetain(MCNameGetString(getmenubar()));
 }
 
 void MCStack::SetMenuBar(MCExecContext& ctxt, MCStringRef p_menubar)
@@ -1597,9 +1602,6 @@ void MCStack::SetLinkAtt(MCExecContext& ctxt, Properties which, MCInterfaceNamed
 			linkatts->colorname = MClinkatts.colorname == nil ? nil : MCValueRetain(MClinkatts.colorname);
 			linkatts->hilitecolorname = MClinkatts.hilitecolorname == nil ? nil : MCValueRetain(MClinkatts.hilitecolorname);
 			linkatts->visitedcolorname = MClinkatts.visitedcolorname == nil ? nil : MCValueRetain(MClinkatts.visitedcolorname);
-			MCscreen->alloccolor(linkatts->color);
-			MCscreen->alloccolor(linkatts->hilitecolor);
-			MCscreen->alloccolor(linkatts->visitedcolor);
 		}
 		switch (which)
 		{
@@ -1726,9 +1728,6 @@ void MCStack::SetUnderlineLinks(MCExecContext& ctxt, bool* p_value)
             linkatts->colorname = MClinkatts.colorname == nil ? nil : MCValueRetain(MClinkatts.colorname);
             linkatts->hilitecolorname = MClinkatts.hilitecolorname == nil ? nil : MCValueRetain(MClinkatts.hilitecolorname);
             linkatts->visitedcolorname = MClinkatts.visitedcolorname == nil ? nil : MCValueRetain(MClinkatts.visitedcolorname);
-            MCscreen->alloccolor(linkatts->color);
-            MCscreen->alloccolor(linkatts->hilitecolor);
-            MCscreen->alloccolor(linkatts->visitedcolor);
         }
 
         linkatts->underline = *p_value;
@@ -1806,7 +1805,11 @@ void MCStack::GetScreen(MCExecContext& ctxt, integer_t& r_screen)
 {
 	const MCDisplay *t_display;
 	t_display = MCscreen -> getnearestdisplay(rect);
-	r_screen = t_display -> index + 1;
+    
+    if (t_display != nil)
+        r_screen = t_display -> index + 1;
+    else
+        r_screen = 0;
 }
 
 void MCStack::GetCurrentCard(MCExecContext& ctxt, MCStringRef& r_card)
@@ -2171,3 +2174,87 @@ void MCStack::GetIgnoreMouseEvents(MCExecContext &ctxt, bool &r_ignored)
     r_ignored = getextendedstate(ECS_IGNORE_MOUSE_EVENTS);
 }
 
+// MERG-2015-08-31: [[ ScriptOnly ]] Setter and getter for scriptOnly
+void MCStack::GetScriptOnly(MCExecContext& ctxt, bool& r_script_only)
+{
+    r_script_only = isscriptonly();
+}
+
+void MCStack::SetScriptOnly(MCExecContext& ctxt, bool p_script_only)
+{
+    if (haspassword())
+    {
+        ctxt . LegacyThrow(EE_SCRIPT_ONLY_STACK_NOPASSWORD);
+        return;
+    }
+    
+    m_is_script_only = p_script_only;
+}
+
+// MERG-2015-10-11: [[ DocumentFilename ]] Add stack documentFilename property
+void MCStack::GetDocumentFilename(MCExecContext &ctxt, MCStringRef& r_document_filename)
+{
+    r_document_filename = MCValueRetain(m_document_filename);
+}
+
+void MCStack::SetDocumentFilename(MCExecContext &ctxt, MCStringRef p_document_filename)
+{
+    MCStringRef t_resolved_filename;
+    
+    if (MCStringIsEmpty(p_document_filename))
+    {
+        t_resolved_filename = p_document_filename;
+    }
+    else if (!MCS_resolvepath(p_document_filename, t_resolved_filename))
+    {
+        ctxt . LegacyThrow(EE_DOCUMENTFILENAME_BADFILENAME);
+        return;
+    }
+    
+    MCValueAssign(m_document_filename, t_resolved_filename);
+    
+    updatedocumentfilename();
+
+}
+
+void MCStack::SetTheme(MCExecContext& ctxt, intenum_t p_theme)
+{
+    MCObject::SetTheme(ctxt, p_theme);
+    MCRedrawDirtyScreen();
+}
+
+void MCStack::GetShowInvisibleObjects(MCExecContext &ctxt, bool *&r_show_invisibles)
+{
+	MCStackObjectVisibility t_visibility;
+	t_visibility = gethiddenobjectvisibility();
+	
+	switch (gethiddenobjectvisibility())
+	{
+		case kMCStackObjectVisibilityDefault:
+			r_show_invisibles = nil;
+			break;
+			
+		case kMCStackObjectVisibilityShow:
+			*r_show_invisibles = true;
+			break;
+			
+		case kMCStackObjectVisibilityHide:
+			*r_show_invisibles = false;
+			break;
+	}
+}
+
+void MCStack::SetShowInvisibleObjects(MCExecContext &ctxt, bool *p_show_invisibles)
+{
+	if (p_show_invisibles == nil)
+		sethiddenobjectvisibility(kMCStackObjectVisibilityDefault);
+	else if (*p_show_invisibles)
+		sethiddenobjectvisibility(kMCStackObjectVisibilityShow);
+	else
+		sethiddenobjectvisibility(kMCStackObjectVisibilityHide);
+}
+
+void MCStack::GetEffectiveShowInvisibleObjects(MCExecContext& ctxt, bool& r_value)
+{
+	r_value = geteffectiveshowinvisibleobjects();
+}

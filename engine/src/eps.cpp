@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -22,7 +22,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "parsedef.h"
 #include "mcio.h"
 
-//#include "execpt.h"
+
 #include "util.h"
 #include "mcerror.h"
 #include "sellst.h"
@@ -98,8 +98,8 @@ MCEPS::MCEPS(const MCEPS &sref) : MCControl(sref)
 
 MCEPS::~MCEPS()
 {
-	delete postscript;
-	delete prolog;
+	delete[] postscript; /* Allocated with new[] */
+	delete[] prolog; /* Allocated with new [] */
 	delete pageIndex;
 	delete image;
 }
@@ -181,7 +181,7 @@ Boolean MCEPS::mup(uint2 which, bool p_release)
 	return True;
 }
 
-void MCEPS::setrect(const MCRectangle &nrect)
+void MCEPS::applyrect(const MCRectangle &nrect)
 {
 	if (rect.width != nrect.width || rect.height != nrect.height)
 	{
@@ -192,250 +192,9 @@ void MCEPS::setrect(const MCRectangle &nrect)
 		rect = nrect;
 }
 
-#ifdef LEGACY_EXEC
-Exec_stat MCEPS::getprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, Boolean effective)
+IO_stat MCEPS::extendedsave(MCObjectOutputStream& p_stream, uint4 p_part, uint32_t p_version)
 {
-	switch (which)
-	{
-#ifdef /* MCEPS::getprop */ LEGACY_EXEC
-	case P_SIZE:
-		ep.setint(size);
-		break;
-	case P_ANGLE:
-		ep.setr8(angle, ep.getnffw(), ep.getnftrailing(), ep.getnfforce());
-		break;
-	case P_POSTSCRIPT:
-		ep.setsvalue(postscript);
-		break;
-	case P_PROLOG:
-		ep.setsvalue(prolog);
-		break;
-	case P_RETAIN_IMAGE:
-		ep.setboolean(getflag(F_RETAIN_IMAGE));
-		break;
-	case P_RETAIN_POSTSCRIPT:
-		ep.setboolean(getflag(F_RETAIN_POSTSCRIPT));
-		break;
-	case P_SCALE_INDEPENDENTLY:
-		ep.setboolean(getflag(F_SCALE_INDEPENDENTLY));
-		break;
-	case P_BOUNDING_RECT:
-		ep.setrectangle(tx, ty, tx + ex, ty + ey);
-		break;
-	case P_SCALE:
-	case P_X_SCALE:
-		ep.setr8(xscale, ep.getnffw(), ep.getnftrailing(), ep.getnfforce());
-		break;
-	case P_Y_SCALE:
-		ep.setr8(yscale, ep.getnffw(), ep.getnftrailing(), ep.getnfforce());
-		break;
-	case P_X_OFFSET:
-		ep.setint(tx);
-		break;
-	case P_Y_OFFSET:
-		ep.setint(ty);
-		break;
-	case P_X_EXTENT:
-		ep.setint(ex);
-		break;
-	case P_Y_EXTENT:
-		ep.setint(ey);
-		break;
-	case P_CURRENT_PAGE:
-		ep.setint(MCU_max(curpage, 1));
-		break;
-	case P_PAGE_COUNT:
-		ep.setint(MCU_max(pagecount, 1));
-		break;
-#endif /* MCEPS::getprop */
-	default:
-		return MCControl::getprop_legacy(parid, which, ep, effective);
-	}
-	return ES_NORMAL;
-}
-#endif
-
-#ifdef LEGACY_EXEC
-Exec_stat MCEPS::setprop_legacy(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
-{
-	Boolean dirty = True;
-	real8 n;
-	int2 i;
-	int2 i1, i2, i3, i4;
-	MCString data = ep.getsvalue();
-
-	switch (p)
-	{
-#ifdef /* MCEPS::setprop */ LEGACY_EXEC
-	case P_TRAVERSAL_ON:
-	case P_SHOW_BORDER:
-		if (MCControl::setprop(parid, p, ep, effective) != ES_NORMAL)
-			return ES_ERROR;
-		resetscale();
-		break;
-	case P_ANGLE:
-		if (!MCU_stoi2(data, i))
-		{
-			MCeerror->add
-			(EE_OBJECT_NAN, 0, 0, data);
-			return ES_ERROR;
-		}
-		angle = i;
-		break;
-	case P_POSTSCRIPT:
-		delete postscript;
-		postscript = data.clone();
-		size = data.getlength() + 1;
-		setextents();
-		resetscale();
-		break;
-	case P_PROLOG:
-		delete prolog;
-		prolog = data.clone();
-		break;
-	case P_RETAIN_IMAGE:
-		if (!MCU_matchflags(data, flags, F_RETAIN_IMAGE, dirty))
-		{
-			MCeerror->add
-			(EE_OBJECT_NAB, 0, 0, data);
-			return ES_ERROR;
-		}
-		dirty = False;
-		break;
-	case P_RETAIN_POSTSCRIPT:
-		if (!MCU_matchflags(data, flags, F_RETAIN_POSTSCRIPT, dirty))
-		{
-			MCeerror->add
-			(EE_OBJECT_NAB, 0, 0, data);
-			return ES_ERROR;
-		}
-		dirty = False;
-		break;
-	case P_SCALE_INDEPENDENTLY:
-		if (!MCU_matchflags(data, flags, F_SCALE_INDEPENDENTLY, dirty))
-		{
-			MCeerror->add
-			(EE_OBJECT_NAB, 0, 0, data);
-			return ES_ERROR;
-		}
-		if (dirty)
-			resetscale();
-		break;
-	case P_BOUNDING_RECT:
-		if (!MCU_stoi2x4(data, i1, i2, i3, i4))
-		{
-			MCeerror->add
-			(EE_OBJECT_NAR, 0, 0, data);
-			return ES_ERROR;
-		}
-		if (tx != i1 || ty != i2 || tx + ex != i3 || ty + ey != i4)
-		{
-			tx = i1;
-			ty = i2;
-			ex = MCU_max(i3 - i1, 1);
-			ey = MCU_max(i4 - i2, 1);
-			resetscale();
-		}
-		else
-			dirty = False;
-		break;
-	case P_SCALE:
-		if (!MCU_stor8(data, n))
-		{
-			MCeerror->add
-			(EE_OBJECT_NAN, 0, 0, data);
-			return ES_ERROR;
-		}
-		xscale = yscale = n;
-		break;
-	case P_X_SCALE:
-		if (!MCU_stor8(data, n))
-		{
-			MCeerror->add
-			(EE_OBJECT_NAN, 0, 0, data);
-			return ES_ERROR;
-		}
-		xscale = n;
-		ex = (uint2)(rect.width * xf / xscale + 0.5);
-		flags |= F_SCALE_INDEPENDENTLY;
-		break;
-	case P_Y_SCALE:
-		if (!MCU_stor8(data, n))
-		{
-			MCeerror->add
-			(EE_OBJECT_NAN, 0, 0, data);
-			return ES_ERROR;
-		}
-		yscale = n;
-		ey = (uint2)(rect.height * yf / yscale + 0.5);
-		flags |= F_SCALE_INDEPENDENTLY;
-		break;
-	case P_X_OFFSET:
-		if (!MCU_stoi2(data, i))
-		{
-			MCeerror->add
-			(EE_OBJECT_NAN, 0, 0, data);
-			return ES_ERROR;
-		}
-		tx = i;
-		break;
-	case P_Y_OFFSET:
-		if (!MCU_stoi2(data, i))
-		{
-			MCeerror->add
-			(EE_OBJECT_NAN, 0, 0, data);
-			return ES_ERROR;
-		}
-		ty = i;
-		break;
-	case P_X_EXTENT:
-		if (!MCU_stoi2(data, i))
-		{
-			MCeerror->add
-			(EE_OBJECT_NAN, 0, 0, data);
-			return ES_ERROR;
-		}
-		ex = i;
-		resetscale();
-		break;
-	case P_Y_EXTENT:
-		if (!MCU_stoi2(data, i))
-		{
-			MCeerror->add
-			(EE_OBJECT_NAN, 0, 0, data);
-			return ES_ERROR;
-		}
-		ey = i;
-		resetscale();
-		break;
-	case P_CURRENT_PAGE:    //set eps current page to display
-		if (!MCU_stoi2(data, i))
-		{
-			MCeerror->add
-			(EE_OBJECT_NAN, 0, 0, data);
-			return ES_ERROR;
-		}
-		if ((uint2)i > pagecount)
-			curpage = pagecount;
-		else
-			curpage = i;
-		break;
-#endif /* MCEPS::setprop */
-	default:
-		return MCControl::setprop_legacy(parid, p, ep, effective);
-	}
-	if (dirty && opened)
-	{
-		// MW-2011-08-18: [[ Layers ]] Invalidate the whole object.
-		layer_redrawall();
-	}
-	return ES_NORMAL;
-}
-#endif
-
-IO_stat MCEPS::extendedsave(MCObjectOutputStream& p_stream, uint4 p_part)
-{
-	return defaultextendedsave(p_stream, p_part);
+	return defaultextendedsave(p_stream, p_part, p_version);
 }
 
 IO_stat MCEPS::extendedload(MCObjectInputStream& p_stream, uint32_t p_version, uint4 p_length)
@@ -443,13 +202,13 @@ IO_stat MCEPS::extendedload(MCObjectInputStream& p_stream, uint32_t p_version, u
 	return defaultextendedload(p_stream, p_version, p_length);
 }
 
-IO_stat MCEPS::save(IO_handle stream, uint4 p_part, bool p_force_ext)
+IO_stat MCEPS::save(IO_handle stream, uint4 p_part, bool p_force_ext, uint32_t p_version)
 {
 	IO_stat stat;
 
 	if ((stat = IO_write_uint1(OT_MCEPS, stream)) != IO_NORMAL)
 		return stat;
-	if ((stat = MCObject::save(stream, p_part, p_force_ext)) != IO_NORMAL)
+	if ((stat = MCObject::save(stream, p_part, p_force_ext, p_version)) != IO_NORMAL)
 		return stat;
 	if ((stat = IO_write_uint4(size, stream)) != IO_NORMAL)
 		return stat;
@@ -474,7 +233,7 @@ IO_stat MCEPS::save(IO_handle stream, uint4 p_part, bool p_force_ext)
 	if ((stat = IO_write_uint2(ey, stream)) != IO_NORMAL)
 		return stat;
 	if (flags & F_RETAIN_IMAGE)
-		if ((stat = image->save(stream, p_part, p_force_ext)) != IO_NORMAL)
+		if ((stat = image->save(stream, p_part, p_force_ext, p_version)) != IO_NORMAL)
 			return stat;
 	if ((stat = IO_write_uint2(curpage, stream)) != IO_NORMAL)
 		return stat;
@@ -484,7 +243,7 @@ IO_stat MCEPS::save(IO_handle stream, uint4 p_part, bool p_force_ext)
 	for (i = 0 ; i < pagecount ; i++)
 		if ((stat = IO_write_uint4(pageIndex[i], stream)) != IO_NORMAL)
 			return stat;
-	return savepropsets(stream);
+	return savepropsets(stream, p_version);
 }
 
 MCControl *MCEPS::clone(Boolean attach, Object_pos p, bool invisible)
@@ -565,8 +324,6 @@ void MCEPS::draw(MCDC *dc, const MCRectangle &dirty, bool p_isolated, bool p_spr
 			drawborder(dc, trect, borderwidth);
 	if (getstate(CS_KFOCUSED))
 		drawfocus(dc, dirty);
-	if (state & CS_SELECTED)
-		drawselected(dc);
 }
 
 IO_stat MCEPS::load(IO_handle stream, uint32_t version)
@@ -574,59 +331,59 @@ IO_stat MCEPS::load(IO_handle stream, uint32_t version)
 	IO_stat stat;
 
 	if ((stat = MCObject::load(stream, version)) != IO_NORMAL)
-		return stat;
+		return checkloadstat(stat);
 	delete postscript;
 	delete prolog;
 	if ((stat = IO_read_uint4(&size, stream)) != IO_NORMAL)
-		return stat;
+		return checkloadstat(stat);
 	postscript = new char[size + 1];
 	if ((stat = IO_read(postscript, size, stream)) != IO_NORMAL)
-		return stat;
+		return checkloadstat(stat);
 	postscript[size] = '\0';
 	// MW-2013-11-19: [[ UnicodeFileFormat ]] EPS is always ASCII so legacy.
 	if ((stat = IO_read_cstring_legacy(prolog, stream, 2)) != IO_NORMAL)
-		return stat;
+		return checkloadstat(stat);
 	int4 i;
 	if ((stat = IO_read_int4(&i, stream)) != IO_NORMAL)
-		return stat;
+		return checkloadstat(stat);
 	xscale = MCU_i4tor8(i);
 	if (flags & F_SCALE_INDEPENDENTLY)
 	{
 		if ((stat = IO_read_int4(&i, stream)) != IO_NORMAL)
-			return stat;
+			return checkloadstat(stat);
 		yscale = MCU_i4tor8(i);
 	}
 	else
 		yscale = xscale;
 	if ((stat = IO_read_int2(&angle, stream)) != IO_NORMAL)
-		return stat;
+		return checkloadstat(stat);
 	if ((stat = IO_read_int2(&tx, stream)) != IO_NORMAL)
-		return stat;
+		return checkloadstat(stat);
 	if ((stat = IO_read_int2(&ty, stream)) != IO_NORMAL)
-		return stat;
+		return checkloadstat(stat);
 	if ((stat = IO_read_uint2(&ex, stream)) != IO_NORMAL)
-		return stat;
+		return checkloadstat(stat);
 	if ((stat = IO_read_uint2(&ey, stream)) != IO_NORMAL)
-		return stat;
+		return checkloadstat(stat);
 	if (flags & F_RETAIN_IMAGE)
 	{
 		image = new MCImage;
 		image->setparent(this);
 		if ((stat = image->load(stream, version)) != IO_NORMAL)
-			return stat;
+			return checkloadstat(stat);
 	}
 	if (version > 1300)
 	{
 		if ((stat = IO_read_uint2(&curpage, stream)) != IO_NORMAL)
-			return stat;
+			return checkloadstat(stat);
 		if ((stat = IO_read_uint2(&pagecount, stream)) != IO_NORMAL)
-			return stat;
+			return checkloadstat(stat);
 		if (pagecount > 0)
 		{
 			pageIndex = new uint4[pagecount];
 			for (i = 0 ; i < pagecount ; i++)
 				if ((stat = IO_read_uint4(&pageIndex[i], stream)) != IO_NORMAL)
-					return stat;
+					return checkloadstat(stat);
 		}
 	}
 	return loadpropsets(stream, version);

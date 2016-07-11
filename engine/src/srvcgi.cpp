@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -22,7 +22,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "parsedef.h"
 #include "mcio.h"
 
-//#include "execpt.h"
+
 #include "exec.h"
 #include "scriptpt.h"
 #include "globals.h"
@@ -62,7 +62,7 @@ static MCVariable *s_cgi_files;      // ArrayRef
 static MCVariable *s_cgi_get;        // nativised StringRef
 static MCVariable *s_cgi_get_raw;    // StringRef
 static MCVariable *s_cgi_get_binary; // DataRef
-static MCVariable *s_cgi_cookie;     // StringRef
+static MCVariable *s_cgi_cookie;     // ArrayRef
 
 static bool s_cgi_processed_post = false;
 
@@ -71,6 +71,11 @@ static bool s_cgi_processed_post = false;
 // cache reader handle around it when reading from stdin
 class MCStreamCache;
 static MCStreamCache *s_cgi_stdin_cache;
+
+/* Maximum number of POST variables permitted. */
+enum {
+	kMCCGIMaxFormFields = (1<<10),
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -169,7 +174,7 @@ public:
 		return m_delegate -> GetFilePointer();
 	}
 	
-	int64_t GetFileSize(void)
+	uint64_t GetFileSize(void)
 	{
 		return m_delegate -> GetFileSize();
 	}
@@ -486,10 +491,10 @@ public:
 	
 	void* GetFilePointer()
 	{
-		return false;
+		return NULL;
 	}
 	
-	int64_t GetFileSize()
+	uint64_t GetFileSize()
 	{
 		return 0;
     }
@@ -595,10 +600,119 @@ static void cgi_fetch_valueref_for_key(MCVariable *p_variable, MCNameRef p_key, 
     r_var_value = p_variable->getvalueref(&p_key, 1, false);
 }
 
-static bool cgi_store_control_value(MCVariable *p_variable, MCNameRef p_key, MCValueRef p_value)
+/*
+ * SN-2015-09-21: [[ Bug 15946 ]] Ensure that the variables are parsed correctly
+ *
+ * p_raw_key is a sequence of keys and values passed by stdin to the CGI script.
+ * The value contained can be located in a variable or in an array, in the form
+ *    array[subkey1][][subkey2]=value
+ *
+ * We need to parse that sequence of keys in an array of MCNameRef, that
+ * MCArrayStoreValue will understand.
+ * Some of the keys can be unnamed ('[]' is then used), and we translate them
+ * into a numerical sequence.
+ *
+ * The input
+ *      array[]=value1
+ * will output the array
+ *      array[1]=value1
+ */
+static bool cgi_store_control_value(MCVariable *p_variable, MCNameRef p_raw_key, MCValueRef p_value)
 {
-    return p_variable->setvalueref(&p_key, 1, false, p_value);
+    MCStringRef t_raw_key_str;
+    t_raw_key_str = MCNameGetString(p_raw_key);
+
+    uindex_t t_key_end;
+
+    // Use the full key if there is no subkey
+    if (!MCStringFirstIndexOfChar(t_raw_key_str, '[', 0, kMCStringOptionCompareExact, t_key_end))
+    {
+        return p_variable -> setvalueref(&p_raw_key, 1, false, p_value);
+    }
+
+    // Store the key path.
+    MCAutoNameRefArray t_path;
+    MCValueRef t_fetched_value;
+
+    // We get the value for the first key.
+    MCAutoStringRef t_key_str;
+    MCNewAutoNameRef t_key;
+
+    // We fetch the initial key
+    if (!MCStringCopySubstring(t_raw_key_str, MCRangeMake(0, t_key_end), &t_key_str)
+            || !MCNameCreate(*t_key_str, &t_key)
+            || !t_path . Push(*t_key))
+        return false;
+
+    t_fetched_value = p_variable -> getvalueref(*t_path, t_path . Count(), false);
+
+    uindex_t t_subkey_start, t_subkey_end;
+
+    // Initialise t_subkey_end to find the first subkey after the initial key
+    t_subkey_end = t_key_end;
+
+    while (MCStringFirstIndexOfChar(t_raw_key_str, '[', t_subkey_end, kMCStringOptionCompareExact, t_subkey_start))
+    {
+        // Fetch the value at the current path.
+        t_fetched_value = p_variable -> getvalueref(*t_path, t_path . Count(), false);
+
+        // The subkey starts after the '['
+        t_subkey_start++;
+
+        if (!MCStringFirstIndexOfChar(t_raw_key_str, ']', t_subkey_start, kMCStringOptionCompareExact, t_subkey_end))
+            return false;
+
+        MCAutoStringRef t_subkey_str;
+        MCNewAutoNameRef t_subkey;
+        // We create the subkeys as needed (unnamed keys are translated to
+        //  indices).
+        if (t_subkey_end == t_subkey_start)
+        {
+            // Subkey with no name: we must use an index
+            uindex_t t_index;
+
+            // getvalueref returns kMCEmptyString if the key path does not lead to
+            //  an existing value.
+            if (t_fetched_value == kMCEmptyString
+                    || !MCValueIsArray(t_fetched_value))
+            {
+                // Not an array: we put the value at the index 1
+                t_index = 1;
+            }
+            else if (MCArrayIsSequence((MCArrayRef)t_fetched_value))
+            {
+                // Sequence: we put after the last element
+                t_index = MCArrayGetCount((MCArrayRef)t_fetched_value) + 1;
+            }
+            else
+            {
+                // We get the first index available in the fetched array
+                MCValueRef t_indexed_value;
+                for (t_index = 1; MCArrayFetchValueAtIndex((MCArrayRef)t_fetched_value, t_index, t_indexed_value); ++t_index)
+                    ;
+            }
+
+            if (!MCStringFormat(&t_subkey_str, "%u", t_index))
+                return false;
+        }
+        else
+        {
+            // We have a named key, we just add the name to the path.
+            if (!MCStringCopySubstring(t_raw_key_str, MCRangeMake(t_subkey_start, t_subkey_end - t_subkey_start), &t_subkey_str))
+                return false;
+        }
+
+        // Create a name from the subkey string, and append it to the path
+        if (!MCNameCreate(*t_subkey_str, &t_subkey)
+                || !t_path . Push(*t_subkey))
+            return false;
+    }
+
+    // Store the value at the built key path - setvalueref will take care of
+    //  creating subarrays if needed.
+    return p_variable -> setvalueref(*t_path, t_path . Count(), false, p_value);
 }
+
 
 static bool MCConvertNativeFromUTF16(const uint16_t *p_chars, uint32_t p_char_count, uint8_t*& r_output, uint32_t& r_output_length);
 static bool MCConvertNativeFromWindows1252(const uint8_t *p_chars, uint32_t p_char_count, uint8_t*& r_output, uint32_t& r_output_length);
@@ -619,6 +733,8 @@ static bool cgi_native_from_encoding(MCSOutputTextEncoding p_encoding, MCDataRef
         t_encoding = kMCStringEncodingISO8859_1;
     else if (p_encoding == kMCSOutputTextEncodingNative)
         t_encoding = kMCStringEncodingNative;
+    else // kMCSOutputTextEncodingUndefined
+        return false;
 
     if (MCStringDecode(p_text, t_encoding, false, r_native_text))
     {
@@ -629,16 +745,20 @@ static bool cgi_native_from_encoding(MCSOutputTextEncoding p_encoding, MCDataRef
         return false;
 }
 
-static void cgi_store_data_urlencoded(MCVariable *p_variable, MCDataRef p_data, bool p_native_encoding, char p_delimiter, bool p_remove_whitespace)
+static void cgi_store_data_urlencoded(MCVariable *p_variable, MCDataRef p_data, bool p_native_encoding, char p_delimiter, bool p_remove_whitespace, uint32_t p_max_values)
 {
     uindex_t t_length;
     uindex_t t_encoded_index;
+	uindex_t t_num_values;
     t_encoded_index = 0;
     t_length = MCDataGetLength(p_data);
+	t_num_values = 0;
 
     while(t_encoded_index < t_length)
     {
         uindex_t t_delimiter_index;
+
+		if (p_max_values > 0 && t_num_values >= p_max_values) break;
 
         if (p_remove_whitespace)
             while (MCDataGetByteAtIndex(p_data, t_encoded_index) == ' ')
@@ -691,28 +811,29 @@ static void cgi_store_data_urlencoded(MCVariable *p_variable, MCDataRef p_data, 
         }
 
         t_encoded_index = t_delimiter_index + 1;
+		++t_num_values;
     }
 }
 
 static void cgi_store_cookie_urlencoded(MCVariable *p_variable, MCDataRef p_data, bool p_native)
 {
-    cgi_store_data_urlencoded(p_variable, p_data, p_native, ';', true);
+    cgi_store_data_urlencoded(p_variable, p_data, p_native, ';', true, 0);
 }
 
 static void cgi_store_form_urlencoded(MCVariable *p_variable, MCDataRef p_data, bool p_native)
 {
-    cgi_store_data_urlencoded(p_variable, p_data, p_native, '&', false);
+    cgi_store_data_urlencoded(p_variable, p_data, p_native, '&', false,
+							  kMCCGIMaxFormFields);
 }
 
 
 static void cgi_fix_path_variables()
 {
-	char *t_path, *t_path_end;
+    char *t_path;
 
 	MCStringRef env;
     env = nil;
-	t_path = nil;
-    t_path_end = nil;
+    t_path = nil;
     
     // SN-2014-07-29: [[ Bug 12865 ]] When a LiveCode CGI script has a .cgi extension and has
     //  the appropriate shebang pointing to the LiveCode server, PATH_TRANSLATED is not set by Apache.
@@ -722,46 +843,68 @@ static void cgi_fix_path_variables()
     else if (MCS_getenv(MCSTR("SCRIPT_FILENAME"), env))
         t_path = strdup(MCStringGetCString(env));
 
-    MCAutoStringRef t_path_string;
-    /* UNCHECKED */ MCStringCreateWithCString(t_path, &t_path_string);
+    // SN-2015-02-11: [[ Bug 14457 ]] We want to split PATH_TRANSLATED
+    //  between what is the real filename (into PATH_TRANSLATED)
+    //  and what was appended to the URI (into PATH_INFO)
+    MCStringRef t_path_string;
+    MCStringRef t_path_info;
              
     if (t_path != nil)
     {
-		t_path_end = t_path + strlen(t_path);
-        
 #ifdef _WINDOWS_SERVER
 		for(uint32_t i = 0; t_path[i] != '\0'; i++)
 			if (t_path[i] == '\\')
 				t_path[i] = '/';
 #endif
-             
-        char t_sep;
-        t_sep = '\0';
+
+        // SN-2015-02-12: [[ Bug 14457 ]] We use a mutable string for
+        //  the path info, as we will need to prepend each segment we
+        //  cut off of the TRANSLATED_PATH.
+        // Initialise path_string and path_info
+        MCAutoStringRef t_mutable_path_info;
+        /* UNCHECKED */ MCStringCreateWithCString(t_path, t_path_string);
+        MCStringCreateMutable(0, &t_mutable_path_info);
         
-        while (!MCS_exists(*t_path_string, True))
+        // SN-2015-02-12: [[ Bug 14457 ]] As long as the path does not lead
+        //  to an existing file, we cut it at the last path separator.
+        //
+        while (!MCS_exists(t_path_string, True))
         {
-            char *t_new_end;
-            t_new_end = strrchr(t_path, '/');
-            *t_path_end = t_sep;
-            if (t_new_end == NULL)
-            {
-                t_sep = '\0';
+            uindex_t t_offset;
+            MCAutoStringRef t_new_path;
+            MCAutoStringRef t_new_path_info;
+
+            // SN-2015-02-11: [[ Bug 14457 ]] If we cannot find any slash, we are done.
+            if (!MCStringLastIndexOfChar(t_path_string, '/', UINDEX_MAX, kMCStringOptionCompareExact, t_offset))
                 break;
-            }
-            t_path_end = t_new_end;
-            t_sep = *t_path_end;
-            *t_path_end = '\0';
+
+            // We take split from the last separator (which must be
+            // included in the tail).
+            if (!MCStringCopySubstring(t_path_string, MCRangeMake(0, t_offset), &t_new_path)
+                    || !MCStringCopySubstring(t_path_string, MCRangeMake(t_offset, UINDEX_MAX), &t_new_path_info))
+                break;
+
+            // SN-2015-02-11: [[ Bug 14457 ]] Update path and path_info
+            MCValueAssign(t_path_string, *t_new_path);
+           /* UNCHECKED */ MCStringPrepend(*t_mutable_path_info, *t_new_path_info);
         }
-        
-        *t_path_end = t_sep;
+
+        // SN-2015-02-12: [[ Bug 14457 ]] We get the constructed path info
+        /* UNCHECKED */ MCStringCopy(*t_mutable_path_info, t_path_info);
+    }
+    else
+    {
+        // SN-2015-02-11: [[ Bug 14457 ]] Initialise the values to empty
+        //  if we failed to get the path
+        t_path_string = MCValueRetain(kMCEmptyString);
+        t_path_info = MCValueRetain(kMCEmptyString);
     }
 
-    MCS_setenv(MCSTR("PATH_TRANSLATED"), *t_path_string);
-             
-	MCAutoStringRef t_path_end_string;
-	/* UNCHECKED */ MCStringCreateWithCString(t_path_end, &t_path_end_string);
-	MCS_setenv(MCSTR("PATH_INFO"), *t_path_end_string);
+    MCS_setenv(MCSTR("PATH_TRANSLATED"), t_path_string);
+    MCS_setenv(MCSTR("PATH_INFO"), t_path_info);
 
+    MCValueRelease(t_path_string);
+    MCValueRelease(t_path_info);
 	free(t_path);
 }
 
@@ -779,6 +922,11 @@ static bool cgi_compute_get_var(void *p_context, MCVariable *p_var)
             /* UNCHECKED */ MCDataCreateWithBytes((byte_t*)MCStringGetCharPtr(*t_query_string), 2 * MCStringGetLength(*t_query_string), &t_query_data);
 
         cgi_store_form_urlencoded(s_cgi_get, *t_query_data, true);
+	}
+	else
+	{
+		// Set the $_GET variable to the empty array
+		s_cgi_get->setvalueref(kMCEmptyArray);
 	}
 
     return true;
@@ -813,6 +961,11 @@ static bool cgi_compute_get_binary_var(void *p_context, MCVariable *p_var)
             /* UNCHECKED */ MCDataCreateWithBytes((byte_t*)MCStringGetCharPtr(*t_query_string), 2 * MCStringGetLength(*t_query_string), &t_query_data);
 
         cgi_store_form_urlencoded(s_cgi_get_binary, *t_query_data, true);
+	}
+	else
+	{
+		// Set the $_GET_BINARY variable to the empty array
+		s_cgi_get_binary->setvalueref(kMCEmptyArray);
 	}
     return true;
 }
@@ -868,7 +1021,9 @@ static bool cgi_compute_post_variables()
 	MCAutoStringRef t_content_type;
 
 	bool gotenv = MCS_getenv(MCSTR("CONTENT_TYPE"), &t_content_type);
-	if (gotenv && MCStringIsEqualToCString(*t_content_type, "application/x-www-form-urlencoded", kMCCompareCaseless))
+    if (gotenv
+            && (MCStringIsEqualToCString(*t_content_type, "application/x-www-form-urlencoded", kMCCompareCaseless)
+                || MCStringBeginsWithCString(*t_content_type, (const char_t*)"application/x-www-form-urlencoded;", kMCCompareCaseless)))
 	{
 		// TODO: currently we assume that urlencoded form data is small enough to fit into memory,
 		// so we fetch the contents from $_POST_RAW (which automatically reads the data from stdin).
@@ -907,6 +1062,12 @@ static bool cgi_compute_post_variables()
 		
         cgi_store_form_multipart(t_stdin_handle);
 		MCS_close(t_stdin_handle);
+	}
+	else
+	{
+		// Set the $_POST and $_POST_BINARY variables to empty arrays
+		s_cgi_post->setvalueref(kMCEmptyArray);
+		s_cgi_post_binary->setvalueref(kMCEmptyArray);
 	}
     return t_success;
 }
@@ -1001,31 +1162,43 @@ typedef struct
 	uint32_t file_size;
 	MCMultiPartFileStatus file_status;
 
-    MCArrayRef file_variable;
-
     MCStringRef boundary;
 	
-    MCStringRef post_variable;
-    MCDataRef post_binary_variable;
+	// Storage for the data as it is being read
+	MCDataRef data;
+	
+	// Arrays used to implement the $_POST and $_POST_BINARY variables
+    MCArrayRef post_variable;
+    MCArrayRef post_binary_variable;
 
 } cgi_multipart_context_t;
 
 static void cgi_dispose_multipart_context(cgi_multipart_context_t *p_context)
 {
     MCValueRelease(p_context->name);
+	p_context->name = nil;
     MCValueRelease(p_context->file_name);
+	p_context->file_name = nil;
     MCValueRelease(p_context->type);
+	p_context->type = nil;
     MCValueRelease(p_context->boundary);
+	p_context->boundary = nil;
     MCValueRelease(p_context->temp_name);
+	p_context->temp_name = nil;
 
 	if (p_context->file_handle != NULL)
 		MCS_close(p_context->file_handle);
+	p_context->file_handle = nil;
 
-    MCValueRelease(p_context->file_variable);
-    MCValueRelease(p_context->post_binary_variable);
-    MCValueRelease(p_context->post_variable);
+	MCValueRelease(p_context->data);
+	p_context->data = nil;
 	
-	MCMemoryClear(p_context, sizeof(cgi_multipart_context_t));
+	p_context->disposition = kMCDispositionUnknown;
+	p_context->file_size = 0;
+	p_context->file_status = kMCFileStatusOK;
+	
+	// Note that the post_variable and post_binary_variable members are
+	// maintained - these don't change between parts and shouldn't be reset.
 }
 
 static bool cgi_context_is_form_data(cgi_multipart_context_t *p_context)
@@ -1068,21 +1241,29 @@ static bool cgi_multipart_header_callback(void *p_context, MCMultiPartHeader *p_
 				if (MCCStringEqualCaseless(p_header->param_name[i], "name"))
                 {
                     MCAutoStringRef t_name;
-                    MCStringCreateWithCStringAndRelease((char_t*)p_header->param_value[i], &t_name);
+                    // SN-2015-02-06: [[ Bug 14477 ]] We don't want to release this values
+                    //  that are released again later in srvmultipart.cpp
+                    MCStringCreateWithCString(p_header->param_value[i], &t_name);
                     MCNameCreate(*t_name, t_context->name);
                 }
 				else if (MCCStringEqualCaseless(p_header->param_name[i], "filename"))
-                    MCStringCreateWithCStringAndRelease((char_t*)p_header->param_value[i], t_context->file_name);
+                    // SN-2015-02-06: [[ Bug 14477 ]] We don't want to release this values
+                    //  that are released again later in srvmultipart.cpp
+                    MCStringCreateWithCString(p_header->param_value[i], t_context->file_name);
 			}
 		}
 		else if (MCCStringEqualCaseless(p_header->name, "Content-Type"))
 		{
-            MCStringCreateWithCStringAndRelease((char_t*)p_header->value, t_context->type);
+            // SN-2015-02-06: [[ Bug 14477 ]] We don't want to release this values
+            //  that are released again later in srvmultipart.cpp
+            MCStringCreateWithCString(p_header->value, t_context->type);
 			
 			for (uint32_t i = 0; i < p_header->param_count; i++)
 			{
 				if (MCCStringEqualCaseless(p_header->param_name[i], "boundary"))
-                    MCStringCreateWithCStringAndRelease((char_t*)p_header->param_value[i], t_context->boundary);
+                    // SN-2015-02-06: [[ Bug 14477 ]] We don't want to release this values
+                    //  that are released again later in srvmultipart.cpp
+                    MCStringCreateWithCString(p_header->param_value[i], t_context->boundary);
 			}
 		}
 	}
@@ -1093,13 +1274,10 @@ static bool cgi_multipart_header_callback(void *p_context, MCMultiPartHeader *p_
             t_success = t_context->name != NULL;
 			if (t_success)
 			{
-                // We need to reset the binary data fetched from the global variable
-                // and create a mutable DataRef
-                cgi_fetch_valueref_for_key(s_cgi_post, t_context->name, (MCValueRef&)t_context->post_variable);
-
-                cgi_fetch_valueref_for_key(s_cgi_post_binary, t_context -> name, (MCValueRef&)t_context->post_binary_variable);
-                MCValueRelease(t_context->post_binary_variable);
-                MCDataCreateMutable(0, t_context->post_binary_variable);
+				// Allocate storage for the data
+				MCAutoDataRef t_data;
+				t_success = MCDataCreateMutable(0, &t_data);
+				MCValueAssign(t_context->data, *t_data);
 			}
 		}
 		else if (cgi_context_is_file(t_context))
@@ -1135,13 +1313,20 @@ static bool cgi_multipart_body_callback(void *p_context, const char *p_data, uin
 	{
 		if (t_context->post_binary_variable != NULL)
 		{
-            t_success = MCDataAppendBytes(t_context->post_binary_variable, (const byte_t*)p_data, p_data_length);
+            t_success = MCDataAppendBytes(t_context->data, (const byte_t*)p_data, p_data_length);
 
 			if (t_success && p_finished)
             {
-                MCAutoStringRef t_native_string;
-                if (cgi_native_from_encoding(MCserveroutputtextencoding, t_context->post_binary_variable, &t_native_string))
-                    MCValueAssign(t_context->post_variable, *t_native_string);
+                // Store the binary data into its output variable
+				t_success = MCArrayStoreValue(t_context->post_binary_variable, false, t_context->name, t_context->data);
+				
+				// Convert the binary data to a string
+				MCAutoStringRef t_native_string;
+				t_success = cgi_native_from_encoding(MCserveroutputtextencoding, t_context->data, &t_native_string);
+				
+				// Store the string into its output variable
+				if (t_success)
+					t_success = MCArrayStoreValue(t_context->post_variable, false, t_context->name, *t_native_string);				
 			}
 		}
 	}
@@ -1157,7 +1342,20 @@ static bool cgi_multipart_body_callback(void *p_context, const char *p_data, uin
 		
 		if (t_success && (p_finished || p_truncated))
         {
-            cgi_fetch_valueref_for_key(s_cgi_files, t_context->name, (MCValueRef &)t_context->file_variable);
+            // SN-2015-02-06: [[ Bug 14477 ]] We want to copy the valueRef from
+            //  s_cgi_files, since it will be released in the end.
+            //  If the value was not an array (like kMCExecValueTypeNone), we
+            //  create a new *mutable* array.
+            //  We then store the changed array in place of the value we fetched
+            MCValueRef t_file_variable;
+            MCAutoArrayRef t_file_array;
+
+            cgi_fetch_valueref_for_key(s_cgi_files, t_context->name, t_file_variable);
+
+            if (MCValueIsArray(t_file_variable))
+                t_file_array = (MCArrayRef)MCValueRetain(t_file_variable);
+            else
+                t_success = MCArrayCreateMutable(&t_file_array);
 			
 			if (t_context->file_status == kMCFileStatusOK && t_context->file_size == 0)
 				t_context->file_status = kMCFileStatusFailed;
@@ -1170,14 +1368,17 @@ static bool cgi_multipart_body_callback(void *p_context, const char *p_data, uin
 
             MCNumberCreateWithUnsignedInteger(t_context->file_size, &t_size);
 
-            MCArrayStoreValue(t_context->file_variable, false, MCNAME("name"), t_context->file_name);
-            MCArrayStoreValue(t_context->file_variable, false, MCNAME("type"), t_context->type);
-            MCArrayStoreValue(t_context->file_variable, false, MCNAME("filename"), t_context->temp_name);
-            MCArrayStoreValue(t_context->file_variable, false, MCNAME("size"), *t_size);
+            MCArrayStoreValue(*t_file_array, false, MCNAME("name"), t_context->file_name);
+            MCArrayStoreValue(*t_file_array, false, MCNAME("type"), t_context->type);
+            MCArrayStoreValue(*t_file_array, false, MCNAME("filename"), t_context->temp_name);
+            MCArrayStoreValue(*t_file_array, false, MCNAME("size"), *t_size);
 
             if (t_context->file_status != kMCFileStatusOK
                     && MCMultiPartGetErrorMessage(t_context->file_status, &t_error))
-                MCArrayStoreValue(t_context->file_variable, false, MCNAME("error"), *t_error);
+                MCArrayStoreValue(*t_file_array, false, MCNAME("error"), *t_error);
+
+            if (t_success)
+                cgi_store_control_value(s_cgi_files, t_context->name, *t_file_array);
 		}
 	}
 	
@@ -1196,6 +1397,23 @@ static bool cgi_store_form_multipart(IO_handle p_stream)
 	
 	cgi_multipart_context_t t_context;
 	MCMemoryClear(&t_context, sizeof(t_context));
+    // SN-2015-02-06: [[ Bug 14477 ]] Initialise the temp_name (which is
+    //  only reassigned, never directly set).
+    t_context . temp_name = MCValueRetain(kMCEmptyString);
+	
+	// Create the arrays for storing the $_POST and $_POST_BINARY variables
+	MCAutoArrayRef t_post_array, t_post_binary_array;
+	if (t_success)
+	{
+		t_success = MCArrayCreateMutable(&t_post_array) &&
+			MCArrayCreateMutable(&t_post_binary_array);
+			
+		if (t_success)
+		{
+			t_context.post_variable = *t_post_array;
+			t_context.post_binary_variable = *t_post_binary_array;
+		}
+	}
 	
 	uint32_t t_bytes_read = 0;
 	
@@ -1208,6 +1426,13 @@ static bool cgi_store_form_multipart(IO_handle p_stream)
 		t_success = MCMultiPartReadMessageFromStream(p_stream, *t_boundary_str, t_bytes_read,
 													 cgi_multipart_header_callback, cgi_multipart_body_callback, &t_context);
     }
+
+	// Assign the values for the $_POST and $_POST_BINARY variables
+	if (t_success)
+	{
+		s_cgi_post->setvalueref(*t_post_array);
+		s_cgi_post_binary->setvalueref(*t_post_binary_array);
+	}
 
 	// clean up in case of errors;
 	if (!t_success)
@@ -1238,8 +1463,12 @@ static bool cgi_compute_cookie_var(void *p_context, MCVariable *p_var)
             cgi_store_cookie_urlencoded(s_cgi_cookie, *t_query_data, true);
     }
     else
-        // returns true if nothing had to be computed
-        return true;
+	{
+        // There is no cookie data so set the variable to the empty array (it
+		// needs to be an array rather than the empty type because the rest of
+		// the CGI code assumes $_COOKIE holds an array).
+		s_cgi_cookie->setvalueref(kMCEmptyArray);
+	}
 
     return t_success;
 }
@@ -1256,6 +1485,9 @@ extern char **environ;
 
 bool cgi_initialize()
 {
+	bool t_success;
+	t_success = true;
+	
 	s_cgi_upload_temp_dir = MCValueRetain(kMCEmptyString);
 	s_cgi_temp_dir = MCValueRetain(kMCEmptyString);
 	// need to ensure PATH_TRANSLATED points to the script and PATH_INFO contains everything that follows
@@ -1264,57 +1496,77 @@ bool cgi_initialize()
 	// Resolve the main script that has been requested by the CGI interface.
 	MCAutoStringRef t_env;
 
-	if (MCS_getenv(MCSTR("PATH_TRANSLATED"), &t_env))
-        MCsystem -> ResolvePath(*t_env, MCserverinitialscript);
+	if (t_success)
+		t_success = MCS_getenv(MCSTR("PATH_TRANSLATED"), &t_env);
+	if (t_success)
+		t_success = MCsystem -> ResolvePath(*t_env, MCserverinitialscript);
 
 	
 	// Set the current folder to be that containing the CGI file.
-	char *t_server_script_folder;
-    t_server_script_folder = strdup(MCStringGetCString(MCserverinitialscript));
+	MCAutoStringRef t_server_script_folder_string;
 
 	// Windows paths have been fixed - no backslashes in the environment variables
-	strrchr(t_server_script_folder, '/')[0] = '\0';
+	uindex_t t_last_separator = 0;
+	if (t_success)
+		t_success = MCStringLastIndexOfChar(MCserverinitialscript, '/', MCStringGetLength(MCserverinitialscript), kMCStringOptionCompareExact, t_last_separator);
+	if (t_success)
+		t_success = MCStringCopySubstring(MCserverinitialscript, MCRangeMake(0, t_last_separator), &t_server_script_folder_string);
 
-    MCAutoStringRef t_server_script_folder_string;
-    /* UNCHECKED */ MCStringCreateWithCString(t_server_script_folder, &t_server_script_folder_string);
-
-	MCsystem -> SetCurrentFolder(*t_server_script_folder_string);
-	delete t_server_script_folder;
+	if (t_success)
+		MCsystem -> SetCurrentFolder(*t_server_script_folder_string);
 	
 	// Initialize the headers.
 	MCservercgiheaders = NULL;
 	MCservercgiheaders_sent = false;
 	
     // Get the document root
-    /* UNCHECKED */ MCStringCreateWithCString(getenv("DOCUMENT_ROOT"), MCservercgidocumentroot);
+	if (t_success)
+		t_success = MCS_getenv(MCSTR("DOCUMENT_ROOT"), MCservercgidocumentroot);
 	
 	// Initialize the input wrapper.  This creates a cache of the input stream
 	// which is filled as the stream is read from.  this allows stdin to be used
 	// to populate the post data arrays, and also to be read from by the script
 	// without conflicting
-    s_cgi_stdin_cache = new MCStreamCache(IO_stdin);
-    IO_stdin = new MCCacheHandle(s_cgi_stdin_cache);
-		
+	if (t_success)
+	{
+		s_cgi_stdin_cache = new MCStreamCache(IO_stdin);
+		t_success = s_cgi_stdin_cache != nil;
+	}
+	if (t_success)
+	{
+		IO_stdin = new MCCacheHandle(s_cgi_stdin_cache);
+		t_success = IO_stdin != nil;
+	}
+	
 	// Initialize the output wrapper, this simply ensures we output headers
 	// before any content.
-    IO_stdout = new cgi_stdout;
+	if (t_success)
+	{
+		IO_stdout = new cgi_stdout;
+		t_success = IO_stdout != nil;
+	}
 	
 	// Construct the _SERVER variable
-    /* UNCHECKED */ MCVariable::createwithname(MCNAME("$_SERVER"), s_cgi_server);
-	s_cgi_server -> setnext(MCglobals);
-	MCglobals = s_cgi_server;
+	if (t_success)
+		t_success = MCVariable::createwithname(MCNAME("$_SERVER"), s_cgi_server);
+	if (t_success)
+	{
+		s_cgi_server -> setnext(MCglobals);
+		MCglobals = s_cgi_server;
+	}
 	
 	MCAutoArrayRef t_vars;
-    /* UNCHECKED */ MCArrayCreateMutable(&t_vars);
-	for(uint32_t i = 0; environ_var[i] != NULL; i++)
+	if (t_success)
+		t_success = MCArrayCreateMutable(&t_vars);
+	for(uint32_t i = 0; t_success && environ_var[i] != NULL; i++)
 	{
         MCAutoStringRef t_environ;
 #ifdef _LINUX_SERVER
-        MCStringCreateWithSysString(environ_var[i], &t_environ);
+        t_success = MCStringCreateWithSysString(environ_var[i], &t_environ);
 #elif defined (_DARWIN_SERVER) || defined(_MAC_SERVER)
-        MCStringCreateWithBytes((byte_t*)environ_var[i], strlen(environ_var[i]), kMCStringEncodingUTF8, false, &t_environ);
+        t_success = MCStringCreateWithBytes((byte_t*)environ_var[i], strlen(environ_var[i]), kMCStringEncodingUTF8, false, &t_environ);
 #elif defined (_WINDOWS_SERVER)
-        MCStringCreateWithWString(environ_var[i], &t_environ);
+        t_success = MCStringCreateWithWString(environ_var[i], &t_environ);
 #endif
 		static const char *s_cgi_vars[] =
 		{
@@ -1360,79 +1612,115 @@ bool cgi_initialize()
 			NULL
 		};
 		
-		bool t_found;
-		t_found = false;
-		
-        if (MCStringBeginsWithCString(*t_environ, (const char_t*)"HTTP_", kMCStringOptionCompareCaseless))
-            t_found = true;
-		else
-			for(uint32_t j = 0; s_cgi_vars[j] != NULL && !t_found; j++)
-                if (MCStringBeginsWithCString(*t_environ, (const char_t*)s_cgi_vars[j], kMCStringOptionCompareCaseless))
-					t_found = true;
+		if (t_success)
+		{
+			bool t_found;
+			t_found = false;
+			
+			if (MCStringBeginsWithCString(*t_environ, (const char_t*)"HTTP_", kMCStringOptionCompareCaseless))
+				t_found = true;
+			else
+				for(uint32_t j = 0; s_cgi_vars[j] != NULL && !t_found; j++)
+					if (MCStringBeginsWithCString(*t_environ, (const char_t*)s_cgi_vars[j], kMCStringOptionCompareCaseless))
+						t_found = true;
 
-		if (t_found)
-        {
-            MCAutoStringRef t_value;
-            MCAutoStringRef t_key;
-            MCNameRef t_key_name;
+			if (t_found)
+			{
+				MCAutoStringRef t_value;
+				MCAutoStringRef t_key;
+				MCNewAutoNameRef t_key_name;
 
-            if (!MCStringDivideAtChar(*t_environ, '=', kMCStringOptionCompareExact, &t_key, &t_value))
-            {
-                t_key = *t_environ;
-                t_value = kMCEmptyString;
-            }
-
-            /* UNCHECKED */ MCNameCreate(*t_key, t_key_name);
-            /* UNCHECKED */ s_cgi_server->setvalueref(&t_key_name, 1, false, *t_value);
-            MCNameDelete(t_key_name);
+				t_success = MCStringDivideAtChar(*t_environ, '=', kMCStringOptionCompareExact, &t_key, &t_value);
+				if (t_success)
+					t_success = MCNameCreate(*t_key, &t_key_name);
+				if (t_success)
+					t_success = s_cgi_server->setvalueref(&!t_key_name, 1, false, *t_value);
+			}
 		}
 	}
 	
-	MCresult -> setvalueref(*t_vars);
+	if (t_success)
+		t_success = MCresult -> setvalueref(*t_vars);
 	
 	// Construct the GET variables by parsing the QUERY_STRING
 	
-	/* UNCHECKED */ MCDeferredVariable::createwithname(MCNAME("$_GET_RAW"), cgi_compute_get_raw_var, nil, s_cgi_get_raw);
-	s_cgi_get_raw -> setnext(MCglobals);
-	MCglobals = s_cgi_get_raw;	
-	/* UNCHECKED */ MCDeferredVariable::createwithname(MCNAME("$_GET"), cgi_compute_get_var, nil, s_cgi_get);
-	s_cgi_get -> setnext(MCglobals);
-	MCglobals = s_cgi_get;
-	/* UNCHECKED */ MCDeferredVariable::createwithname(MCNAME("$_GET_BINARY"), cgi_compute_get_binary_var, nil, s_cgi_get_binary);
-	s_cgi_get_binary -> setnext(MCglobals);
-	MCglobals = s_cgi_get_binary;	
+	if (t_success)
+		t_success = MCDeferredVariable::createwithname(MCNAME("$_GET_RAW"), cgi_compute_get_raw_var, nil, s_cgi_get_raw);
+	if (t_success)
+	{
+		s_cgi_get_raw -> setnext(MCglobals);
+		MCglobals = s_cgi_get_raw;
+	}
+	if (t_success)
+		t_success = MCDeferredVariable::createwithname(MCNAME("$_GET"), cgi_compute_get_var, nil, s_cgi_get);
+	if (t_success)
+	{
+		s_cgi_get -> setnext(MCglobals);
+		MCglobals = s_cgi_get;
+	}
+	if (t_success)
+		t_success = MCDeferredVariable::createwithname(MCNAME("$_GET_BINARY"), cgi_compute_get_binary_var, nil, s_cgi_get_binary);
+	if (t_success)
+	{
+		s_cgi_get_binary -> setnext(MCglobals);
+		MCglobals = s_cgi_get_binary;
+	}
 	
 	// Construct the _POST variables by reading stdin.
 	
-	/* UNCHECKED */ MCDeferredVariable::createwithname(MCNAME("$_POST_RAW"), cgi_compute_post_raw_var, nil, s_cgi_post_raw);
-	s_cgi_post_raw -> setnext(MCglobals);
-	MCglobals = s_cgi_post_raw;
-	/* UNCHECKED */ MCDeferredVariable::createwithname(MCNAME("$_POST"), cgi_compute_post_var, nil, s_cgi_post);
-	s_cgi_post -> setnext(MCglobals);
-	MCglobals = s_cgi_post;
-	/* UNCHECKED */ MCDeferredVariable::createwithname(MCNAME("$_POST_BINARY"), cgi_compute_post_binary_var, nil, s_cgi_post_binary);
-	s_cgi_post_binary -> setnext(MCglobals);
-	MCglobals = s_cgi_post_binary;	
+	if (t_success)
+		t_success = MCDeferredVariable::createwithname(MCNAME("$_POST_RAW"), cgi_compute_post_raw_var, nil, s_cgi_post_raw);
+	if (t_success)
+	{
+		s_cgi_post_raw -> setnext(MCglobals);
+		MCglobals = s_cgi_post_raw;
+	}
+	if (t_success)
+		t_success = MCDeferredVariable::createwithname(MCNAME("$_POST"), cgi_compute_post_var, nil, s_cgi_post);
+	if (t_success)
+	{
+		s_cgi_post -> setnext(MCglobals);
+		MCglobals = s_cgi_post;
+	}
+	if (t_success)
+		t_success = MCDeferredVariable::createwithname(MCNAME("$_POST_BINARY"), cgi_compute_post_binary_var, nil, s_cgi_post_binary);
+	if (t_success)
+	{
+		s_cgi_post_binary -> setnext(MCglobals);
+		MCglobals = s_cgi_post_binary;
+	}
 	
 	// Construct the FILES variable by reading stdin
 
-	/* UNCHECKED */ MCDeferredVariable::createwithname(MCNAME("$_FILES"), cgi_compute_files_var, nil, s_cgi_files);
-	s_cgi_files -> setnext(MCglobals);
-	MCglobals = s_cgi_files;
+	if (t_success)
+		t_success = MCDeferredVariable::createwithname(MCNAME("$_FILES"), cgi_compute_files_var, nil, s_cgi_files);
+	if (t_success)
+	{
+		s_cgi_files -> setnext(MCglobals);
+		MCglobals = s_cgi_files;
+	}
 	
 	// Construct the COOKIES variable by parsing HTTP_COOKIE
-	/* UNCHECKED */ MCDeferredVariable::createwithname(MCNAME("$_COOKIE"), cgi_compute_cookie_var, nil, s_cgi_cookie);
-	s_cgi_cookie -> setnext(MCglobals);
-	MCglobals = s_cgi_cookie;
+	if (t_success)
+		t_success = MCDeferredVariable::createwithname(MCNAME("$_COOKIE"), cgi_compute_cookie_var, nil, s_cgi_cookie);
+	if (t_success)
+	{
+		s_cgi_cookie -> setnext(MCglobals);
+		MCglobals = s_cgi_cookie;
+	}
 	
 	// Create the $_SESSION variable explicitly, to be populated upon calls to "start session"
 	// required as implicit references to "$_SESSION" will result in its creation as an env var
 	MCVariable *t_session_var = NULL;
-	/* UNCHECKED */ MCVariable::createwithname(MCNAME("$_SESSION"), t_session_var);
-	t_session_var->setnext(MCglobals);
-	MCglobals = t_session_var;
+	if (t_success)
+		t_success = MCVariable::createwithname(MCNAME("$_SESSION"), t_session_var);
+	if (t_success)
+	{
+		t_session_var->setnext(MCglobals);
+		MCglobals = t_session_var;
+	}
 
-	return true;
+	return t_success;
 }
 
 void cgi_finalize_session();

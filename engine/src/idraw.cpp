@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -20,7 +20,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "filedefs.h"
 #include "objdefs.h"
 #include "parsedef.h"
-//#include "execpt.h"
+
 #include "exec.h"
 #include "stacklst.h"
 #include "undolst.h"
@@ -53,22 +53,17 @@ bool MCImage::get_rep_and_transform(MCImageRep *&r_rep, bool &r_has_transform, M
 		else
 		{
 			// MM-2014-08-05: [[ Bug 13112 ]] Make sure only a single thread resamples the image.
-			MCThreadMutexLock(MCimagerepmutex);
 			if (m_resampled_rep != nil && m_resampled_rep->Matches(rect.width, rect.height, t_h_flip, t_v_flip, m_rep))
 				r_rep = m_resampled_rep;
 			else
 			{
 				if (!MCImageRepGetResampled(rect.width, rect.height, t_h_flip, t_v_flip, m_rep, r_rep))
-				{
-					MCThreadMutexUnlock(MCimagerepmutex);
 					return false;
-				}
 
 				if (m_resampled_rep != nil)
 					m_resampled_rep->Release();
 				m_resampled_rep = static_cast<MCResampledImageRep*>(r_rep);
 			}
-			MCThreadMutexUnlock(MCimagerepmutex);
 		}
 		
 		r_has_transform = false;
@@ -89,9 +84,6 @@ void MCImage::drawme(MCDC *dc, int2 sx, int2 sy, uint2 sw, uint2 sh, int2 dx, in
 
 	if (m_rep != nil)
 	{
-		uint32_t t_frame_duration;
-		t_frame_duration = 0;
-		
 		if (m_rep->GetType() == kMCImageRepVector)
 		{
 			MCU_set_rect(drect, dx - sx, dy - sy, rect.width, rect.height);
@@ -139,40 +131,27 @@ void MCImage::drawme(MCDC *dc, int2 sx, int2 sy, uint2 sw, uint2 sh, int2 dx, in
                     t_has_transform = true;
                     t_transform = MCGAffineTransformMakeIdentity();
                 }
-                t_transform = MCGAffineTransformScale(t_transform, dw / (float)sw, dh / (float)sh);
+                t_transform = MCGAffineTransformPreScale(t_transform, dw / (float)sw, dh / (float)sh);
             }
             
 			MCGFloat t_device_scale;
 			t_device_scale = 1.0;
 			
-			// IM-2014-01-31: [[ HiDPI ]] If we're rendering to an MCGraphicsContext, get the device scale from its MCGContextRef
-			if (dc->gettype() != CONTEXT_TYPE_PRINTER)
-			{
-				MCGContextRef t_gcontext;
-				t_gcontext = ((MCGraphicsContext *)dc)->getgcontextref();
-				
-				if (t_gcontext != nil)
-				{
-					MCGAffineTransform t_device_transform;
-					t_device_transform = MCGContextGetDeviceTransform(t_gcontext);
-					
-					// If the image has a transform, combine it with the context device transform
-					if (t_has_transform)
-						t_device_transform = MCGAffineTransformConcat(t_device_transform, t_transform);
-					
-					// get the effective scale from the combined transform
-					t_device_scale = MCGAffineTransformGetEffectiveScale(t_device_transform);
-				}
-			}
+			MCGAffineTransform t_device_transform;
+			t_device_transform = dc->getdevicetransform();
+			
+			// If the image has a transform, combine it with the context device transform
+			if (t_has_transform)
+				t_device_transform = MCGAffineTransformConcat(t_device_transform, t_transform);
+			
+			// get the effective scale from the combined transform
+			t_device_scale = MCGAffineTransformGetEffectiveScale(t_device_transform);
 			
 			// IM-2014-01-31: [[ HiDPI ]] Get the appropriate image for the combined
 			//   context device & image transforms
 			t_success = t_rep->LockImageFrame(currentframe, t_device_scale, t_frame);
 			if (t_success)
 			{
-				// IM-2014-08-01: [[ Bug 13021 ]] Get frame duration to avoid re-locking later
-				t_frame_duration = t_frame.duration;
-				
 				MCImageDescriptor t_image;
 				MCMemoryClear(&t_image, sizeof(MCImageDescriptor));
 
@@ -234,13 +213,17 @@ void MCImage::drawme(MCDC *dc, int2 sx, int2 sy, uint2 sw, uint2 sh, int2 dx, in
 			// MM-2014-07-31: [[ ThreadedRendering ]] Make sure only a single thread posts the timer message (i.e. the first that gets here)
 			if (!m_animate_posted)
 			{
-				MCThreadMutexLock(MCanimationmutex);
 				if (!m_animate_posted)
 				{
+					// IM-2014-11-25: [[ ImageRep ]] Use ImageRep method to get frame duration
+					uint32_t t_frame_duration;
+					t_frame_duration = 0;
+					
+					/* UNCHECKED */ m_rep->GetFrameDuration(currentframe, t_frame_duration);
+					
 					m_animate_posted = true;
 					MCscreen->addtimer(this, MCM_internal, t_frame_duration);
 				}
-				MCThreadMutexUnlock(MCanimationmutex);
 			}
 
 			state &= ~CS_DO_START;

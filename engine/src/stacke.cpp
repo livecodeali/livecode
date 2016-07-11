@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -25,7 +25,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "stack.h"
 #include "aclip.h"
 #include "card.h"
-#include "control.h"
+#include "mccontrol.h"
 #include "player.h"
 #include "sellst.h"
 #include "visual.h"
@@ -36,7 +36,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "region.h"
 #include "globals.h"
 #include "context.h"
-//#include "execpt.h"
+
 
 #include "graphicscontext.h"
 
@@ -233,10 +233,12 @@ void MCStack::effectrect(const MCRectangle& p_area, Boolean& r_abort)
 	t_device_rect = MCRectangleGetScaledBounds(t_effect_area, t_scale);
 	t_user_rect = MCRectangleGetTransformedBounds(t_device_rect, MCGAffineTransformInvert(t_transform));
 	
+#ifdef _MAC_DESKTOP
 	// IM-2013-08-29: [[ RefactorGraphics ]] get device height for CoreImage effects
 	// IM-2013-09-30: [[ FullscreenMode ]] Use view rect to get device height
 	uint32_t t_device_height;
 	t_device_height = floor(view_getrect().height * t_scale);
+#endif /* _MAC_DESKTOP */
 	
 	// Make a region of the effect area
 	// IM-2013-08-29: [[ ResIndependence ]] scale effect region to device coords
@@ -245,16 +247,6 @@ void MCStack::effectrect(const MCRectangle& p_area, Boolean& r_abort)
 	/* UNCHECKED */ MCRegionCreate(t_effect_region);
 	/* UNCHECKED */ MCRegionSetRect(t_effect_region, t_effect_area);
 	
-#ifndef FEATURE_PLATFORM_PLAYER
-#if defined(FEATURE_QUICKTIME)
-	// MW-2010-07-07: Make sure QT is only loaded if we actually are doing an effect
-	if (t_effects != nil)
-		if (!MCdontuseQTeffects)
-			if (!MCtemplateplayer -> isQTinitted())
-				MCtemplateplayer -> initqt();
-#endif	
-#endif
-
 	// Lock the screen to prevent any updates occuring until we want them.
 	MCRedrawLockScreen();
 
@@ -697,6 +689,9 @@ Boolean pusheffect_step(const MCRectangle &drect, MCStackSurface *p_target, MCGI
 			t_end_dst = MCGRectangleTranslate(t_start_dst, 0.0, -(MCGFloat)drect.height);
 			break;
 			
+		default:
+			MCUnreachable();
+			break;
 	}
 	
 	p_target->Composite(t_start_dst, p_start, t_src_rect, 1.0, kMCGBlendModeCopy);
@@ -740,6 +735,9 @@ Boolean revealeffect_step(const MCRectangle &drect, MCStackSurface *p_target, MC
 			t_end_src = MCGRectangleMake(0.0, 0.0, t_dst_rect.size.width, size);
 			break;
 			
+		default:
+			MCUnreachable();
+			break;
 	}
 	
 	t_end_dst = MCGRectangleTranslate(t_end_src, t_dst_rect.origin.x, t_dst_rect.origin.y);
@@ -782,6 +780,10 @@ Boolean scrolleffect_step(const MCRectangle &drect, MCStackSurface *p_target, MC
 			height = drect.height * t_position;
 			t_end_dst = MCGRectangleTranslate(t_end_src, 0.0, -t_end_src.size.height + height);
 			break;
+			
+		default:
+			MCUnreachable();
+			break;
 	}
 	
 	t_end_dst.origin.x += drect.x;
@@ -811,6 +813,10 @@ Boolean shrinkeffect_step(const MCRectangle &drect, MCStackSurface *p_target, MC
 			
 		case VE_BOTTOM:
 			t_top = drect.height - height;
+			break;
+			
+		default:
+			MCUnreachable();
 			break;
 	}
 	t_bottom = t_top + height;
@@ -843,7 +849,7 @@ Boolean stretcheffect_step(const MCRectangle &drect, MCStackSurface *p_target, M
 {
 	uint2 height = drect.height * delta / duration;
 	
-	uint32_t t_top, t_bottom;
+	uint32_t t_top;
 	
 	switch (dir)
 	{
@@ -858,8 +864,11 @@ Boolean stretcheffect_step(const MCRectangle &drect, MCStackSurface *p_target, M
 		case VE_BOTTOM:
 			t_top = drect.height - height;
 			break;
+			
+		default:
+			MCUnreachable();
+			break;
 	}
-	t_bottom = t_top + height;
 	
 	MCGRectangle t_start_src, t_start_dst;
 	MCGRectangle t_end_src, t_end_dst;
@@ -929,6 +938,10 @@ Boolean wipeeffect_step(const MCRectangle &drect, MCStackSurface *p_target, MCGI
 		case VE_DOWN:
 			t_start_src = MCGRectangleMake(0.0, size, drect.width, drect.height - size);
 			t_end_src = MCGRectangleMake(0.0, 0.0, drect.width, size);
+			break;
+			
+		default:
+			MCUnreachable();
 			break;
 	}
 	

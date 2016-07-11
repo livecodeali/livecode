@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -81,6 +81,7 @@ DATABASEREC *DoLoadDatabaseDriver(const char *p_path)
 	t_result -> idcounterptr = (idcounterrefptr)GetProcAddress(t_module, "setidcounterref");
 	t_result -> newconnectionptr = (new_connectionrefptr)GetProcAddress(t_module, "newdbconnectionref");
 	t_result -> releaseconnectionptr = (release_connectionrefptr)GetProcAddress(t_module, "releasedbconnectionref");
+    t_result -> setcallbacksptr = (set_callbacksrefptr)GetProcAddress(t_module, "setcallbacksref");
 	return t_result;
 }
 

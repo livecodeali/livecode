@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -23,11 +23,12 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "parsedef.h"
 #include "mode.h"
 
-//#include "execpt.h"
+
 #include "scriptpt.h"
 #include "mcerror.h"
 #include "globals.h"
 #include "util.h"
+#include "libscript/script.h"
 
 #include <msctf.h>
 
@@ -119,6 +120,9 @@ static void CALLBACK LoopFiberRoutine(void *p_parameter)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+extern "C" bool MCModulesInitialize();
+extern "C" void MCModulesFinalize();
+
 int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
 	// MW-2010-05-09: Elevated process handling - if the cmd line begins with '-elevated-slave'
@@ -180,11 +184,37 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 		csptr++;
 	}
 
-	if (!MCInitialize())
+	// SN-2014-11-19: [[ Bug 14058 ]] GetCommandLineW returns the executable name and the arguments, 
+	// but we do not want to include the former in MCcmdline
+	csptr = lpWCmdLine;
+	if (*csptr == '"')
+	{
+		// The executable is the whole enquoted string
+		++csptr;
+		while(*csptr && *csptr != '"')
+			csptr++;
+	}
+	else
+	{
+		// The executable goes up to the first space
+		while(*csptr && !iswspace(*csptr))
+			csptr++;
+	}
+	if (*csptr)
+	{
+		// We discard all the spaces after the quote/space we found
+		csptr++;
+		while (*csptr && iswspace(*csptr))
+			++csptr;
+	}
+
+    if (!MCInitialize() || !MCSInitialize() ||
+        !MCModulesInitialize() || !MCScriptInitialize())
 		exit(-1);
 	
     // Ensure the command line variable gets set
-    /* UNCHECKED */ MCStringCreateWithWString(lpWCmdLine, MCcmdline);
+	// SN-2014-11-19: [[ Bug 14058 ]] We use the updated command line (a nil pointer is fine)
+    /* UNCHECKED */ MCStringCreateWithWString(csptr, MCcmdline);
     
 	// Convert the WStrings (UTF-16) into StringRefs
     LPWSTR *lpWargv = CommandLineToArgvW(lpWCmdLine, &argc);
@@ -285,13 +315,15 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 	
 	g_mainthread_errno = _errno();
 	int r = X_close();
-
+    
+    MCValueRelease(MCcmdline);
+    
+    MCScriptFinalize();
+    MCModulesFinalize();
 	MCFinalize();
 
 	if (t_tsf_mgr != nil)
 		t_tsf_mgr -> Release();
-
-	MCValueRelease(MCcmdline);
 
 	return r;
 }

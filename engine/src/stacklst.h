@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -18,7 +18,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 // List of windows in their stacking order
 //
 #ifndef	STACKLIST_H
-#define	STACKTLIST_H
+#define	STACKLIST_H
 
 #include "dllst.h"
 

@@ -1,6 +1,8 @@
 #ifndef __MC_MAC_PLATFORM__
 #define __MC_MAC_PLATFORM__
 
+#import <AppKit/NSColorPanel.h>
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class MCMacPlatformWindow;
@@ -92,15 +94,27 @@ class MCMacPlatformSurface;
 
 - (void)sendEvent:(NSEvent *)event;
 
+- (bool)windowIsMoving: (MCPlatformWindowRef)window;
+
 // FG-2014-11-07: [[ Bugfix 13628 ]] Fake being modal for a non-modal window
 - (void)becomePseudoModalFor: (NSWindow*)window;
 - (NSWindow*)pseudoModalFor;
 
+- (OSErr)preDispatchAppleEvent: (const AppleEvent *)p_event withReply: (AppleEvent *)p_reply;
+
 @end
 
-@interface com_runrev_livecode_MCWindow: NSWindow
+@protocol com_runrev_livecode_MCMovingFrame <NSObject>
+
+- (NSRect)movingFrame;
+- (void)setMovingFrame:(NSRect)p_moving_frame;
+
+@end
+
+@interface com_runrev_livecode_MCWindow: NSWindow <com_runrev_livecode_MCMovingFrame>
 {
 	bool m_can_become_key : 1;
+    NSRect m_moving_frame;
 }
 
 - (id)initWithContentRect:(NSRect)contentRect styleMask:(NSUInteger)windowStyle backing:(NSBackingStoreType)bufferingType defer:(BOOL)deferCreation;
@@ -116,11 +130,12 @@ class MCMacPlatformSurface;
 
 @end
 
-@interface com_runrev_livecode_MCPanel: NSPanel
+@interface com_runrev_livecode_MCPanel: NSPanel  <com_runrev_livecode_MCMovingFrame>
 {
 	bool m_can_become_key : 1;
     bool m_is_popup : 1;
     id m_monitor;
+    NSRect m_moving_frame;
 }
 
 - (void)setCanBecomeKeyWindow: (BOOL)value;
@@ -134,6 +149,41 @@ class MCMacPlatformSurface;
 - (void)popupAndMonitor;
 
 @end
+
+////////////////////////////////////////////////////////////////////////////////
+
+// SN-2014-12-05: [[ Bug 14019 ]] Interface declaration moved to be available from mac-menu.mm
+
+// SN-2014-10-20: [[ Bug 13628 ]] ColorDelegate to react when the colour picker window is closed
+@interface com_runrev_livecode_MCColorPanelDelegate: NSObject<NSWindowDelegate>
+{
+    NSButton *mCancelButton;
+    NSButton *mOkButton;
+    NSView   *mColorPickerView;
+    NSView   *mUpdatedView;
+    NSColorPanel *mColorPanel;
+    
+    MCPlatformDialogResult mResult;
+    MCColor mColorPicked;
+	id eventMonitor;
+}
+
+-(id)   initWithColorPanel: (NSColorPanel*)p_panel
+               contentView: (NSView*) p_view;
+-(void) dealloc;
+-(void) windowDidBecomeKey:(NSNotification *)notification;
+-(void) windowWillClose: (NSNotification *)notification;
+-(void) windowDidResize:(NSNotification *)notification;
+-(void) getColor;
+//-(void) changeColor:(id)sender;
+-(void) pickerCancelClicked;
+-(void) pickerOkClicked;
+-(void) processEscKeyDown;
+-(void) relayout;
+
+@end
+
+@compatibility_alias MCColorPanelDelegate com_runrev_livecode_MCColorPanelDelegate;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -162,6 +212,7 @@ class MCMacPlatformSurface;
 
 - (NSSize)windowWillResize:(NSWindow *)sender toSize:(NSSize)frameSize;
 - (void)windowDidMove:(NSNotification *)notification;
+- (void)windowDidChangeScreen:(NSNotification *)notification;
 
 - (void)windowWillStartLiveResize:(NSNotification *)notification;
 - (void)windowDidEndLiveResize:(NSNotification *)notification;
@@ -411,6 +462,8 @@ private:
     MCGRaster m_raster;
 	
 	bool m_cg_context_first_lock;
+	
+	bool m_opaque;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -452,6 +505,9 @@ public:
 	void MapMCRectangleToNSRect(MCRectangle rect, NSRect& r_ns_rect);
 	void MapNSRectToMCRectangle(NSRect rect, MCRectangle& r_mc_rect);
 	
+	// IM-2015-01-30: [[ Bug 14140 ]] Locking the frame will prevent the window from being moved or resized
+	void SetFrameLocked(bool p_locked);
+	
 protected:
 	virtual void DoRealize(void);
 	virtual void DoSynchronize(void);
@@ -478,7 +534,9 @@ public:
 private:
 	// Compute the Cocoa window style from the window's current properties.
 	void ComputeCocoaStyle(NSUInteger& r_window_style);
-	
+    // MERG-2015-10-11: [[ DocumentFilename ]] Set documentFilename.
+    void UpdateDocumentFilename(void);
+    
 	// The window delegate object.
 	MCWindowDelegate *m_delegate;
 	
@@ -501,6 +559,9 @@ private:
 		
 		// When set to true, the window has a sheet.
 		bool m_has_sheet : 1;
+		
+		// When the frame is locked, any changes to the window rect will be prevented.
+		bool m_frame_locked : 1;
 	};
 	
 	// A window might map to one of several different classes, so we use a
@@ -615,6 +676,22 @@ struct MCMacPlatformWindowMask
 void MCMacPlatformEnableEventChecking(void);
 void MCMacPlatformDisableEventChecking(void);
 bool MCMacPlatformIsEventCheckingEnabled(void);
+
+////////////////////////////////////////////////////////////////////////////////
+
+// The function pointer for objc_msgSend_fpret needs to be cast in order
+// to get the correct return type, otherwise we can get strange results
+// on x86_64 because "long double" return values are returned in
+// different registers to "float" or "double".
+extern "C" void objc_msgSend_fpret(void);
+template <class R, class... Types> R objc_msgSend_fpret_type(id p_id, SEL p_sel, Types... p_params)
+{
+    // Cast the obj_msgSend_fpret function to the correct type
+    R (*t_send)(id, SEL, ...) = reinterpret_cast<R (*)(id, SEL, ...)> (&objc_msgSend_fpret);
+    
+    // Perform the call
+    return t_send(p_id, p_sel, p_params...);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

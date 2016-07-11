@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -67,10 +67,6 @@ class MCScriptPoint
 public:
 	MCScriptPoint(MCScriptPoint &sp);
 	MCScriptPoint(MCObject *, MCHandlerlist *, MCStringRef script);
-#ifdef LEGACY_EXEC
-	MCScriptPoint(MCExecPoint &ep);
-    MCScriptPoint(const MCString &s);
-#endif
     MCScriptPoint(MCExecContext &ctxt);
     MCScriptPoint(MCExecContext &ctxt, MCStringRef p_string);
 	MCScriptPoint(MCStringRef p_string);
@@ -98,16 +94,13 @@ public:
 	{
 		line = l;
 	}
-	uint2 getpos()
+	ptrdiff_t getpos()
 	{
 		return pos > (curptr - backupptr)
 		       ?  pos - (curptr - backupptr) : 1;
 	}
 	bool token_is_cstring(const char *p_cstring);
 
-#ifdef LEGACY_EXEC
-	MCString gettoken_oldstring(void);
-#endif
 	MCNameRef gettoken_nameref(void);
 	MCStringRef gettoken_stringref(void);
 
@@ -135,8 +128,12 @@ public:
     
     uindex_t getindex(void)
     {
-        // AL-2014-07-28: [[ Bug 12729 ]] Fix the initial index of a token with quotation marks.
-        return (const unichar_t *)token . getstring() + length - endptr;
+        // Warning: explicitly truncated to a uindex_t
+        // This imposes a limit of 4GB on scripts
+        size_t index = (const unichar_t *)token . getstring() + length - endptr;
+        MCAssert(uindex_t(index) == index);
+        
+        return uindex_t(index);
     }
 
 	Parse_stat skip_space();

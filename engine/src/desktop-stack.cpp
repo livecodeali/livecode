@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -34,6 +34,7 @@
 #include "resolution.h"
 #include "player.h"
 #include "dispatch.h"
+#include "redraw.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -92,7 +93,8 @@ void MCStack::realize(void)
 		MCPlatformWindowStyle t_window_style;;
 		if (getflag(F_DECORATIONS) && (decorations & WD_UTILITY) != 0)
 			t_window_style = kMCPlatformWindowStyleUtility;
-		else if (mode == WM_PALETTE)
+		else if (mode == WM_PALETTE
+                 || mode == WM_DRAWER)  // COCOA-TODO: Implement drawers
 			t_window_style = kMCPlatformWindowStylePalette;
 		else if (mode == WM_MODAL || mode == WM_SHEET)
 			t_window_style = kMCPlatformWindowStyleDialog;
@@ -102,8 +104,6 @@ void MCStack::realize(void)
 			t_window_style = kMCPlatformWindowStylePopUp;
 		else if (mode == WM_TOOLTIP)
 			t_window_style = kMCPlatformWindowStyleToolTip;
-		else if (mode == WM_DRAWER)
-			; // COCOA-TODO: Implement drawers
 		else
 			t_window_style = kMCPlatformWindowStyleDocument;
 		
@@ -191,6 +191,7 @@ void MCStack::realize(void)
 		
 		if (m_window_shape != nil)
 			MCPlatformSetWindowProperty(t_window, kMCPlatformWindowPropertyMask, kMCPlatformPropertyTypeWindowMask, (MCPlatformWindowMaskRef *)&m_window_shape -> handle);
+		MCPlatformSetWindowBoolProperty(t_window, kMCPlatformWindowPropertyIsOpaque, isopaque());
 		MCPlatformSetWindowProperty(t_window, kMCPlatformWindowPropertyStyle, kMCPlatformPropertyTypeWindowStyle, &t_window_style);
 		MCPlatformSetWindowBoolProperty(t_window, kMCPlatformWindowPropertyHasTitleWidget, t_has_titlebox);
 		MCPlatformSetWindowBoolProperty(t_window, kMCPlatformWindowPropertyHasCloseWidget, t_has_closebox);
@@ -214,6 +215,9 @@ void MCStack::realize(void)
         
         // MW-2014-06-11: [[ Bug 12467 ]] Make sure we reset the cursor property of the window.
         resetcursor(True);
+        
+        // MERG-2015-10-11: [[ DocumentFilename ]] update the window with the document filename property
+        MCPlatformSetWindowProperty(t_window, kMCPlatformWindowPropertyDocumentFilename, kMCPlatformPropertyTypeMCString, &m_document_filename);
 	}
 	
 	start_externals();
@@ -332,6 +336,13 @@ void MCStack::view_platform_updatewindowwithcallback(MCRegionRef p_region, MCSta
 	s_update_context = nil;
 }
 
+// MERG-2015-10-12: [[ DocumentFilename ]] Stub for documentFilename.
+void MCStack::updatedocumentfilename(void)
+{
+    if (window != nil)
+        MCPlatformSetWindowProperty(window, kMCPlatformWindowPropertyDocumentFilename, kMCPlatformPropertyTypeMCString, &m_document_filename);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // MW-2014-06-11: [[ Bug 12495 ]] Update windowshape by setting window property.
@@ -441,16 +452,6 @@ void MCDispatch::wredraw(Window p_window, MCPlatformSurfaceRef p_surface, MCGReg
 		t_stack -> view_surface_redrawwindow(&t_stack_surface, p_update_rgn);
 	else
 		s_update_callback(&t_stack_surface, (MCRegionRef)p_update_rgn, s_update_context);
-}
-
-void MCDispatch::wreshape(Window p_window)
-{
-	MCStack *t_stack;
-	t_stack = findstackd(p_window);
-	if (t_stack == nil)
-		return;
-	
-	t_stack -> view_configure(true);
 }
 
 void MCDispatch::wiconify(Window p_window)

@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -132,7 +132,7 @@ void MCTileCacheSetCacheLimit(MCTileCacheRef self, uint32_t new_cachelimit);
 uint32_t MCTileCacheGetCacheLimit(MCTileCacheRef self);
 
 // Set the tile size of the tilecache.
-void MCTileCacheSetTileSize(MCTileCacheRef self, int32_t new_tilesize);
+void MCTileCacheSetTileSize(MCTileCacheRef self, uint32_t new_tilesize);
 // Fetch the tile size of the tilecache
 int32_t MCTileCacheGetTileSize(MCTileCacheRef self);
 

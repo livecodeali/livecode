@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -20,7 +20,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "parsedef.h"
 
 #include "mcerror.h"
-//#include "execpt.h"
+
 #include "util.h"
 #include "globals.h"
 
@@ -77,6 +77,7 @@ const MCPurchasePropertyTable *getpropertytable()
 }
 
 static MCPurchase *s_purchase_request = nil;
+static bool s_did_restore = false;
 
 typedef struct
 {
@@ -160,162 +161,55 @@ void MCPurchaseFinalize(MCPurchase *p_purchase)
 	MCMemoryDelete(t_ios_data);
 }
 
-#ifdef /* MCPurchaseSet */ LEGACY_EXEC
-Exec_stat MCPurchaseSet(MCPurchase *p_purchase, MCPurchaseProperty p_property, MCExecPoint &ep)
-{
-	MCiOSPurchase *t_ios_data = (MCiOSPurchase*)p_purchase->platform_data;
-	switch (p_property)
-	{
-		case kMCPurchasePropertyQuantity:
-		{
-			uint32_t t_quantity;
-			if (!MCU_stoui4(ep . getsvalue(), t_quantity))
-			{
-				MCeerror->add(EE_OBJECT_NAN, 0, 0, ep.getsvalue());
-				return ES_ERROR;
-			}
-			if (t_ios_data->payment != nil)
-				[t_ios_data->payment setQuantity: t_quantity];
-			return ES_NORMAL;
-		}
-			break;
-		default:
-			break;
-	}
-	
-	return ES_NOT_HANDLED;
-}
-#endif /* MCPurchaseSet */
+// PM-2015-01-12: [[ Bug 14343 ]] Implemented MCStoreGetPurchaseProperty/MCStoreSetPurchaseProperty for iOS
+extern MCPropertyInfo *lookup_purchase_property(const MCPurchasePropertyTable *p_table, Properties p_which);
 
-#ifdef /* MCStoreGetPurchaseProperty */ LEGACY_EXEC
-char* MCStoreGetPurchaseProperty(const char *p_product_id, const char*  p_prop_name)
+void MCStoreGetPurchaseProperty(MCExecContext& ctxt, MCStringRef p_product_id, MCStringRef p_prop_name, MCStringRef& r_property_value)
 {
-    bool t_success = true;
     MCPurchase *t_purchase = nil;
-	MCPurchaseProperty t_property;
-
-	if (t_success)
-		t_success =
-		MCPurchaseFindByProdId(p_product_id, t_purchase) &&
-		MCPurchaseLookupProperty(p_prop_name, t_property);
-        
-        /*
-    if (t_success)
-		t_success = MCPurchaseLookupProperty(p_prop_name, t_property);
+    Properties t_property;
     
-    if (t_success)
-        MCLog("Success in lookUpProperty!...",nil);
+    MCPropertyInfo *t_info;
+    t_info = nil;
     
-    if (t_success)
-		t_success = MCPurchaseFindByProdId(p_product_id, t_purchase);
+    if (MCPurchaseFindByProdId(p_product_id, t_purchase) && MCPurchaseLookupProperty(p_prop_name, t_property))
+        t_info = lookup_purchase_property(getpropertytable(), t_property);
     
-    if (t_success)
-        MCLog("Success in finding Purchase!...",nil);
-        */
-
-	
-	MCExecPoint ep(nil, nil, nil);
-	if (t_success)
-		t_success = MCPurchaseGet(t_purchase, t_property, ep) == ES_NORMAL;
-	
-    char *temp;
-    MCCStringFormat(temp, "%s", ep.getcstring());
-    return temp;
-	
+    if (t_info != nil)
+	{
+		MCExecValue t_value;
+        MCExecFetchProperty(ctxt, t_info, t_purchase, t_value);
+        if (ctxt.HasError())
+            r_property_value = MCValueRetain(kMCEmptyString);
+        else
+            MCExecTypeConvertAndReleaseAlways(ctxt, t_value . type, &t_value, kMCExecValueTypeStringRef, &r_property_value);
+        return;
+    }
+    
+    ctxt .Throw();
 }
-#endif
 
-
-#ifdef /* MCPurchaseGet */ LEGACY_EXEC
-Exec_stat MCPurchaseGet(MCPurchase *p_purchase, MCPurchaseProperty p_property, MCExecPoint &ep)
+void MCStoreSetPurchaseProperty(MCExecContext& ctxt, MCStringRef p_product_id, MCStringRef p_prop_name, MCStringRef p_value)
 {
-	MCiOSPurchase *t_ios_data = (MCiOSPurchase*)p_purchase->platform_data;
-
-	SKPayment *t_payment = nil;
-	SKPaymentTransaction *t_transaction = nil;
-	SKPaymentTransaction *t_original_transaction = nil;
+    MCPurchase *t_purchase = nil;
+	Properties t_property;
+    
+    MCPropertyInfo *t_info;
+    t_info = nil;
+    
+    if (MCPurchaseFindByProdId(p_product_id, t_purchase) && MCPurchaseLookupProperty(p_prop_name, t_property))
+        t_info = lookup_purchase_property(getpropertytable(), t_property);
 	
-	if (t_ios_data->transaction != nil)
+	if (t_info != nil)
 	{
-		t_transaction = t_ios_data->transaction;
-		t_payment = [t_transaction payment];
-		t_original_transaction = [t_transaction originalTransaction];
+		MCExecValue t_value;
+		MCExecValueTraits<MCValueRef>::set(t_value, MCValueRetain(p_value));
+        MCExecStoreProperty(ctxt, t_info, t_purchase, t_value);
+        return;
 	}
-	else
-		t_payment = t_ios_data->payment;
-	
-	switch (p_property)
-	{
-		case kMCPurchasePropertyProductIdentifier:
-			if (t_payment == nil)
-				break;
-			
-			ep.copysvalue([[t_payment productIdentifier] cStringUsingEncoding: NSMacOSRomanStringEncoding]);
-			return ES_NORMAL;
-			
-		case kMCPurchasePropertyQuantity:
-			if (t_payment == nil)
-				break;
-			
-			ep.setuint([t_payment quantity]);
-			return ES_NORMAL;
-			
-		case kMCPurchasePropertyReceipt:
-		{
-			if (t_transaction == nil)
-				break;
-			
-			NSData *t_bytes = [t_transaction transactionReceipt];
-			ep.copysvalue((const char*)[t_bytes bytes], [t_bytes length]);
-			return ES_NORMAL;
-		}
-			
-		case kMCPurchasePropertyPurchaseDate:
-			if (t_transaction == nil)
-				break;
-			
-			ep.setnvalue([[t_transaction transactionDate] timeIntervalSince1970]);
-            ep.ntos();
-			return ES_NORMAL;
-
-		case kMCPurchasePropertyTransactionIdentifier:
-			if (t_transaction == nil)
-				break;
-			
-			ep.copysvalue([[t_transaction transactionIdentifier] cStringUsingEncoding:NSMacOSRomanStringEncoding]);
-			return ES_NORMAL;
-			
-		case kMCPurchasePropertyOriginalReceipt:
-		{
-			if (t_original_transaction == nil)
-				break;
-			
-			NSData *t_bytes = [t_original_transaction transactionReceipt];
-			ep.copysvalue((const char*)[t_bytes bytes], [t_bytes length]);
-			return ES_NORMAL;
-		}
-			
-		case kMCPurchasePropertyOriginalPurchaseDate:
-			if (t_original_transaction == nil)
-				break;
-			
-			ep.setnvalue([[t_original_transaction transactionDate] timeIntervalSince1970]);
-			return ES_NORMAL;
-
-		case kMCPurchasePropertyOriginalTransactionIdentifier:
-			if (t_original_transaction == nil)
-				break;
-			
-			ep.copysvalue([[t_original_transaction transactionIdentifier] cStringUsingEncoding:NSMacOSRomanStringEncoding]);
-			return ES_NORMAL;
-			
-		default:
-			break;
-	}
-	
-	return ES_NOT_HANDLED;
+    
+    ctxt . Throw();
 }
-#endif /* MCPurchaseGet */
 
 void MCPurchaseGetProductIdentifier(MCExecContext& ctxt, MCPurchase *p_purchase, MCStringRef& r_productIdentifier)
 {
@@ -396,7 +290,10 @@ void MCPurchaseGetTransactionIdentifier(MCExecContext& ctxt, MCPurchase *p_purch
 	else
 		t_payment = t_ios_data->payment;
     
-    if (t_transaction != nil && MCStringCreateWithCFString((CFStringRef)[t_transaction transactionIdentifier], r_identifier))
+    // PM-2015-03-10: [[ Bug 14858 ]] transactionIdentifier can be nil if the purchase is still in progress (i.e when purchaseStateUpdate msg is sent with state=sendingRequest)
+    if (t_transaction != nil
+            && [t_transaction transactionIdentifier] != nil
+            && MCStringCreateWithCFString((CFStringRef)[t_transaction transactionIdentifier], r_identifier))
         return;
     
     ctxt . Throw();
@@ -445,7 +342,7 @@ void MCPurchaseGetOriginalTransactionIdentifier(MCExecContext& ctxt, MCPurchase 
 void MCPurchaseGetOriginalPurchaseDate(MCExecContext& ctxt, MCPurchase *p_purchase, integer_t& r_date)
 {
 	MCiOSPurchase *t_ios_data = (MCiOSPurchase*)p_purchase->platform_data;
-    \
+    
 	SKPaymentTransaction *t_transaction = nil;
 	SKPaymentTransaction *t_original_transaction = nil;
     t_transaction = t_ios_data->transaction;
@@ -485,27 +382,6 @@ void MCPurchaseGetOriginalReceipt(MCExecContext& ctxt, MCPurchase *p_purchase, M
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-#ifdef /* MCPurchaseSet */ LEGACY_EXEC
-Exec_stat MCPurchaseSet(MCPurchase *p_purchase, MCPurchaseProperty p_property, uint32_t p_quantity)
-{
-	MCiOSPurchase *t_ios_data = (MCiOSPurchase*)p_purchase->platform_data;
-	switch (p_property)
-	{
-		case kMCPurchasePropertyQuantity:
-		{
-			if (t_ios_data->payment != nil)
-				[t_ios_data->payment setQuantity: p_quantity];
-			return ES_NORMAL;
-		}
-			break;
-		default:
-			break;
-	}
-	
-	return ES_NOT_HANDLED;
-}
-#endif /* MCPurchaseSet */
-
 void MCPurchaseSetQuantity(MCExecContext& ctxt, MCPurchase *p_purchase, uinteger_t p_quantity)
 {
 	MCiOSPurchase *t_ios_data = (MCiOSPurchase*)p_purchase->platform_data;
@@ -538,6 +414,10 @@ bool MCPurchaseConfirmDelivery(MCPurchase *p_purchase)
 	
 	[[SKPaymentQueue defaultQueue] finishTransaction: t_ios_data->transaction];
 	p_purchase->state = kMCPurchaseStateComplete;
+    
+    // PM-2015-01-28: [[ Bug 14461 ]] Once the purchase is completed, add the productID to the completed purchases list
+    MCPurchaseCompleteListUpdate(p_purchase);
+    
 	MCPurchaseNotifyUpdate(p_purchase);
 	MCPurchaseRelease(p_purchase);
 	
@@ -617,10 +497,14 @@ void update_purchase_state(MCPurchase *p_purchase)
 				break;
 			case SKPaymentTransactionStateRestored:
 				p_purchase->state = kMCPurchaseStateRestored;
+                s_did_restore = true;
 				break;
 			case SKPaymentTransactionStateFailed:
 			{
 				NSError *t_error = [t_ios_data->transaction error];
+                
+                if(t_error == nil)
+                    return;
 				if ([[t_error domain] isEqualToString:SKErrorDomain] && [t_error code] == SKErrorPaymentCancelled)
 					p_purchase->state = kMCPurchaseStateCancelled;
 				else
@@ -638,7 +522,7 @@ void update_purchase_state(MCPurchase *p_purchase)
 	}
 }
 
-@interface MCPurchaseObserver : NSObject <SKPaymentTransactionObserver>
+@interface com_runrev_livecode_MCPurchaseObserver : NSObject <SKPaymentTransactionObserver>
 {
 }
 
@@ -649,7 +533,7 @@ void update_purchase_state(MCPurchase *p_purchase)
 
 @end
 
-@implementation MCPurchaseObserver
+@implementation com_runrev_livecode_MCPurchaseObserver
 
 - (void)paymentQueue:(SKPaymentQueue *)queue removedTransactions:(NSArray *)transactions
 {
@@ -712,18 +596,29 @@ void update_purchase_state(MCPurchase *p_purchase)
 
 - (void)paymentQueueRestoreCompletedTransactionsFinished:(SKPaymentQueue *)queue
 {
+    // PM-2015-02-12: [[ Bug 14402 ]] When there are no previous purchases to restore, send a purchaseStateUpdate msg with state=restored and productID=""
+    if (!s_did_restore)
+    {
+        MCPurchase *t_empty_purchase = new MCPurchase[1]();
+        t_empty_purchase -> prod_id = MCValueRetain(kMCEmptyString);
+        t_empty_purchase -> id = 0;
+        t_empty_purchase -> ref_count = 0;
+        t_empty_purchase -> state = kMCPurchaseStateRestored;
+        
+        MCPurchaseNotifyUpdate(t_empty_purchase);
+    }
 }
 
 @end
 
-MCPurchaseObserver *s_purchase_observer = nil;
+com_runrev_livecode_MCPurchaseObserver *s_purchase_observer = nil;
 
 bool MCStoreEnablePurchaseUpdates()
 {
 	if (s_purchase_observer != nil)
 		return true;
 	
-	s_purchase_observer = [[MCPurchaseObserver alloc] init];
+	s_purchase_observer = [[com_runrev_livecode_MCPurchaseObserver alloc] init];
 	if (s_purchase_observer == nil)
 		return false;
 	
@@ -749,7 +644,7 @@ bool MCStoreDisablePurchaseUpdates()
 bool MCStorePostProductRequestError(MCStringRef p_product, MCStringRef p_error);
 bool MCStorePostProductRequestResponse(SKProduct *p_product);
 
-@interface MCProductsRequest : SKProductsRequest
+@interface com_runrev_livecode_MCProductsRequest : SKProductsRequest
 {
     NSString *m_product_id;
 }
@@ -759,7 +654,7 @@ bool MCStorePostProductRequestResponse(SKProduct *p_product);
 
 @end
 
-@implementation MCProductsRequest
+@implementation com_runrev_livecode_MCProductsRequest
 
 - (id)initWithProductId:(NSString *)p_productId
 {
@@ -787,7 +682,7 @@ bool MCStorePostProductRequestResponse(SKProduct *p_product);
 
 @end
 
-@interface MCProductsRequestDelegate : NSObject <SKProductsRequestDelegate>
+@interface com_runrev_livecode_MCProductsRequestDelegate : NSObject <SKProductsRequestDelegate>
 {
 }
 - (void)productsRequest:(SKProductsRequest *)request didReceiveResponse:(SKProductsResponse *)response;
@@ -797,7 +692,7 @@ bool MCStorePostProductRequestResponse(SKProduct *p_product);
 
 @end
 
-@implementation MCProductsRequestDelegate
+@implementation com_runrev_livecode_MCProductsRequestDelegate
 - (void)productsRequest:(SKProductsRequest *)request didReceiveResponse:(SKProductsResponse *)response
 {
     if (response.invalidProductIdentifiers != nil)
@@ -828,7 +723,7 @@ bool MCStorePostProductRequestResponse(SKProduct *p_product);
 {
     MCAutoStringRef t_product, t_error;
     
-    /* UNCHECKED */ MCStringCreateWithCFString((CFStringRef)[(MCProductsRequest*)request getProductId], &t_product);
+    /* UNCHECKED */ MCStringCreateWithCFString((CFStringRef)[(com_runrev_livecode_MCProductsRequest*)request getProductId], &t_product);
     /* UNCHECKED */ MCStringCreateWithCFString((CFStringRef)[error description], &t_error);
 
     MCStorePostProductRequestError(*t_product, *t_error);
@@ -845,9 +740,9 @@ bool MCStoreRequestProductDetails(MCStringRef p_product_id)
     NSString *t_product_id = nil;
     
     t_product_id = [NSString stringWithMCStringRef: p_product_id];
-    t_request = [[MCProductsRequest alloc] initWithProductId: t_product_id];
+    t_request = [[com_runrev_livecode_MCProductsRequest alloc] initWithProductId: t_product_id];
     
-    [t_request setDelegate: [[MCProductsRequestDelegate alloc] init]];
+    [t_request setDelegate: [[com_runrev_livecode_MCProductsRequestDelegate alloc] init]];
     
     [t_request start];
     

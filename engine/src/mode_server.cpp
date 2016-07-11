@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -21,7 +21,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "objdefs.h"
 #include "parsedef.h"
 
-//#include "execpt.h"
+
 #include "dispatch.h"
 #include "stack.h"
 #include "tooltip.h"
@@ -134,18 +134,6 @@ IO_stat MCDispatch::startup(void)
 //  Implementation of MCStack::mode* hooks for SERVER mode.
 //
 
-#ifdef LEGACY_EXEC
-Exec_stat MCStack::mode_getprop(uint4 parid, Properties which, MCExecPoint &ep, MCStringRef carray, Boolean effective)
-{
-	return ES_NOT_HANDLED;
-}
-
-Exec_stat MCStack::mode_setprop(uint4 parid, Properties which, MCExecPoint &ep, MCStringRef cprop, MCStringRef carray, Boolean effective)
-{
-	return ES_NOT_HANDLED;
-}
-#endif
-
 #ifdef _WINDOWS_SERVER
 MCSysWindowHandle MCStack::getrealwindow(void)
 {
@@ -204,33 +192,6 @@ void MCStack::mode_constrain(MCRectangle& rect)
 {
 }
 
-#ifdef LEGACY_EXEC
-////////////////////////////////////////////////////////////////////////////////
-//
-//  Implementation of MCObject::mode_get/setprop for SERVER mode.
-//
-
-Exec_stat MCObject::mode_getprop(uint4 parid, Properties which, MCExecPoint &ep, MCStringRef carray, Boolean effective)
-{
-	return ES_NOT_HANDLED;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-//
-//  Implementation of MCProperty::mode_eval/mode_set for SERVER mode.
-//
-
-Exec_stat MCProperty::mode_set(MCExecPoint& ep)
-{
-	return ES_NOT_HANDLED;
-}
-
-Exec_stat MCProperty::mode_eval(MCExecPoint& ep)
-{
-	return ES_NOT_HANDLED;
-}
-#endif
-
 ////////////////////////////////////////////////////////////////////////////////
 //
 //  Implementation of mode hooks for SERVER mode.
@@ -261,6 +222,13 @@ uint32_t MCModeGetEnvironmentType(void)
 	return kMCModeEnvironmentTypeServer;
 }
 
+// SN-2015-01-16: [[ Bug 14295 ]] Not implemented for server
+void MCModeGetResourcesFolder(MCStringRef &r_resources_folder)
+{
+    // Not implemented on server
+    r_resources_folder = MCValueRetain(kMCEmptyString);
+}
+
 // In standalone mode, we are never licensed.
 bool MCModeGetLicensed(void)
 {
@@ -269,6 +237,19 @@ bool MCModeGetLicensed(void)
 
 // In standalone mode, the executable is $0 if there is an embedded stack.
 bool MCModeIsExecutableFirstArgument(void)
+{
+	return true;
+}
+
+// In server mode, we have command line name / arguments
+bool MCModeHasCommandLineArguments(void)
+{
+    return true;
+}
+
+// In server mode, we have environment variables
+bool
+MCModeHasEnvironmentVariables()
 {
 	return true;
 }
@@ -333,10 +314,6 @@ MCStatement *MCModeNewCommand(int2 which)
 MCExpression *MCModeNewFunction(int2 which)
 {
 	return NULL;
-}
-
-void MCModeObjectDestroyed(MCObject *object)
-{
 }
 
 bool MCModeShouldQueueOpeningStacks(void)
@@ -411,6 +388,11 @@ bool MCModeHasHomeStack(void)
 bool MCModeGetPixelScalingEnabled(void)
 {
 	return false;
+}
+
+void MCModeFinalize(void)
+{
+    
 }
 
 ////////////////////////////////////////////////////////////////////////////////

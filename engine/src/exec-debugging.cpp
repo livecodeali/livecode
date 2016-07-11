@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -78,7 +78,11 @@ void MCDebuggingExecDebugDo(MCExecContext& ctxt, MCStringRef p_script, uinteger_
 	MCExecContext *t_ctxt_ptr;
 	t_ctxt_ptr = MCexecutioncontexts[MCdebugcontext];
 
-	t_ctxt_ptr->GetHandler()->doscript(*t_ctxt_ptr, p_script, p_line, p_pos);
+    // Do not permit script to be executed in an inaccessible context
+    if (t_ctxt_ptr->GetObject()->getstack()->iskeyed())
+        t_ctxt_ptr->doscript(*t_ctxt_ptr, p_script, p_line, p_pos);
+    else
+        ctxt.LegacyThrow(EE_STACK_NOKEY);
     
     // AL-2014-03-21: [[ Bug 11940 ]] Ensure the debug context is not permanently in a state of error.
     t_ctxt_ptr -> IgnoreLastError();
@@ -91,7 +95,9 @@ void MCDebuggingExecDebugDo(MCExecContext& ctxt, MCStringRef p_script, uinteger_
 
 void MCDebuggingExecBreakpoint(MCExecContext& ctxt, uinteger_t p_line, uinteger_t p_pos)
 {
-	MCB_break(ctxt, p_line, p_pos);
+    // Ignore breakpoints in inaccessible stacks
+    if (ctxt.GetObject()->getstack()->iskeyed())
+        MCB_break(ctxt, p_line, p_pos);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -218,11 +224,20 @@ void MCDebuggingGetDebugContext(MCExecContext& ctxt, MCStringRef& r_value)
 					MCListAppend(*t_list, *t_context_id);
 	}
 	
-	if (t_success)
-		t_success = MCListAppend(*t_list, MCexecutioncontexts[MCdebugcontext]->GetHandler()->getname());
+    // Don't display the handler name if the stack script is not available
+    if (MCexecutioncontexts[MCdebugcontext]->GetObject()->getstack()->iskeyed())
+    {
+        if (t_success)
+            t_success = MCListAppend(*t_list, MCexecutioncontexts[MCdebugcontext]->GetHandler()->getname());
 
-	if (t_success)
-        t_success = MCListAppendInteger(*t_list, MCexecutioncontexts[MCdebugcontext] -> GetLine());
+        if (t_success)
+            t_success = MCListAppendInteger(*t_list, MCexecutioncontexts[MCdebugcontext] -> GetLine());
+    }
+    else
+    {
+        if (t_success)
+            t_success = MCListAppend(*t_list, MCNAME("<protected>")) && MCListAppendInteger(*t_list, 0);
+    }
 	
 	if (t_success)
 		t_success = MCListCopyAsString(*t_list, r_value);
@@ -236,21 +251,8 @@ void MCDebuggingGetDebugContext(MCExecContext& ctxt, MCStringRef& r_value)
 void MCDebuggingSetDebugContext(MCExecContext& ctxt, MCStringRef p_value)
 {
 	uindex_t t_length = MCStringGetLength(p_value);
-	bool t_in_quotes;
-	t_in_quotes = false;
 	uindex_t t_offset;
 
-	/*for (t_offset = 0; t_offset < t_length; t_offset++)
-	{
-		if (!t_in_quotes && MCStringGetNativeCharAtIndex(p_value, t_offset) == ',')
-			break;
-
-		if (MCStringGetNativeCharAtIndex(p_value, t_offset) == '"')
-			t_in_quotes = !t_in_quotes;
-	}
-     
-    if (t_offset < t_length)*/
-    
 	if (MCStringLastIndexOfChar(p_value, ',', t_length, kMCStringOptionCompareExact, t_offset))
 	{
 		MCAutoStringRef t_head;
@@ -262,7 +264,14 @@ void MCDebuggingSetDebugContext(MCExecContext& ctxt, MCStringRef p_value)
 			MCInterfaceTryToResolveObject(ctxt, *t_head, t_object) &&
 			MCU_strtol(*t_tail, t_line))
 		{
-			for (uint2 i = 0; i < MCnexecutioncontexts; i++)
+            // If this object isn't debuggable, fail
+            if (!t_object.object->getstack()->iskeyed())
+            {
+                ctxt.LegacyThrow(EE_STACK_NOKEY);
+                return;
+            }
+            
+            for (uint2 i = 0; i < MCnexecutioncontexts; i++)
 			{
 				if (MCexecutioncontexts[i] -> GetObject() == t_object . object && 
                     MCexecutioncontexts[i] -> GetLine() == t_line)
@@ -311,30 +320,46 @@ void MCDebuggingGetExecutionContexts(MCExecContext& ctxt, MCStringRef& r_value)
 			MCAutoListRef t_context;
 			t_success = MCListCreateMutable(',', &t_context);
 			
-			if (t_success)
-			{
-				MCAutoValueRef t_context_id;
-				t_success = MCexecutioncontexts[i]->GetObject()->names(P_LONG_ID, &t_context_id) &&
-							MCListAppend(*t_context, *t_context_id);
-			}
-			
-            // PM-2014-04-14: [[Bug 12125]] Do this check to avoid a crash in LC server
-            if (t_success && MCexecutioncontexts[i]->GetHandler() != NULL)
-				t_success = MCListAppend(*t_context, MCexecutioncontexts[i]->GetHandler()->getname());
-			
-			if (t_success)
-			{
-				MCAutoStringRef t_line;
-                t_success = MCStringFormat(&t_line, "%d", MCexecutioncontexts[i] -> GetLine()) &&
-							MCListAppend(*t_context, *t_line);
-			}
-			
-			if (t_success && MCexecutioncontexts[i] -> GetParentScript() != NULL)
-			{
-				MCAutoValueRef t_parent;
-				t_success = MCexecutioncontexts[i] -> GetParentScript() -> GetParent() -> GetObject() -> names(P_LONG_ID, &t_parent) &&
-							MCListAppend(*t_context, *t_parent);
-			}
+            // Don't display context information when not available
+            if (MCexecutioncontexts[i]->GetObject()->getstack()->iskeyed())
+            {
+                if (t_success)
+                {
+                    MCAutoValueRef t_context_id;
+                    t_success = MCexecutioncontexts[i]->GetObject()->names(P_LONG_ID, &t_context_id) &&
+                                MCListAppend(*t_context, *t_context_id);
+                }
+                
+                // PM-2014-04-14: [[Bug 12125]] Do this check to avoid a crash in LC server
+                if (t_success && MCexecutioncontexts[i]->GetHandler() != NULL)
+                    t_success = MCListAppend(*t_context, MCexecutioncontexts[i]->GetHandler()->getname());
+                
+                if (t_success)
+                {
+                    MCAutoStringRef t_line;
+                    t_success = MCStringFormat(&t_line, "%d", MCexecutioncontexts[i] -> GetLine()) &&
+                                MCListAppend(*t_context, *t_line);
+                }
+                
+                if (t_success && MCexecutioncontexts[i] -> GetParentScript() != NULL)
+                {
+                    MCAutoValueRef t_parent;
+                    t_success = MCexecutioncontexts[i] -> GetParentScript() -> GetParent() -> GetObject() -> names(P_LONG_ID, &t_parent) &&
+                                MCListAppend(*t_context, *t_parent);
+                }
+            }
+            else
+            {
+                if (t_success)
+                {
+                    MCAutoValueRef t_stack_id;
+                    t_success = MCexecutioncontexts[i]->GetObject()->getstack()->names(P_LONG_ID, &t_stack_id)
+                                && MCListAppend(*t_context, *t_stack_id)
+                                && MCListAppend(*t_context, MCNAME("<protected>"))
+                                && MCListAppendInteger(*t_context, 0);
+                }
+ 
+            }
 
 			if (t_success)
 				t_success = MCListAppend(*t_context_list, *t_context);
@@ -417,7 +442,9 @@ void MCDebuggingExecAssert(MCExecContext& ctxt, int type, bool p_eval_success, b
 	
 	// Dispatch 'assertError <handler>, <line>, <pos>, <object>'
 	MCParameter t_handler, t_line, t_pos, t_object;
-	t_handler.setvalueref_argument(ctxt .GetHandler() -> getname());
+	if (ctxt . GetHandler() != NULL) {
+		t_handler.setvalueref_argument(ctxt . GetHandler() -> getname());
+	}
 	t_handler.setnext(&t_line);
 	t_line.setn_argument((real8)ctxt . GetLine());
 	t_line.setnext(&t_pos);

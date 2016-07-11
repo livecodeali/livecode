@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -21,7 +21,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "filedefs.h"
 
 #include "scriptpt.h"
-//#include "execpt.h"
+
 #include "mcerror.h"
 #include "util.h"
 
@@ -53,7 +53,7 @@ void MCError::add(uint2 id, uint2 line, uint2 pos, uint32_t v)
 
 void MCError::add(uint2 id, uint2 line, uint2 pos, MCValueRef n)
 {
-    if (MCerrorlock != 0 || thrown)
+    if (MCerrorlock || thrown)
 		return;
     
     if (n != nil)
@@ -67,15 +67,6 @@ void MCError::add(uint2 id, uint2 line, uint2 pos, MCValueRef n)
 		doadd(id, line, pos, kMCEmptyString);
 	}
 }
-
-#ifdef LLEGACY_EXEC
-void MCError::add(uint2 id, uint2 line, uint2 pos, const MCString &token)
-{
-	if (MCerrorlock != 0 || thrown)
-		return;
-	doadd(id, line, pos, token);
-}
-#endif
 
 void MCError::doadd(uint2 id, uint2 line, uint2 pos, MCStringRef p_token)
 {
@@ -113,15 +104,6 @@ void MCError::append(MCError& p_other)
 {
 	MCStringAppendFormat(buffer, MCStringIsEmpty(buffer) ? "%@" : "\n%@", p_other . buffer);
 }
-
-#ifdef LEGACY_EXEC
-const MCString &MCError::getsvalue()
-{
-    if (!thrown)
-        svalue.set(buffer, strlen(buffer));
-    return svalue;
-}
-#endif
 
 void MCError::copystringref(MCStringRef s, Boolean t)
 {

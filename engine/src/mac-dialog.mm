@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -616,7 +616,13 @@ void MCPlatformBeginFileDialog(MCPlatformFileDialogKind p_kind, MCPlatformWindow
 		[t_panel setMessage: [NSString stringWithMCStringRef: p_prompt]];
 	}
 	else
-		[t_panel setTitle: [NSString stringWithMCStringRef: p_prompt]];
+	{
+		extern uint4 MCmajorosversion;
+		if (MCmajorosversion >= 0x10B0 && p_kind != kMCPlatformFileDialogKindSave)
+			[t_panel setMessage: [NSString stringWithMCStringRef: p_prompt]];
+		else
+			[t_panel setTitle: [NSString stringWithMCStringRef: p_prompt]];
+	}
 	
     // MW-2014-07-17: [[ Bug 12826 ]] If we have at least one type, add a delegate. Only add as
     //   an accessory view if more than one type.
@@ -640,6 +646,12 @@ void MCPlatformBeginFileDialog(MCPlatformFileDialogKind p_kind, MCPlatformWindow
 	// MM-2012-03-01: [[ BUG 10046]] Make sure the "new folder" button is enabled for save dialogs
 	else 
 		[t_panel setCanCreateDirectories: YES];
+	
+	if ([t_panel respondsToSelector:@selector(isAccessoryViewDisclosed)])
+	{
+		// show accessory view when dialog opens
+		[t_panel setAccessoryViewDisclosed: YES];
+	}
 	
 	MCMacPlatformBeginOpenSaveDialog(p_owner, t_panel, *t_initial_folder, *t_initial_file);
 }
@@ -696,36 +708,6 @@ MCPlatformDialogResult MCPlatformEndFileDialog(MCPlatformFileDialogKind p_kind, 
 	
 	return MCPlatformEndOpenSaveDialog();
 }
-
-////////////////////////////////////////////////////////////////////////////////
-
-// SN-2014-10-20: [[ Bug 13628 ]] ColorDelegate to react when the colour picker window is closed
-@interface com_runrev_livecode_MCColorPanelDelegate: NSObject<NSWindowDelegate>
-{
-    NSButton *mCancelButton;
-    NSButton *mOkButton;
-    NSView   *mColorPickerView;
-    NSView   *mUpdatedView;
-    NSColorPanel *mColorPanel;
-    
-    MCPlatformDialogResult mResult;
-    MCColor mColorPicked;
-}
-
--(id)   initWithColorPanel: (NSColorPanel*)p_panel
-               contentView: (NSView*) p_view;
--(void) dealloc;
--(void) windowWillClose: (NSNotification *)notification;
--(void) windowDidResize:(NSNotification *)notification;
--(void) getColor;
-//-(void) changeColor:(id)sender;
--(void) pickerCancelClicked;
--(void) pickerOkClicked;
--(void) relayout;
-
-@end
-
-@compatibility_alias MCColorPanelDelegate com_runrev_livecode_MCColorPanelDelegate;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -826,22 +808,22 @@ static MCColorPanelDelegate* s_color_dialog_delegate;
     
     const CGFloat ButtonHeight = ButtonMinHeight;
     
+    // SN-2014-11-28: [[ Bug 14098 ]] OK and Cancel buttons were inverted.
+    // Update frame for the Cancel button
+    NSRect cancelRect = { { ButtonSideMargin,
+        ButtonBottomMargin },
+        { ButtonWidth, ButtonHeight } };
+    [mCancelButton setButtonType: NSMomentaryLightButton];
+    [mCancelButton setFrame:cancelRect];
+    [mCancelButton setNeedsDisplay:YES];
+    
     // Update frame for the OK button
-    NSRect okRect = { { ButtonSideMargin,
+    NSRect okRect = { { cancelRect.origin.x + ButtonWidth + ButtonSpacing,
         ButtonBottomMargin },
         { ButtonWidth, ButtonHeight } };
     [mOkButton setButtonType: NSMomentaryLightButton];
     [mOkButton setFrame:okRect];
     [mOkButton setNeedsDisplay:YES];
-    
-    // Update frame for the cancel button
-    NSRect cancelRect = { { okRect.origin.x + ButtonWidth + ButtonSpacing,
-        ButtonBottomMargin },
-        { ButtonWidth, ButtonHeight } };
-    
-    [mCancelButton setButtonType: NSMomentaryLightButton];
-    [mCancelButton setFrame:cancelRect];
-    [mCancelButton setNeedsDisplay:YES];
     
     const CGFloat Y = ButtonBottomMargin + ButtonHeight + ButtonTopMargin;
     NSRect pickerCVRect = { { 0.0, Y },
@@ -862,9 +844,24 @@ static MCColorPanelDelegate* s_color_dialog_delegate;
     if (s_color_dialog_result == kMCPlatformDialogResultSuccess)
     {
         NSColor *t_color;
+        t_color =  [mColorPanel color];
         
-        t_color = [[mColorPanel color] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+        // Some NSColor's will not have a colorspace (e.g. named ones from the developer
+        // pane). Since trying to get a colorSpace of such a thing throws an exception
+        // we wrap the colorSpace access call.
+        NSColorSpace *t_colorspace;
+        @try {
+            t_colorspace = [t_color colorSpace];
+        }
+        @catch (NSException *exception) {
+            t_colorspace = nil;
+        }
         
+        // If we have no colorspace, or the colorspace is not already RGB convert.
+        if (t_colorspace == nil ||
+            [t_colorspace colorSpaceModel] != NSRGBColorSpaceModel)
+            t_color = [t_color colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
+    
         // Convert the value from to a colour component value.
         s_color_dialog_color . red   = (uint2) ([t_color redComponent] * UINT16_MAX);
         s_color_dialog_color . green = (uint2) ([t_color greenComponent] * UINT16_MAX);
@@ -874,6 +871,26 @@ static MCColorPanelDelegate* s_color_dialog_delegate;
 
 //////////
 // NSWindow delegate's method
+
+// PM-2015-07-10: [[ Bug 15096 ]] Escape key should dismiss the 'answer color' dialog
+- (void) windowDidBecomeKey:(NSNotification *)notification
+{
+	NSEvent* (^handler)(NSEvent*) = ^(NSEvent *theEvent) {
+		
+		NSEvent *result = theEvent;
+		// Check if the esc key is pressed
+		if (theEvent.keyCode == 53)
+		{
+			[self processEscKeyDown];
+			result = nil;
+		}
+		
+		return result;
+	};
+	
+	eventMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSKeyDownMask handler:handler];
+}
+
 - (void)windowDidResize:(NSNotification *)notification
 {
     [self relayout];
@@ -883,6 +900,9 @@ static MCColorPanelDelegate* s_color_dialog_delegate;
 {
     if (mResult != kMCPlatformDialogResultSuccess)
         mResult = kMCPlatformDialogResultCancel;
+		
+	// Detach the event monitor when window closes.
+	[NSEvent removeMonitor:eventMonitor];
 }
 
 //////////
@@ -899,6 +919,11 @@ static MCColorPanelDelegate* s_color_dialog_delegate;
     [self getColor];
 }
 
+- (void) processEscKeyDown
+{
+	[self pickerCancelClicked];
+}
+
 //////////
 
 -(MCPlatformDialogResult) result
@@ -912,11 +937,6 @@ static MCColorPanelDelegate* s_color_dialog_delegate;
 
 void MCPlatformBeginColorDialog(MCStringRef p_title, const MCColor& p_color)
 {
-	uint32_t t_red, t_green, t_blue;
-	t_red = p_color.red;
-	t_green = p_color.green;
-	t_blue = p_color.blue;
-	
     // SN-2014-10-20: [[ Bug 13628 ]] Update to use the Cocoa picker
     NSColorPanel *t_colorPicker;
     
@@ -924,6 +944,14 @@ void MCPlatformBeginColorDialog(MCStringRef p_title, const MCColor& p_color)
     [NSColorPanel setPickerMask: NSColorPanelAllModesMask];
     
     t_colorPicker = [NSColorPanel sharedColorPanel];
+    
+    // SN-2014-11-28: [[ Bug 14098 ]] Make use of the initial colour
+    CGFloat t_divider = UINT16_MAX;
+    NSColor* t_initial_color = [NSColor colorWithCalibratedRed:(CGFloat)p_color.red / t_divider
+                                                         green:(CGFloat)p_color.green / t_divider
+                                                          blue:(CGFloat)p_color.blue / t_divider
+                                                         alpha:1];
+    [t_colorPicker setColor:t_initial_color];
     
     NSView* t_pickerView;
     t_pickerView = [t_colorPicker contentView];

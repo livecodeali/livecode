@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -21,7 +21,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "parsedef.h"
 #include "objdefs.h"
 
-//#include "execpt.h"
+
 #include "dispatch.h"
 #include "stack.h"
 #include "button.h"
@@ -71,7 +71,7 @@ MCStacklist::~MCStacklist()
 	if (menus != NULL)
 		delete menus;
 	if (accelerators != NULL)
-		delete accelerators;
+		delete[] accelerators; /* Allocated with new[] */
 }
 
 void MCStacklist::add(MCStack *sptr)
@@ -133,6 +133,7 @@ static int stack_real_mode(MCStack *p_stack)
 	return p_stack -> getmode();
 }
 
+#ifdef _WINDOWS
 static bool stack_is_above(MCStack *p_stack_a, MCStack *p_stack_b)
 {
 	int t_mode_a, t_mode_b;
@@ -147,6 +148,7 @@ static bool stack_is_above(MCStack *p_stack_a, MCStack *p_stack_b)
 
 	return t_mode_a > t_mode_b;
 }
+#endif /* _WINDOWS */
 
 void MCStacklist::top(MCStack *sptr)
 {
@@ -210,7 +212,8 @@ void MCStacklist::top(MCStack *sptr)
 		tptr = stacks;
 		do
 		{
-			if (tptr->getstack()->getmode() == pass)
+			if (tptr->getstack()->getmode() == pass &&
+                !tptr->getstack()->getstate(CS_DELETE_STACK))
 			{
 				MCtopstackptr = tptr->getstack();
 				return;
@@ -264,6 +267,14 @@ MCStack *MCStacklist::getstack(uint2 n)
 bool MCStacklist::stackprops(MCExecContext& ctxt, Properties p_property, MCListRef& r_list)
 {
 	MCAutoListRef t_list;
+    
+    // SN-2015-01-05: [[ Bug 14330 ]] Return if there is no open stacks
+    if (stacks == NULL)
+    {
+        r_list = MCValueRetain(kMCEmptyList);
+        return true;
+    }
+    
 	if (!MCListCreateMutable('\n', &t_list))
 		return false;
 

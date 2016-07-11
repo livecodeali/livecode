@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -31,6 +31,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "tilecache.h"
 #include "redraw.h"
+#include "player.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -214,7 +215,7 @@ void MCStack::view_set_content_scale(MCGFloat p_scale)
 	m_view_content_scale = p_scale;
 	
 	// IM-2014-01-16: [[ StackScale ]] Update view transform after changing view property
-	view_update_transform();
+	view_update_transform(true);
 	// IM-2014-10-22: [[ Bug 13746 ]] Update window mask when stack scale changes
 	loadwindowshape();
 }
@@ -294,16 +295,16 @@ MCGAffineTransform view_get_stack_transform(MCStackFullscreenMode p_mode, MCRect
 	case kMCStackFullscreenShowAll:
 		t_scale = MCMin((MCGFloat)p_screen_rect.width / (MCGFloat)p_stack_rect.width, (MCGFloat)p_screen_rect.height / (MCGFloat)p_stack_rect.height);
 		t_transform = MCGAffineTransformMakeTranslation(-(MCGFloat)p_stack_rect.width / 2.0, -(MCGFloat)p_stack_rect.height / 2.0);
-		t_transform = MCGAffineTransformScale(t_transform, t_scale, t_scale);
-		t_transform = MCGAffineTransformTranslate(t_transform, (MCGFloat)p_screen_rect.width / 2.0, (MCGFloat)p_screen_rect.height / 2.0);
+		t_transform = MCGAffineTransformPreScale(t_transform, t_scale, t_scale);
+		t_transform = MCGAffineTransformPreTranslate(t_transform, (MCGFloat)p_screen_rect.width / 2.0, (MCGFloat)p_screen_rect.height / 2.0);
 
 		return t_transform;
 
 	case kMCStackFullscreenNoBorder:
 		t_scale = MCMax((MCGFloat)p_screen_rect.width / (MCGFloat)p_stack_rect.width, (MCGFloat)p_screen_rect.height / (MCGFloat)p_stack_rect.height);
 		t_transform = MCGAffineTransformMakeTranslation(-(MCGFloat)p_stack_rect.width / 2.0, -(MCGFloat)p_stack_rect.height / 2.0);
-		t_transform = MCGAffineTransformScale(t_transform, t_scale, t_scale);
-		t_transform = MCGAffineTransformTranslate(t_transform, (MCGFloat)p_screen_rect.width / 2.0, (MCGFloat)p_screen_rect.height / 2.0);
+		t_transform = MCGAffineTransformPreScale(t_transform, t_scale, t_scale);
+		t_transform = MCGAffineTransformPreTranslate(t_transform, (MCGFloat)p_screen_rect.width / 2.0, (MCGFloat)p_screen_rect.height / 2.0);
 
 		return t_transform;
 
@@ -313,6 +314,8 @@ MCGAffineTransform view_get_stack_transform(MCStackFullscreenMode p_mode, MCRect
 		t_rect = MCU_center_rect(p_screen_rect, p_stack_rect);
 		// IM-2013-12-19: [[ Bug 11590 ]] Adjust for screen rect origins other than 0,0
 		return MCGAffineTransformMakeTranslation(t_rect.x - p_screen_rect.x, t_rect.y - p_screen_rect.y);
+    default:
+        MCUnreachableReturn(MCGAffineTransformMakeIdentity());
 	}
 }
 
@@ -425,7 +428,7 @@ void MCStack::view_calculate_viewports(const MCRectangle &p_stack_rect, MCRectan
 	r_transform = MCGAffineTransformConcat(view_get_stack_transform(t_mode, MCGRectangleGetIntegerBounds(t_scaled_rect), t_view_rect), t_transform);
 }
 	
-void MCStack::view_update_transform(void)
+void MCStack::view_update_transform(bool p_ensure_onscreen)
 {
 	MCRectangle t_view_rect;
 	MCGAffineTransform t_transform;
@@ -449,8 +452,33 @@ void MCStack::view_update_transform(void)
 		view_dirty_all();
 	}
 	
-	// IM-2014-01-16: [[ StackScale ]] Update view rect if needed
-	view_setrect(t_view_rect);
+	// PM-2015-07-17: [[ Bug 13754 ]] Make sure stack does not disappear off screen when changing the scalefactor
+    MCRectangle t_bounded_rect;
+    if (p_ensure_onscreen)
+    {
+        // AL-2015-10-01: [[ Bug 16017 ]] Remember location of stacks on a second monitor
+        const MCDisplay* t_nearest_display;
+        t_nearest_display = MCscreen -> getnearestdisplay(t_view_rect);
+        
+        if (t_nearest_display != nil)
+        {
+			MCRectangle t_screen_rect;
+            t_screen_rect = t_nearest_display -> viewport;
+            t_bounded_rect = MCU_bound_rect(t_view_rect, t_screen_rect . x, t_screen_rect . y, t_screen_rect . width, t_screen_rect . height);
+        }
+        else
+        {
+            // In noUI mode, we don't have a nearest display.
+            t_bounded_rect = MCU_bound_rect(t_view_rect, 0, 0, MCscreen -> getwidth(), MCscreen -> getheight());
+        }
+    }
+    else
+    {
+        t_bounded_rect = t_view_rect;
+    }
+    
+    // IM-2014-01-16: [[ StackScale ]] Update view rect if needed
+    view_setrect(t_bounded_rect);
 }
 
 MCRectangle MCStack::view_setstackviewport(const MCRectangle &p_rect)
@@ -470,7 +498,7 @@ void MCStack::view_configure(bool p_user)
 
 	// IM-2014-10-29: [[ Bug 13812 ]] Remove need resize check and unset flag
 	m_view_need_resize = false;
-	
+
 	if (!MCU_equal_rect(t_view_rect, m_view_rect))
 	{
 		// IM-2014-02-13: [[ StackScale ]] Test if the view size has changed
@@ -604,6 +632,11 @@ bool MCStack::view_getacceleratedrendering(void)
 
 void MCStack::view_setacceleratedrendering(bool p_value)
 {
+#ifdef _SERVER
+    // We don't have accelerated rendering on Server
+    return;
+#else
+    
 	// If we are turning accelerated rendering off, then destroy the tilecache.
 	if (!p_value)
 	{
@@ -630,7 +663,7 @@ void MCStack::view_setacceleratedrendering(bool p_value)
 	t_compositor_type = kMCTileCacheCompositorCoreGraphics;
 	t_tile_size = 32;
 	t_cache_limit = 32 * 1024 * 1024;
-#elif defined(_WINDOWS_DESKTOP) || defined(_LINUX_DESKTOP)
+#elif defined(_WINDOWS_DESKTOP) || defined(_LINUX_DESKTOP) || defined(__EMSCRIPTEN__)
 	t_compositor_type = kMCTileCacheCompositorSoftware;
 	t_tile_size = 32;
 	t_cache_limit = 32 * 1024 * 1024;
@@ -656,6 +689,8 @@ void MCStack::view_setacceleratedrendering(bool p_value)
 		t_tile_size = 64, t_cache_limit = 32 * 1024 * 1024;
 	else
 		t_tile_size = 64, t_cache_limit = 64 * 1024 * 1024;
+#else
+#   error "No tile cache implementation defined for this platform"
 #endif
 	
 	MCTileCacheCreate(t_tile_size, t_cache_limit, m_view_tilecache);
@@ -663,6 +698,7 @@ void MCStack::view_setacceleratedrendering(bool p_value)
 	MCTileCacheSetCompositor(m_view_tilecache, t_compositor_type);
 	
 	view_dirty_all();
+#endif /* !_SERVER */
 }
 
 //////////
@@ -963,7 +999,8 @@ MCRectangle MCStack::view_setgeom(const MCRectangle &p_rect)
 
 void MCStack::view_update_geometry()
 {
-	if (m_view_need_resize)
+	if (m_view_need_resize &&
+        window != NULL)
 		view_platform_setgeom(m_view_rect);
 	
 	m_view_need_resize = false;

@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -122,8 +122,8 @@ public:
 	virtual int GetHScroll(void);
 	virtual void SetHScroll(int p_hscroll_pixels);
 
-	virtual int GetWindowId(void);
-	virtual void SetWindowId(int p_new_id);
+	virtual uintptr_t GetWindowId(void);
+	virtual void SetWindowId(uintptr_t p_new_id);
 
 	virtual char *GetUserAgent(void);
 	virtual void SetUserAgent(const char *p_user_agent);
@@ -166,7 +166,7 @@ public:
 	virtual bool PlatformGetRect(int32_t &t_left, int32_t &t_top, int32_t &t_right, int32_t &t_bottom) = 0;
 	virtual bool PlatformSetRect(int32_t t_left, int32_t t_top, int32_t t_right, int32_t t_bottom) = 0;
 
-	virtual bool PlatformGetWindowID(int32_t &r_id) = 0;
+	virtual bool PlatformGetWindowID(uintptr_t &r_id) = 0;
 	
 	virtual bool PlatformGetAuthCredentials(bool p_is_proxy, const CefString &p_url, const CefString &p_realm, MCCefAuthScheme p_auth_scheme, CefString &r_user, CefString &r_password) = 0;
 
@@ -184,8 +184,8 @@ void MCCefPlatformCloseBrowserWindow(CefRefPtr<CefBrowser> p_browser);
 
 const char *MCCefPlatformGetSubProcessName(void);
 
-bool MCCefStringToCString(const CefString &p_cef_string, char *&r_c_string);
-bool MCCefStringFromCString(const char *p_c_string, CefString &r_cef_string);
+bool MCCefStringToUtf8String(const CefString &p_cef_string, char *&r_u8_string);
+bool MCCefStringFromUtf8String(const char *p_u8_string, CefString &r_cef_string);
 bool MCCefStringToUInt(const CefString &p_string, uint32_t &r_int);
 
 bool MCCefAuthSchemeFromCefString(const CefString &p_string, MCCefAuthScheme &r_scheme);

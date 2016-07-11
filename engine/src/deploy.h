@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -18,8 +18,30 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #define __MC_DEPLOY__
 
 #include "mcio.h"
+#include "license.h"
 
 ////////////////////////////////////////////////////////////////////////////////
+
+enum MCDeployArchitecture
+{
+    kMCDeployArchitecture_Unknown,
+    kMCDeployArchitecture_I386,
+    kMCDeployArchitecture_X86_64,
+    kMCDeployArchitecture_ARMV6,
+    kMCDeployArchitecture_ARMV7,
+    kMCDeployArchitecture_ARMV7S,
+    kMCDeployArchitecture_ARM64,
+    kMCDeployArchitecture_PPC,
+    kMCDeployArchitecture_PPC64,
+};
+
+struct MCDeployMinOSVersion
+{
+    // The architecture this version applies to.
+    MCDeployArchitecture architecture;
+    // The version word encoded as nibbles XXXX.YY.ZZ for X.Y.Z.
+    uint32_t version;
+};
 
 struct MCDeployParameters
 {
@@ -34,11 +56,16 @@ struct MCDeployParameters
 	// fields.
 	MCArrayRef version_info;
 
-	// The root stackfile to be included in the standalone.
+    // When building for Mac/iOS, you can specify a min os version per arch
+    // slice.
+    MCDeployMinOSVersion *min_os_versions;
+    uindex_t min_os_version_count;
+    
+    // The root stackfile to be included in the standalone.
 	MCStringRef stackfile;
 	
-	// The array of auxillary stackfiles to be included in the standalone.
-	MCArrayRef auxillary_stackfiles;
+    // The array of auxiliary stackfiles to be included in the standalone.
+    MCArrayRef auxiliary_stackfiles;
 
 	// The array of externals to be loaded on startup by the standalone.
 	MCArrayRef externals;
@@ -49,9 +76,15 @@ struct MCDeployParameters
 	// If true, then the standalone will have an implicit timeout
 	uint32_t timeout;
 	
-	// The list of redirection mappings
+    // The list of redirection mappings
 	MCArrayRef redirects;
 
+    // The list of font mappings
+    MCArrayRef fontmappings;
+
+    // AL-2015-02-10: [[ Standalone Inclusions ]] The list of resource mappings.
+    MCArrayRef library;
+    
 	// On Windows, the icon files to be inserted into the resource directory.
 	MCStringRef app_icon;
 	MCStringRef doc_icon;
@@ -69,6 +102,22 @@ struct MCDeployParameters
 
 	// The output path for the new executable.
 	MCStringRef output;
+    
+    // The list of modules to include.
+    MCArrayRef modules;
+    
+    // List of architectures to retain when building universal binaries
+    MCAutoArray<MCDeployArchitecture> architectures;
+	
+	// This can be set to commercial or professional trial. In that
+	// case, the standalone will be built in that mode.
+	uint32_t banner_class;
+	
+	// The timeout for the banner that's displayed before startup.
+	uint32_t banner_timeout;
+	
+	// The data for the banner stackfile.
+	MCDataRef banner_stackfile;
 	
 	
 	MCDeployParameters()
@@ -78,7 +127,7 @@ struct MCDeployParameters
 		engine_ppc		= MCValueRetain(kMCEmptyString);
 		version_info	= MCValueRetain(kMCEmptyArray);
 		stackfile		= MCValueRetain(kMCEmptyString);
-		auxillary_stackfiles = MCValueRetain(kMCEmptyArray);
+        auxiliary_stackfiles = MCValueRetain(kMCEmptyArray);
 		externals		= MCValueRetain(kMCEmptyArray);
 		startup_script	= MCValueRetain(kMCEmptyString);
 		timeout			= 0;
@@ -88,26 +137,43 @@ struct MCDeployParameters
 		manifest		= MCValueRetain(kMCEmptyString);
 		payload			= MCValueRetain(kMCEmptyString);
 		spill			= MCValueRetain(kMCEmptyString);
-		output			= MCValueRetain(kMCEmptyString);
+        output			= MCValueRetain(kMCEmptyString);
+        modules         = MCValueRetain(kMCEmptyArray);
+        library         = MCValueRetain(kMCEmptyArray);
+        
+        // SN-2015-04-23: [[ Merge-6.7.5-rc-1 ]] Initialise fontmappings array
+        fontmappings    = MCValueRetain(kMCEmptyArray);
+        
+        // SN-2015-02-04: [[ Merge-6.7.2 ]] Init the versions pointer / count
+        min_os_versions = nil;
+        min_os_version_count = 0;
+		
+		banner_timeout = 0;
+		banner_stackfile = MCValueRetain(kMCEmptyData);
+        banner_class = kMCLicenseClassNone;
 	}
 	
 	~MCDeployParameters()
-	{
-			MCValueRelease(engine);
-			MCValueRelease(engine_x86);
-			MCValueRelease(engine_ppc);
-			MCValueRelease(version_info);
-			MCValueRelease(stackfile);
-			MCValueRelease(auxillary_stackfiles);
-			MCValueRelease(externals);
-			MCValueRelease(startup_script);
-			MCValueRelease(redirects);
-			MCValueRelease(app_icon);
-			MCValueRelease(doc_icon);
-			MCValueRelease(manifest);
-			MCValueRelease(payload);
-			MCValueRelease(spill);
-			MCValueRelease(output);
+    {
+        MCValueRelease(engine);
+        MCValueRelease(engine_x86);
+        MCValueRelease(engine_ppc);
+        MCValueRelease(version_info);
+        MCValueRelease(stackfile);
+        MCValueRelease(auxiliary_stackfiles);
+        MCValueRelease(externals);
+        MCValueRelease(startup_script);
+        MCValueRelease(redirects);
+        MCValueRelease(app_icon);
+        MCValueRelease(doc_icon);
+        MCValueRelease(manifest);
+        MCValueRelease(payload);
+        MCValueRelease(spill);
+        MCValueRelease(output);
+        MCValueRelease(modules);
+        MCValueRelease(library);
+        MCMemoryDeleteArray(min_os_versions);
+		MCValueRelease(banner_stackfile);
 	}
 	
 	// Creates using an array of parameters
@@ -119,6 +185,7 @@ Exec_stat MCDeployToLinux(const MCDeployParameters& p_params);
 Exec_stat MCDeployToMacOSX(const MCDeployParameters& p_params);
 Exec_stat MCDeployToIOS(const MCDeployParameters& p_params, bool embedded);
 Exec_stat MCDeployToAndroid(const MCDeployParameters& p_params);
+Exec_stat MCDeployToEmscripten(const MCDeployParameters& p_params);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -331,6 +398,7 @@ enum MCDeployError
 	kMCDeployErrorNoEngine,
 	kMCDeployErrorNoStackfile,
 	kMCDeployErrorNoAuxStackfile,
+    kMCDeployErrorNoModule,
 	kMCDeployErrorNoOutput,
 	kMCDeployErrorNoSpill,
 	kMCDeployErrorNoPayload,
@@ -381,6 +449,12 @@ enum MCDeployError
 	kMCDeployErrorMacOSXUnknownLoadCommand,
 	kMCDeployErrorMacOSXBadCpuType,
 	kMCDeployErrorMacOSXBadTarget,
+
+	/* An error occurred while creating the startup stack */
+	kMCDeployErrorEmscriptenBadStack,
+	
+	/* An error occured with the pre-deploy step */
+	kMCDeployErrorTrialBannerError,
 
 	// SIGN ERRORS
 

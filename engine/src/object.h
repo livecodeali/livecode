@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -20,15 +20,15 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #ifndef	OBJECT_H
 #define	OBJECT_H
 
-#ifndef DLLIST_H
 #include "dllst.h"
-#endif
-
-#ifndef __MC_IMAGE_BITMAP_H__
-#include "imagebitmap.h"
-#endif
-
 #include "globals.h"
+#include "imagebitmap.h"
+#include "objdefs.h"
+#include "parsedef.h"
+#include "platform.h"
+#include "context.h"
+
+#include "native-layer.h"
 
 enum {
     MAC_SHADOW,
@@ -44,10 +44,43 @@ enum {
 typedef bool (*MCObjectListFontsCallback)(void *p_context, unsigned int p_index);
 typedef bool (*MCObjectResetFontsCallback)(void *p_context, unsigned int p_index, unsigned int p_new_index);
 
+// IM-2015-02-12: [[ ScriptObjectProps ]] Add object visitor flags
+// Descend recursively to the children of an object
+#define kMCObjectVisitorRecursive (1 << 0)
+
+// Visit the children of an object before itself
+#define kMCObjectVisitorDepthFirst (1 << 1)
+
+// Only visit children who are direct descendants of an object.
+#define kMCObjectVisitorHeirarchical (1 << 2)
+
+typedef uint32_t MCObjectVisitorOptions;
+
+inline bool MCObjectVisitorIsDepthFirst(MCObjectVisitorOptions p_options)
+{
+	return (p_options & kMCObjectVisitorDepthFirst) != 0;
+}
+
+inline bool MCObjectVisitorIsDepthLast(MCObjectVisitorOptions p_options)
+{
+	return !MCObjectVisitorIsDepthFirst(p_options);
+}
+
+inline bool MCObjectVisitorIsRecursive(MCObjectVisitorOptions p_options)
+{
+	return (p_options & kMCObjectVisitorRecursive) != 0;
+}
+
+inline bool MCObjectVisitorIsHeirarchical(MCObjectVisitorOptions p_options)
+{
+	return (p_options & kMCObjectVisitorHeirarchical) != 0;
+}
+
+/* LEGACY - Set flags for visit styles to perform previously defined behaviour */
 enum MCVisitStyle
 {
-	VISIT_STYLE_DEPTH_FIRST,
-	VISIT_STYLE_DEPTH_LAST
+	VISIT_STYLE_DEPTH_FIRST = (kMCObjectVisitorRecursive | kMCObjectVisitorDepthFirst),
+	VISIT_STYLE_DEPTH_LAST = (kMCObjectVisitorRecursive)
 };
 
 enum MCObjectIntersectType
@@ -73,6 +106,13 @@ enum MCPropertyChangedMessageType
 	kMCPropertyChangedMessageTypeResizeControlEnded = 1 << 2,
 	kMCPropertyChangedMessageTypeGradientEditStarted = 1 << 3,
 	kMCPropertyChangedMessageTypeGradientEditEnded = 1 << 4
+};
+
+enum MCInterfaceTheme
+{
+    kMCInterfaceThemeEmpty = 0,         // Inherit the theme
+    kMCInterfaceThemeNative = 1,        // Native appearance
+    kMCInterfaceThemeLegacy = 2         // Backwards-compatibility theming
 };
 
 struct MCObjectShape
@@ -123,6 +163,7 @@ struct MCObjectVisitor
 	virtual bool OnParagraph(MCParagraph *p_paragraph);
 	virtual bool OnBlock(MCBlock *p_block);
 	virtual bool OnStyledText(MCStyledText *p_styled_text);
+    virtual bool OnWidget(MCWidget *p_widget);
 };
 
 #define OBJECT_EXTRA_ARRAYPROPS		(1U << 0)
@@ -132,31 +173,42 @@ struct MCObjectVisitor
 // MW-2012-02-19: [[ SplitTextAttrs ]] If this flag is set, then there is a font-flags
 //   byte in the extended data section.
 #define OBJECT_EXTRA_FONTFLAGS		(1U << 4)
+#define OBJECT_EXTRA_THEME_INFO     (1U << 5)       // "theme" and/or "themeClass" properties are present
 
-class MCObjectHandle
+
+// Proxy allowing for weak references to MCObjects
+class MCObjectProxy
 {
 public:
-	MCObjectHandle(MCObject *p_object);
-	~MCObjectHandle(void);
-
-	// Increase the reference count.
-	void Retain(void);
-
-	// Decrease the reference count, destroying the object when it reaches 0.
-	void Release(void);
-
-	MCObject *Get(void);
-
-	// Set the handle to nil - the object has been destroyed.
-	void Clear(void);
-
-	// Returns true if the object still exists.
-	bool Exists(void);
-
+    
+    // RAII handle class
+    class Handle;
+    
+    // Create a proxy for the given object
+    MCObjectProxy(MCObject* p_proxy_form);
+    
+    // Inform the proxy that the bound object no longer exists
+    void Clear();
+    
 private:
-	uint32_t m_references;
-	MCObject *m_object;
+    
+    uint32_t    m_refcount;
+    MCObject*   m_object;
+    
+    // The proxy can only be deleted by itself
+    ~MCObjectProxy();
+    
+    void Retain();
+    void Release();
+    
+    MCObject* Get();
+    
+    bool ObjectExists() const;
 };
+
+// Slightly more readable name
+typedef MCObjectProxy::Handle MCObjectHandle;
+
 
 // MW-2012-02-17: [[ LogFonts ]] The font attrs struct for the object.
 struct MCObjectFontAttrs
@@ -181,6 +233,19 @@ struct MCInterfaceTextStyle;
 struct MCInterfaceTriState;
 struct MCExecValue;
 
+struct MCDeletedObjectPool;
+void MCDeletedObjectsSetup(void);
+void MCDeletedObjectsTeardown(void);
+void MCDeletedObjectsEnterWait(bool p_dispatching);
+void MCDeletedObjectsLeaveWait(bool p_dispatching);
+void MCDeletedObjectsOnObjectCreated(MCObject *object);
+void MCDeletedObjectsOnObjectDeleted(MCObject *object);
+void MCDeletedObjectsOnObjectDestroyed(MCObject *object);
+void MCDeletedObjectsOnObjectSuspendDeletion(MCObject *object, void*& r_cookie);
+void MCDeletedObjectsOnObjectResumeDeletion(MCObject *object, void *cookie);
+
+void MCDeletedObjectsDoDrain(void);
+
 struct MCPatternInfo
 {
 	uint32_t id;
@@ -202,13 +267,13 @@ protected:
 	MCHandlerlist *hlist;
 	MCObjectPropertySet *props;
 	uint4 state;
+	uint4 scriptdepth;
 	uint2 fontheight;
 	uint2 dflags;
 	uint2 ncolors;
 	uint2 npatterns;
 	uint2 altid;
 	uint1 hashandlers;
-	uint1 scriptdepth;
 	uint1 borderwidth;
 	int1 shadowoffset;
 	uint1 ink;
@@ -231,6 +296,18 @@ protected:
 	
 	// IM-2013-04-16: [[ BZ 10848 ]] // flag to record encrypted state of object script
 	bool m_script_encrypted : 1;
+    
+    // If this is true, then this object is in the parentScript resolution table.
+    bool m_is_parent_script : 1;
+	
+	// If this is true, then the object is currently suspended from deletion.
+	bool m_deletion_is_suspended : 1;
+	
+    // Whether to use legacy theming (or native-like theming)
+    MCInterfaceTheme m_theme;
+    
+    // Override the type of the control for theming purposes
+    MCPlatformControlType m_theme_type;
 	
 	MCStringRef tooltip;
 	
@@ -238,7 +315,7 @@ protected:
 	MCParentScriptUse *parent_script;
 
 	// MW-2009-08-25: Pointer to the object's weak reference (if any).
-	MCObjectHandle *m_weak_handle;
+	MCObjectProxy* m_weak_proxy;
 
 	// MW-2011-07-21: For now, make this a uint4 as imageSrc references can make
 	//   it exceed 255 and wrap causing much much badness for the likes of rTree.
@@ -249,6 +326,8 @@ protected:
 
 	// MW-2012-02-16: [[ LogFonts ]] The object's logical font attrs.
 	MCObjectFontAttrs *m_font_attrs;
+    
+    MCDeletedObjectPool *m_pool;
 
 	static uint1 dashlist[2];
 	static uint1 dotlist[2];
@@ -274,7 +353,12 @@ protected:
 	static MCObjectPropertyTable kPropertyTable;
     static MCPropertyInfo kModeProperties[];
 	static MCObjectPropertyTable kModePropertyTable;
+
+	// The native layer associated with this object
+	MCNativeLayer* m_native_layer;
+	
 public:
+    
 	MCObject();
 	MCObject(const MCObject &oref);
 	virtual ~MCObject();
@@ -284,10 +368,12 @@ public:
 	virtual const MCObjectPropertyTable *getpropertytable(void) const { return &kPropertyTable; }
     virtual const MCObjectPropertyTable *getmodepropertytable(void) const { return &kModePropertyTable; }
 	
-	virtual bool visit(MCVisitStyle p_style, uint32_t p_part, MCObjectVisitor *p_visitor);
+	virtual bool visit(MCObjectVisitorOptions p_options, uint32_t p_part, MCObjectVisitor *p_visitor);
+	virtual bool visit_self(MCObjectVisitor *p_visitor);
+	virtual bool visit_children(MCObjectVisitorOptions p_options, uint32_t p_part, MCObjectVisitor *p_visitor);
 
-	virtual IO_stat save(IO_handle stream, uint4 p_part, bool p_force_ext);
-	virtual IO_stat extendedsave(MCObjectOutputStream& p_stream, uint4 p_part);
+	virtual IO_stat save(IO_handle stream, uint4 p_part, bool p_force_ext, uint32_t p_version);
+	virtual IO_stat extendedsave(MCObjectOutputStream& p_stream, uint4 p_part, uint32_t p_version);
 
 	virtual IO_stat load(IO_handle stream, uint32_t version);
 	virtual IO_stat extendedload(MCObjectInputStream& p_stream, uint32_t version, uint4 p_length);
@@ -311,18 +397,13 @@ public:
 	
 	virtual void timer(MCNameRef mptr, MCParameter *params);
 	virtual uint2 gettransient() const;
-	virtual void setrect(const MCRectangle &nrect);
+	virtual void applyrect(const MCRectangle &nrect);
+	void setrect(const MCRectangle &p_rect);
 
 	// MW-2011-11-23: [[ Array Chunk Props ]] Add 'effective' param to arrayprop access.
-#ifdef LEGACY_EXEC
-	virtual Exec_stat getprop_legacy(uint4 parid, Properties which, MCExecPoint &, Boolean effective);
-	virtual Exec_stat getarrayprop_legacy(uint4 parid, Properties which, MCExecPoint &, MCNameRef key, Boolean effective);
-	virtual Exec_stat setprop_legacy(uint4 parid, Properties which, MCExecPoint &, Boolean effective);
-	virtual Exec_stat setarrayprop_legacy(uint4 parid, Properties which, MCExecPoint&, MCNameRef key, Boolean effective);
-#endif
 	virtual void select();
 	virtual void deselect();
-	virtual Boolean del();
+	virtual Boolean del(bool p_check_flag);
 	virtual void paste(void);
 	virtual void undo(Ustruct *us);
 	virtual void freeundo(Ustruct *us);
@@ -335,23 +416,45 @@ public:
 	virtual void closemenu(Boolean kfocus, Boolean disarm);
 	virtual void recompute();
 	
+    // FG-2014-10-10: [[ Native Widgets ]] Informs the object that the selected tool has changed
+    virtual void toolchanged(Tool p_new_tool);
+    
+    // FG-2014-10-14: [[ Native Widgets ]] Informs the object that its layer has changed
+    virtual void layerchanged();
+    
+    // AL-2015-09-23: [[ Native Widgets ]] Informs the object that its visibility has changed
+    virtual void visibilitychanged(bool p_visible);
+	
+	// IM-2015-12-11: [[ Native Widgets ]] Informs the object that its rect has changed
+	virtual void geometrychanged(const MCRectangle &p_rect);
+
+	// IM-2016-01-19: [[ NativeWidgets ]] Informs the object that its visible area has changed.
+	virtual void viewportgeometrychanged(const MCRectangle &p_rect);
+	
+	// IM-2015-12-16: [[ NativeWidgets ]] Informs the object that it has been opened.
+	virtual void OnOpen();
+	// IM-2015-12-16: [[ NativeWidgets ]] Informs the object that it will be closed.
+	virtual void OnClose();
+    
 	// MW-2011-09-20: [[ Collision ]] Compute the shape of the object's mask.
 	virtual bool lockshape(MCObjectShape& r_shape);
 	virtual void unlockshape(MCObjectShape& shape);
 
 	// MW-2012-02-14: [[ FontRefs ]] Remap any fonts this object uses as font related property has changed.
-	virtual bool recomputefonts(MCFontRef parent_font);
+    // Set force to true to recompute even if it looks like nothing needs updated
+	virtual bool recomputefonts(MCFontRef parent_font, bool force = false);
 
 	// MW-2012-02-14: [[ FontRefs ]] Returns the current concrete fontref of the object.
 	MCFontRef getfontref(void) const { return m_font; }
 
-#ifdef LEGACY_EXEC
-    Exec_stat getarrayprop(uint32_t p_part_id, Properties p_which, MCExecPoint& ep, MCNameRef p_index, Boolean p_effective);
-    Exec_stat setarrayprop(uint32_t p_part_id, Properties p_which, MCExecPoint& ep, MCNameRef p_index, Boolean p_effective);
-#endif
-	
-    bool getprop(MCExecContext& ctxt, uint32_t p_part_id, Properties p_which, MCNameRef p_index, Boolean p_effective, MCExecValue& r_value);
-	bool setprop(MCExecContext& ctxt, uint32_t p_part_id, Properties p_which, MCNameRef p_index, Boolean p_effective, MCExecValue p_value);
+    
+    Exec_stat sendgetprop(MCExecContext& ctxt, MCNameRef p_set_name, MCNameRef p_prop_name, MCValueRef& r_value);
+    Exec_stat sendsetprop(MCExecContext& ctxt, MCNameRef set_name, MCNameRef prop_name, MCValueRef p_value);
+    
+    virtual bool getprop(MCExecContext& ctxt, uint32_t p_part_id, Properties p_which, MCNameRef p_index, Boolean p_effective, MCExecValue& r_value);
+	virtual bool setprop(MCExecContext& ctxt, uint32_t p_part_id, Properties p_which, MCNameRef p_index, Boolean p_effective, MCExecValue p_value);
+	virtual bool getcustomprop(MCExecContext& ctxt, MCNameRef set_name, MCNameRef prop_name, MCProperListRef p_path, MCExecValue& r_value);
+	virtual bool setcustomprop(MCExecContext& ctxt, MCNameRef set_name, MCNameRef prop_name, MCProperListRef p_path, MCExecValue p_value);
     
 	// MW-2012-05-28: [[ Value Prop Accessors ]] These methods allow access to object props
 	//   via direct types. Appropriate type coercion will be performed, with errors thrown as
@@ -390,26 +493,18 @@ public:
 	virtual void relayercontrol_remove(MCControl *control);
 	virtual void relayercontrol_insert(MCControl *control, MCControl *target);
 
+	bool GetNativeView(void *&r_view);
+	bool SetNativeView(void *p_view);
+	
+	// Gets the current native layer (if any) associated with this object
+	MCNativeLayer* getNativeLayer() const;
+	
+	// IM-2016-04-26: [[ WindowsPlayer ]] Retrieve the rect of the native view attached to the object.
+	virtual MCRectangle GetNativeViewRect(const MCRectangle &p_object_rect);
+	
 	MCNameRef getdefaultpropsetname(void);
 
-#ifdef LEGACY_EXEC
-	Exec_stat sendgetprop(MCExecPoint& ep, MCNameRef set_name, MCNameRef prop_name);
-	Exec_stat getcustomprop(MCExecPoint& ep, MCNameRef set_name, MCNameRef prop_name);
-
-	Exec_stat sendsetprop(MCExecPoint& ep, MCNameRef set_name, MCNameRef prop_name);
-	Exec_stat setcustomprop(MCExecPoint& ep, MCNameRef set_name, MCNameRef prop_name);
-#endif
     
-    Exec_stat sendgetprop(MCExecContext& ctxt, MCNameRef p_set_name, MCNameRef p_prop_name, MCValueRef& r_value);
-	bool getcustomprop(MCExecContext& ctxt, MCNameRef set_name, MCNameRef prop_name, MCExecValue& r_value);
-    Exec_stat sendsetprop(MCExecContext& ctxt, MCNameRef set_name, MCNameRef prop_name, MCValueRef p_value);
-	bool setcustomprop(MCExecContext& ctxt, MCNameRef set_name, MCNameRef prop_name, MCExecValue p_value);
-    
-#ifdef OLD_EXEC
-	Exec_stat setprops(uint32_t parid, MCExecPoint& ep);
-	Exec_stat changeid(uint32_t new_id);
-#endif
-
 	uint4 getid() const
 	{
 		return obj_id;
@@ -457,7 +552,7 @@ public:
 	void setname(MCNameRef new_name);
 	void setname_cstring(const char *p_new_name);
 
-	uint1 getopened() const
+	uint32_t getopened() const
 	{
 		return opened;
 	}
@@ -523,10 +618,22 @@ public:
 	{
 		return parent;
 	}
-	uint1 getscriptdepth() const
+	
+	uint4 getscriptdepth() const
 	{
 		return scriptdepth;
 	}
+	
+	void lockforexecution(void)
+	{
+		scriptdepth += 1;
+	}
+	
+	void unlockforexecution(void)
+	{
+		scriptdepth -= 1;
+	}
+	
 	void setparent(MCObject *newparent)
 	{
 		parent = newparent;
@@ -558,11 +665,19 @@ public:
 	MCImage *resolveimageid(uint4 image_id);
 	MCImage *resolveimagename(MCStringRef name);
 	
-	Boolean isvisible();
+	// IM-2015-12-07: [[ ObjectVisibility ]]
+	// Returns the visibility of the object. If effective is true then only returns true if the parent (and its parent, etc.) is also visible.
+	bool isvisible(bool p_effective = true);
+	
+	// IM-2016-02-26: [[ Bug 16244 ]]
+	// Returns whether to show this object when its 'visible' property is false
+	bool showinvisible();
+	
 	Boolean resizeparent();
 	Boolean getforecolor(uint2 di, Boolean reversed, Boolean hilite, MCColor &c,
-	                     MCPatternRef &r_pattern, int2 &x, int2 &y, MCDC *dc, MCObject *o);
-	void setforeground(MCDC *dc, uint2 di, Boolean rev, Boolean hilite = False);
+	                     MCPatternRef &r_pattern, int2 &x, int2 &y, MCContextType dc_type,
+                         MCObject *o, bool selected = false);
+	void setforeground(MCDC *dc, uint2 di, Boolean rev, Boolean hilite = False, bool selected = false);
 	Boolean setcolor(uint2 index, const MCString &eptr);
 	Boolean setcolors(const MCString &data);
 	Boolean setpattern(uint2 newpixmap, MCStringRef);
@@ -586,7 +701,7 @@ public:
 
 	// MW-2012-02-17: [[ LogFonts ]] Fetch the (effective) font attrs for the
 	//   object.
-	void getfontattsnew(MCNameRef& fname, uint2& fsize, uint2& fstyle);
+	uint32_t getfontattsnew(MCNameRef& fname, uint2& fsize, uint2& fstyle);
 	//void getfontattsnew(MCStringRef& fname, uint2& fsize, uint2& fstyle);
 
 	// MW-2012-02-16: [[ LogFonts ]] Return the (effective) textFont setting. 
@@ -625,17 +740,15 @@ public:
 	// New method for returning the various 'names' of an object. This should really
 	// return an 'MCValueRef' at some point, but as it stands that causes issues.
 	bool names(Properties which, MCValueRef& r_name);
-#ifdef LEGACY_EXEC
-	// Wrapper for 'names()' working in the old way (for convenience).
-	Exec_stat names_old(Properties which, MCExecPoint& ep, uint32_t parid);
-#endif
-
+    bool getnameproperty(Properties which, uint32_t p_part_id, MCValueRef& r_name_val);
+    
 	Boolean parsescript(Boolean report, Boolean force = False);
 	void drawshadow(MCDC *dc, const MCRectangle &drect, int2 soffset);
 	void draw3d(MCDC *dc, const MCRectangle &drect,
 	            Etch style, uint2 bwidth);
 	void drawborder(MCDC *dc, const MCRectangle &drect, uint2 bwidth);
 	void positionrel(const MCRectangle &dptr, Object_pos xpos, Object_pos ypos);
+    void drawmarquee(MCContext *p_context, const MCRectangle &p_rect);
     
     // SN-2014-04-16 [[ Bug 12078 ]] Buttons and tooltip label are not drawn in the text direction
     void drawdirectionaltext(MCDC *dc, int2 sx, int2 sy, MCStringRef p_string, MCFontRef font);
@@ -673,15 +786,8 @@ public:
 	// IM-2013-07-24: [[ ResIndependence ]] Add scale factor to allow taking high-res snapshots
 	MCImageBitmap *snapshot(const MCRectangle *rect, const MCPoint *size, MCGFloat p_scale_factor, bool with_effects);
 
-#ifdef OLD_EXEC
-	// MW-2011-01-14: [[ Bug 9288 ]] Added 'parid' to make sure 'the properties of card id ...' returns
-	//   the correct result.
-	// MERG-2013-05-07: [[ RevisedPropsProp ]] Add 'effective' option to enable 'the effective
-	//   properties of object ...'.
-	Exec_stat getproparray(MCExecPoint &ep, uint4 parid, bool effective);
-#endif
-
-	MCObjectHandle *gethandle(void);
+    // Returns a weak reference (handle) to this object
+    MCObjectHandle GetHandle();
 
 	// MW-2011-09-20: [[ Collision ]] Check to see if the two objects touch (exactly).
 	bool intersects(MCObject *other, uint32_t threshold);
@@ -774,16 +880,11 @@ public:
 		return kMCPropertyChangedMessageTypeNone;
 	}	
 
-	void scheduledelete(void);
-	
-	// IM-2013-02-11 image change notification (used by button icons, field images, etc.)
-	// returns true if the referenced image is still in use by this object
-	virtual bool imagechanged(MCImage *p_image, bool p_deleting)
-	{
-		return false;
-	}
+	virtual void scheduledelete(bool p_is_child = false);
 
-	// MW-2012-10-10: [[ IdCache ]]
+    virtual bool isdeletable(bool p_check_flag);
+    
+    // MW-2012-10-10: [[ IdCache ]]
 	void setinidcache(bool p_value)
 	{
 		m_in_id_cache = p_value;
@@ -792,29 +893,64 @@ public:
 	bool getinidcache(void)
 	{
 		return m_in_id_cache;
-	}
+    }
+
+	// IM-2013-02-11 image change notification (used by button icons, field images, etc.)
+	// returns true if the referenced image is still in use by this object
+	virtual bool imagechanged(MCImage *p_image, bool p_deleting)
+	{
+        return false;
+    }
+    
+    void setisparentscript(bool p_value)
+    {
+        m_is_parent_script = p_value;
+    }
+    
+    bool getisparentscript(void)
+    {
+        return m_is_parent_script;
+    }
     
     MCRectangle measuretext(MCStringRef p_text, bool p_is_unicode);
+    
+    // Copy the font which should be used for this object. This will map/unmap
+    // as appropriate.
+    void copyfont(MCFontRef& r_font);
+    
+    // MW-2014-12-17: [[ Widgets ]] Returns true if the object is a widget or contains
+    //   a widget.
+    virtual bool haswidgets(void);
     
     // Currently non-functional: always returns false
     bool is_rtl() const { return false; }
     
-	////////// PROPERTY SUPPORT METHODS
+    // AL-2015-06-30: [[ Bug 15556 ]] Refactored function to sync mouse focus
+    void sync_mfocus(void);
+    
+    // This accessor is used by the widget event manager to trigger tooltip
+    // display for widgets.
+    MCStringRef gettooltip(void) {return tooltip;}
+    
+    // Returns true if this object is an ancestor *control* of p_object
+    //  in the parent chain.
+    bool isancestorof(MCObject *p_object);
+    
+    ////////// PROPERTY SUPPORT METHODS
 
 	void Redraw(void);
 
 	bool GetPixel(MCExecContext& ctxt, Properties which, bool effective, uinteger_t& r_pixel);
 	void SetPixel(MCExecContext& ctxt, Properties which, uinteger_t pixel);
 
-	bool GetColor(MCExecContext& ctxt, Properties which, bool effective, MCInterfaceNamedColor& r_color);
+	bool GetColor(MCExecContext& ctxt, Properties which, bool effective, MCInterfaceNamedColor& r_color, bool recursive = false);
 	void SetColor(MCExecContext& ctxt, int index, const MCInterfaceNamedColor& p_color);
 	bool GetColors(MCExecContext& ctxt, bool effective, MCStringRef& r_colors);
 
-	bool GetPattern(MCExecContext& ctxt, Properties which, bool effective, uint4& r_pattern);
+	bool GetPattern(MCExecContext& ctxt, Properties which, bool effective, uint4*& r_pattern);
 	void SetPattern(MCExecContext& ctxt, uint2 p_new_pixmap, uint4* p_new_id);
 	bool GetPatterns(MCExecContext& ctxt, bool effective, MCStringRef& r_patterns);
 
-	void SetVisibility(MCExecContext& ctxt, uint32_t part, bool flag, bool visible);
 	void SetRectProp(MCExecContext& ctxt, bool effective, MCRectangle p_rect);
 	void GetRectPoint(MCExecContext& ctxt, bool effective, Properties which, MCPoint &r_point);
 	void SetRectPoint(MCExecContext& ctxt, bool effective, Properties which, MCPoint point);
@@ -834,8 +970,8 @@ public:
 	void GetId(MCExecContext& ctxt, uint32_t& r_id);
 	virtual void SetId(MCExecContext& ctxt, uint32_t id);
 	void GetAbbrevId(MCExecContext& ctxt, MCStringRef& r_abbrev_id);
-	void GetLongName(MCExecContext& ctxt, MCStringRef& r_long_name);
-	void GetLongId(MCExecContext& ctxt, MCStringRef& r_long_id);
+	void GetLongName(MCExecContext& ctxt, uint32_t p_part_id, MCStringRef& r_long_name);
+	void GetLongId(MCExecContext& ctxt, uint32_t p_part_id, MCStringRef& r_long_id);
 	void GetName(MCExecContext& ctxt, MCStringRef& r_name);
 	virtual void SetName(MCExecContext& ctxt, MCStringRef name);
 	void GetAbbrevName(MCExecContext& ctxt, MCStringRef& r_abbrev_name);
@@ -917,28 +1053,28 @@ public:
 
 	void GetForePattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	virtual void SetForePattern(MCExecContext& ctxt, uinteger_t* pattern);
-	void GetEffectiveForePattern(MCExecContext& ctxt, uinteger_t& r_pattern);
+	void GetEffectiveForePattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	void GetBackPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	virtual void SetBackPattern(MCExecContext& ctxt, uinteger_t* pattern);
-	void GetEffectiveBackPattern(MCExecContext& ctxt, uinteger_t& r_pattern);
+	void GetEffectiveBackPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	void GetHilitePattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	virtual void SetHilitePattern(MCExecContext& ctxt, uinteger_t* pattern);
-	void GetEffectiveHilitePattern(MCExecContext& ctxt, uinteger_t& r_pattern);
+	void GetEffectiveHilitePattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	void GetBorderPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	virtual void SetBorderPattern(MCExecContext& ctxt, uinteger_t* pattern);
-	void GetEffectiveBorderPattern(MCExecContext& ctxt, uinteger_t& r_pattern);
+	void GetEffectiveBorderPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	void GetTopPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	virtual void SetTopPattern(MCExecContext& ctxt, uinteger_t* pattern);
-	void GetEffectiveTopPattern(MCExecContext& ctxt, uinteger_t& r_pattern);
+	void GetEffectiveTopPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	void GetBottomPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	virtual void SetBottomPattern(MCExecContext& ctxt, uinteger_t* pattern);
-	void GetEffectiveBottomPattern(MCExecContext& ctxt, uinteger_t& r_pattern);
+	void GetEffectiveBottomPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	void GetShadowPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	virtual void SetShadowPattern(MCExecContext& ctxt, uinteger_t* pattern);
-	void GetEffectiveShadowPattern(MCExecContext& ctxt, uinteger_t& r_pattern);
+	void GetEffectiveShadowPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	void GetFocusPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 	virtual void SetFocusPattern(MCExecContext& ctxt, uinteger_t* pattern);
-	void GetEffectiveFocusPattern(MCExecContext& ctxt, uinteger_t& r_pattern);
+	void GetEffectiveFocusPattern(MCExecContext& ctxt, uinteger_t*& r_pattern);
 
 	void GetPatterns(MCExecContext& ctxt, MCStringRef& r_patterns);
 	void SetPatterns(MCExecContext& ctxt, MCStringRef patterns);
@@ -997,7 +1133,7 @@ public:
 	void GetOwner(MCExecContext& ctxt, MCStringRef& r_owner);
 	void GetShortOwner(MCExecContext& ctxt, MCStringRef& r_owner);
 	void GetAbbrevOwner(MCExecContext& ctxt, MCStringRef& r_owner);
-	void GetLongOwner(MCExecContext& ctxt, MCStringRef& r_owner);
+	void GetLongOwner(MCExecContext& ctxt, uint32_t p_part_id, MCStringRef& r_owner);
 
 	void GetProperties(MCExecContext& ctxt, uint32_t part, MCArrayRef& r_props);
 	void SetProperties(MCExecContext& ctxt, uint32_t part, MCArrayRef props);
@@ -1075,6 +1211,14 @@ public:
     void GetCustomProperties(MCExecContext& ctxt, MCValueRef &r_array);
     void SetCustomProperties(MCExecContext& ctxt, MCValueRef p_array);
     
+    void GetTheme(MCExecContext& ctxt, intenum_t& r_theme);
+    virtual void SetTheme(MCExecContext& ctxt, intenum_t  p_theme);
+    void GetEffectiveTheme(MCExecContext& ctxt, intenum_t& r_theme);
+    
+    void GetThemeControlType(MCExecContext& ctxt, intenum_t& r_type);
+    void SetThemeControlType(MCExecContext& ctxt, intenum_t  p_type);
+    void GetEffectiveThemeControlType(MCExecContext& ctxt, intenum_t& r_type);
+    
 	////////// ARRAY PROPS
     
     void GetTextStyleElement(MCExecContext& ctxt, MCNameRef p_index, bool& r_element);
@@ -1094,15 +1238,23 @@ public:
 #endif
     
 //////////
-				
+			
+    MCRectangle measuretext(const MCString& p_text, bool p_is_unicode);
+    
+    // Object pool instance variable manipulation
+    MCDeletedObjectPool *getdeletedobjectpool(void) const { return m_pool; }
+    void setdeletedobjectpool(MCDeletedObjectPool *pool) { m_pool = pool; }
+	bool getdeletionissuspended(void) const { return m_deletion_is_suspended; }
+	void setdeletionissuspended(bool value) { m_deletion_is_suspended = value; }
+
 protected:
-	IO_stat defaultextendedsave(MCObjectOutputStream& p_stream, uint4 p_part);
+    IO_stat defaultextendedsave(MCObjectOutputStream& p_stream, uint4 p_part, uint32_t p_version);
 	IO_stat defaultextendedload(MCObjectInputStream& p_stream, uint32_t version, uint4 p_remaining);
 	
 	// MW-2013-12-05: [[ UnicodeFileFormat ]] These are the new propset pickle routines. If
 	//   sfv < 7000 then the legacy ones are used; otherwise new ones are.
 	IO_stat loadpropsets(IO_handle stream, uint32_t version);
-	IO_stat savepropsets(IO_handle stream);
+	IO_stat savepropsets(IO_handle stream, uint32_t p_version);
 	
 	// MW-2012-02-16: [[ LogFonts ]] Load the font attrs with the given index.
 	//   This method is protected as MCStack needs to call it to resolve its
@@ -1117,20 +1269,16 @@ protected:
 		setscript(*t_script);
 	}
 
-#ifdef OLD_EXEC
-    // MW-2014-09-30: [[ ScriptStack ]] Used by MCStack::setasscriptonly.
-    Exec_stat setscriptprop(MCExecPoint& ep);
-#endif
-
+    // FG-2014-11-11: [[ Better theming ]] Fetch the control type/state for theming purposes
+    virtual MCPlatformControlType getcontroltype();
+    virtual MCPlatformControlPart getcontrolsubpart();
+    virtual MCPlatformControlState getcontrolstate();
+    bool getthemeselectorsforprop(Properties, MCPlatformControlType&, MCPlatformControlPart&, MCPlatformControlState&, MCPlatformThemeProperty&, MCPlatformThemePropertyType&);
+    
+    // Returns the effective theme for this object
+    MCInterfaceTheme gettheme() const;
+    
 private:
-#ifdef OLD_EXEC
-	Exec_stat setvisibleprop(uint4 parid, Properties which, MCExecPoint& ep);
-	Exec_stat setrectprop(Properties which, MCExecPoint& ep, Boolean effective);
-	Exec_stat getrectprop(Properties which, MCExecPoint& ep, Boolean effective);
-
-	Exec_stat setparentscriptprop(MCExecPoint& ep);
-	Exec_stat setshowfocusborderprop(MCExecPoint& ep);
-#endif
 	bool clonepropsets(MCObjectPropertySet*& r_new_props) const;
 	void deletepropsets(void);
 
@@ -1138,15 +1286,6 @@ private:
 	bool findpropset(MCNameRef name, bool p_empty_is_default, MCObjectPropertySet*& r_set);
 	// Find the propset with the given name, creating it if necessary.
 	/* CAN FAIL */ bool ensurepropset(MCNameRef name, bool p_empty_is_default, MCObjectPropertySet*& r_set);
-#ifdef OLD_EXEC
-	// Set propset to the one corresponding to name, creating it if it does not exist.
-	/* CAN FAIL */ bool setpropset(MCNameRef name);
-
-	// List the available propsets into ep.
-	void listpropsets(MCExecPoint& ep);
-	// Change the available propsets to those listed in ep.
-	/* CAN FAIL */ bool changepropsets(MCExecPoint& ep);
-#endif
 	
 	// MW-2013-12-05: [[ UnicodeFileFormat ]] These are all the legacy propset pickle routines.
 	//   If sfv >= 7000, then they are written out more directly.
@@ -1174,21 +1313,19 @@ private:
 	// MW-2012-02-19: [[ SplitTextAttrs ]] Returns true if the object needs to save
 	//   the font-flags.
 	bool needtosavefontflags(void) const;
+    // Returns false if hasfontattrs() or a theme or theming type is set
+    bool inheritfont() const;
 
 	// MW-2013-03-06: [[ Bug 10695 ]] New method used by resolveimage* - if name is nil, then id search.
 	MCImage *resolveimage(MCStringRef name, uint4 image_id);
 
-#ifdef LEGACY_EXEC
-	Exec_stat mode_getprop(uint4 parid, Properties which, MCExecPoint &, MCStringRef carray, Boolean effective);
-#endif
-
 	// MW-2012-02-14: [[ FontRefs ]] Called by open/close to map/unmap the concrete font.
 	// MW-2013-08-23: [[ MeasureText ]] Made private as external uses of them can be
 	//   done via measuretext() in a safe way.
-	void mapfont(void);
+	bool mapfont(bool recursive = false);
 	void unmapfont(void);
 
-	friend class MCObjectHandle;
+	friend class MCObjectProxy;
 	friend class MCEncryptedStack;
 };
 
@@ -1236,4 +1373,144 @@ public:
 		return (MCObjectList *)MCDLlist::remove((MCDLlist *&)list);
 	}
 };
+
+
+// Utility function for safe(-ish) casting from an MCObject to a derived class
+// without using RTTI.
+template <typename T>
+T* MCObjectCast(MCObject* p_object)
+{
+    // Check that the object's type matches the (static) type of the desired
+    // type. This will break horribly if the desired type has derived types...
+    MCAssert(p_object->gettype() == T::kObjectType);
+    return static_cast<T*> (p_object);
+}
+
+
+// Automatic (RAII) class for storage of object handles
+class MCObjectProxy::Handle
+{
+public:
+    
+    Handle() :
+    m_proxy(NULL)
+    {
+    }
+    
+    Handle(MCObjectProxy* p_proxy)
+    : m_proxy(NULL)
+    {
+        Set(p_proxy);
+    }
+    
+    Handle(const Handle& p_handle) :
+    m_proxy(NULL)
+    {
+        Set(p_handle.m_proxy);
+    }
+    
+    Handle& operator= (MCObjectProxy* p_proxy)
+    {
+        Set(p_proxy);
+        return *this;
+    }
+    
+    Handle& operator= (const Handle& p_handle)
+    {
+        Set(p_handle.m_proxy);
+        return *this;
+    }
+    
+    ~Handle()
+    {
+        if (m_proxy != nil)
+            m_proxy->Release();
+    }
+    
+    // Returns true if this handle refers to an object (even if that object has
+    // since been deleted)
+    bool IsBound() const
+    {
+        return m_proxy != NULL;
+    }
+    
+    // Returns true if this handle refers to a valid object
+    bool IsValid() const
+    {
+        return m_proxy != NULL && m_proxy->ObjectExists();
+    }
+    operator bool() const
+    {
+        return IsValid();
+    }
+    
+    // Pointer-like access
+    MCObject* Get()
+    {
+        MCAssert(IsValid());
+        return m_proxy->m_object;
+    }
+    MCObject* operator-> ()
+    {
+        return Get();
+    }
+    operator MCObject* ()
+    {
+        return Get();
+    }
+    
+    // Checked fetch as the given type
+    template <typename T>
+    T* GetAs()
+    {
+        return MCObjectCast<T> (Get());
+    }
+    
+    // Two Handles are the same if they use the same proxy
+    bool operator==(const Handle& other) const
+    {
+        return m_proxy == other.m_proxy;
+    }
+    bool operator!=(const Handle& other) const
+    {
+        return !(operator==(other));
+    }
+    
+    // Performs a retain on the underlying proxy without an RAII wrapper. This
+    // is only provided for the use of the EventQueue and the ExternalV1
+    // interface.
+    // **DANGEROUS** Will lead to memory leaks if not balanced
+    MCObjectProxy* ExternalRetain()
+    {
+        MCAssert(IsBound());
+        m_proxy->Retain();
+        return m_proxy;
+    }
+    
+    // Performs a release on the underlying proxy without an RAII wrapper. This
+    // is only provided for the use of the EventQueue and the ExternalV1
+    // interface.
+    // **DANGEROUS** Will cause memory corruption if not balanced
+    void ExternalRelease()
+    {
+        MCAssert(IsBound());
+        m_proxy->Release();
+    }
+    
+    
+private:
+    
+    // The proxy for the object this is a handle to
+    MCObjectProxy*  m_proxy;
+    
+    void Set(MCObjectProxy* p_proxy)
+    {
+        if (m_proxy != nil)
+            m_proxy->Release();
+        m_proxy = p_proxy;
+        if (m_proxy != nil)
+            m_proxy->Retain();
+    }
+};
+
 #endif

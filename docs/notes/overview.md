@@ -1,5 +1,14 @@
 # Overview
 
-The LiveCode engine has undergone a large quantity of changes for the 7.0 release. The way values of variables are stored internally has been changed - in particular where before the engine used C-strings, it now uses a reference counted MCStringRef type. Every bit of code that displays text in LiveCode has been updated, and all the platform-specific API functions that manipulate characters now use the Unicode versions; as a result LiveCode is now fully Unicode compatible. 
-!- The implementation of Unicode compatibility necessitated a change to the stack file format, which means stacks saved in 7.0 format are not compatible with earlier versions of LiveCode. However you can still save stacks in legacy formats using the dropdown menu in the Save As... dialog. -!
-The other significant change to engine internals is the work done on syntax refactoring. The code that deals with statement execution, function evaluation and property access has been cleaned up and separated out from the parsing code, and moved into distinct modules based on functionality. This represents a major first step towards being able to implement Open Language.
+LiveCode 8.1 provides important improvements for delivering
+high-quality cross-platform applications:
+
+- The standalone builder now has a greatly-improved user experience
+  for including externals, script libraries and LiveCode Builder
+  extensions in your cross-platform application.
+
+- The player control can be used in Windows application without any
+  need for users to install any additional libraries or dependencies.
+
+LiveCode 8.1 also contains several important upgrades for LiveCode
+Builder as part of the crowdfunded "LiveCode Infinity" project.

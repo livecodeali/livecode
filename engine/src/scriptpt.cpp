@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -21,7 +21,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "filedefs.h"
 
 #include "scriptpt.h"
-//#include "execpt.h"
+
 #include "hndlrlst.h"
 #include "handler.h"
 #include "cmds.h"
@@ -55,54 +55,54 @@ extern const uint4 factor_table_size;
 
 static struct { codepoint_t codepoint; Symbol_type type; } remainder_table[] =
 {
-    { 0x0131,  ST_ID },    //    õ
-    { 0x0152,  ST_ID },    //    Î
-    { 0x0153,  ST_ID },    //    Ï
-    { 0x0178,  ST_ID },    //    Ù
-    { 0x0192,  ST_ID },    //    Ä
-    { 0x02C6,  ST_ID },    //    ö
-    { 0x02C7,  ST_ID },    //    ÿ
-    { 0x02D8,  ST_ID },    //    ù
-    { 0x02D9,  ST_ID },    //    ú
-    { 0x02DA,  ST_ID },    //    û
-    { 0x02DB,  ST_ID },    //    þ
-    { 0x02DC,  ST_ID },    //    ÷
-    { 0x02DD,  ST_ID },    //    ý
-    { 0x03A9,  ST_ID },    //    ½
-    { 0x03C0,  ST_ID },    //    ¹
-    { 0x2013,  ST_ID },    //    Ð
-    { 0x2014,  ST_ID },    //    Ñ
-    { 0x2018,  ST_ID },    //    Ô
-    { 0x2019,  ST_ID },    //    Õ
-    { 0x201A,  ST_ID },    //    â
-    { 0x201C,  ST_ID },    //    Ò
-    { 0x201D,  ST_ID },    //    Ó
-    { 0x201E,  ST_ID },    //    ã
-    { 0x2020,  ST_ID },    //     
-    { 0x2021,  ST_ID },    //    à
-    { 0x2022,  ST_ID },    //    ¥
-    { 0x2026,  ST_ID },    //    É
-    { 0x2030,  ST_ID },    //    ä
-    { 0x2039,  ST_ID },    //    Ü
-    { 0x203A,  ST_ID },    //    Ý
-    { 0x2044,  ST_ID },    //    Ú
-    { 0x20AC,  ST_ID },    //    Û
-    { 0x2122,  ST_ID },    //    ª
-    { 0x2202,  ST_ID },    //    ¶
-    { 0x2206,  ST_ID },    //    Æ
-    { 0x220F,  ST_ID },    //    ¸
-    { 0x2211,  ST_ID },    //    ·
-    { 0x221A,  ST_ID },    //    Ã
-    { 0x221E,  ST_ID },    //    °
-    { 0x222B,  ST_ID },    //    º
-    { 0x2248,  ST_ID },    //    Å
-    { 0x2260,  ST_OP },    //    ­
-    { 0x2264,  ST_OP },    //    ²
-    { 0x2265,  ST_OP },    //    ³
-    { 0x25CA,  ST_ID },    //    ×
-    { 0xF8FF,  ST_ID },    //    ð
-    { 0xFB01,  ST_ID },    //    Þ
-    { 0xFB02,  ST_ID }     //    ß
+    { 0x0131,  ST_ID },    //    ï¿½
+    { 0x0152,  ST_ID },    //    ï¿½
+    { 0x0153,  ST_ID },    //    ï¿½
+    { 0x0178,  ST_ID },    //    ï¿½
+    { 0x0192,  ST_ID },    //    ï¿½
+    { 0x02C6,  ST_ID },    //    ï¿½
+    { 0x02C7,  ST_ID },    //    ï¿½
+    { 0x02D8,  ST_ID },    //    ï¿½
+    { 0x02D9,  ST_ID },    //    ï¿½
+    { 0x02DA,  ST_ID },    //    ï¿½
+    { 0x02DB,  ST_ID },    //    ï¿½
+    { 0x02DC,  ST_ID },    //    ï¿½
+    { 0x02DD,  ST_ID },    //    ï¿½
+    { 0x03A9,  ST_ID },    //    ï¿½
+    { 0x03C0,  ST_ID },    //    ï¿½
+    { 0x2013,  ST_ID },    //    ï¿½
+    { 0x2014,  ST_ID },    //    ï¿½
+    { 0x2018,  ST_ID },    //    ï¿½
+    { 0x2019,  ST_ID },    //    ï¿½
+    { 0x201A,  ST_ID },    //    ï¿½
+    { 0x201C,  ST_ID },    //    ï¿½
+    { 0x201D,  ST_ID },    //    ï¿½
+    { 0x201E,  ST_ID },    //    ï¿½
+    { 0x2020,  ST_ID },    //    ï¿½
+    { 0x2021,  ST_ID },    //    ï¿½
+    { 0x2022,  ST_ID },    //    ï¿½
+    { 0x2026,  ST_ID },    //    ï¿½
+    { 0x2030,  ST_ID },    //    ï¿½
+    { 0x2039,  ST_ID },    //    ï¿½
+    { 0x203A,  ST_ID },    //    ï¿½
+    { 0x2044,  ST_ID },    //    ï¿½
+    { 0x20AC,  ST_ID },    //    ï¿½
+    { 0x2122,  ST_ID },    //    ï¿½
+    { 0x2202,  ST_ID },    //    ï¿½
+    { 0x2206,  ST_ID },    //    ï¿½
+    { 0x220F,  ST_ID },    //    ï¿½
+    { 0x2211,  ST_ID },    //    ï¿½
+    { 0x221A,  ST_ID },    //    ï¿½
+    { 0x221E,  ST_ID },    //    ï¿½
+    { 0x222B,  ST_ID },    //    ï¿½
+    { 0x2248,  ST_ID },    //    ï¿½
+    { 0x2260,  ST_OP },    //    ï¿½
+    { 0x2264,  ST_OP },    //    ï¿½
+    { 0x2265,  ST_OP },    //    ï¿½
+    { 0x25CA,  ST_ID },    //    ï¿½
+    { 0xF8FF,  ST_ID },    //    ï¿½
+    { 0xFB01,  ST_ID },    //    ï¿½
+    { 0xFB02,  ST_ID }     //    ï¿½
 };
 
 static const unichar_t open_comment[] = {'<', '!', '-', '-'};
@@ -156,46 +156,6 @@ MCScriptPoint::MCScriptPoint(MCScriptPoint &sp)
 	token_nameref = MCValueRetain(kMCEmptyName);
     m_type = ST_UNDEFINED;
 }
-
-#ifdef LEGACY_EXEC
-MCScriptPoint::MCScriptPoint(MCExecPoint &ep)
-{
-	MCAutoStringRef t_string_script;
-	/* UNCHECKED */ ep . copyasstringref(&t_string_script);
-	char *t_utf8_string;
-	/* UNCHECKED */ MCStringConvertToUTF8String(*t_string_script, t_utf8_string);
-	/* UNCHECKED */ MCDataCreateWithBytesAndRelease((byte_t *)t_utf8_string, strlen(t_utf8_string) + 1, script);
-	curobj = ep.getobj();
-	curhlist = ep.gethlist();
-	curhandler = ep.gethandler();
-	curptr = tokenptr = backupptr = (const uint1 *)MCDataGetBytePtr(script);
-	line = pos = 0;
-	escapes = False;
-	tagged = False;
-	in_tag = False;
-	was_in_tag = False;
-	token_nameref = nil;
-}
-
-MCScriptPoint::MCScriptPoint(const MCString &s)
-{
-	MCAutoStringRef t_string_script;
-	/* UNCHECKED */ MCStringCreateWithOldString(s, &t_string_script);
-	char *t_utf8_string;
-	/* UNCHECKED */ MCStringConvertToUTF8String(*t_string_script, t_utf8_string);
-	/* UNCHECKED */ MCDataCreateWithBytesAndRelease((byte_t *)t_utf8_string, strlen(t_utf8_string) + 1, script);
-	curobj = NULL;
-	curhlist = NULL;
-	curhandler = NULL;
-	curptr = tokenptr = backupptr = (const uint1 *)MCDataGetBytePtr(script);
-	line = pos = 0;
-	escapes = False;
-	tagged = False;
-	in_tag = False;
-	was_in_tag = False;
-	token_nameref = nil;
-}
-#endif
 
 MCScriptPoint::MCScriptPoint(MCExecContext &ctxt)
 {
@@ -305,13 +265,6 @@ bool MCScriptPoint::token_is_cstring(const char *p_cstring)
 {
 	return MCStringIsEqualToCString(gettoken_stringref(), p_cstring, kMCCompareCaseless);
 }
-
-#ifdef LEGACY_EXEC
-MCString MCScriptPoint::gettoken_oldstring(void)
-{
-    return token;
-}
-#endif
 
 MCNameRef MCScriptPoint::gettoken_nameref(void)
 {
@@ -1537,19 +1490,20 @@ Parse_stat MCScriptPoint::parseexp(Boolean single, Boolean items,
 	while (True)
 	{
 		if (next(type) != PS_NORMAL)
+		{
 			if (needfact)
 			{
 				MCperror->add(PE_EXPRESSION_NOFACT, *this);
 				return PS_ERROR;
 			}
-			else
-				if (depth == 0)
+			else if (depth == 0)
 					return PS_NORMAL;
 				else
 				{
 					MCperror->add(PE_EXPRESSION_NORPAR, *this);
 					return PS_ERROR;
 				}
+		}
 		if (!needfact && type != ST_OP && type != ST_MIN && type != ST_RP
 		        && !(type == ST_SEP && litems)
 		        && !(type == ST_ID && lookup(SP_FACTOR, te) == PS_NORMAL
@@ -1570,18 +1524,21 @@ Parse_stat MCScriptPoint::parseexp(Boolean single, Boolean items,
 		{
 		case ST_NUM:
         {
-			real8 nvalue;
-            MCAutoNumberRef t_number;
-
-            if (!MCNumberParse(gettoken_stringref(), &t_number))
+            // It is absolutely *vital* that we use the same method here for
+            // parsing numbers as MCExecContext::ConvertToNumber. If we don't,
+            // very strange inconsistencies occur depending on whether the
+            // number is used in an arithmetic context or not (for an example,
+            // see bug #17338 in Bugzilla).
+            real8 nvalue;
+            if (!MCTypeConvertStringToReal(gettoken_stringref(), nvalue, false))
 			{
 				MCperror->add(PE_EXPRESSION_NOTLITERAL, *this);
 				return PS_ERROR;
             }
 
-            nvalue = MCNumberFetchAsReal(*t_number);
+            MCStringSetNumericValue(MCNameGetString(gettoken_nameref()), nvalue);
 
-			newfact = insertfactor(new MCLiteralNumber(gettoken_nameref(), nvalue), curfact, top);
+			newfact = insertfactor(new MCLiteral(gettoken_nameref()), curfact, top);
 			newfact->parse(*this, doingthe);
 			needfact = False;
         }
@@ -1615,7 +1572,16 @@ Parse_stat MCScriptPoint::parseexp(Boolean single, Boolean items,
 		default:
 			if (lookup(SP_FACTOR, te) == PS_NORMAL)
 			{
-				switch (te->type)
+				extern bool lookup_property_override(const LT&p_lt, Properties &r_property);
+				Properties t_property;
+				
+				Token_type t_type;
+				t_type = te->type;
+				if (doingthe && lookup_property_override(*te, t_property))
+				{
+					t_type = TT_PROPERTY;
+				}
+				switch (t_type)
 				{
 				case TT_THE:
 					doingthe = True;
@@ -1674,9 +1640,9 @@ Parse_stat MCScriptPoint::parseexp(Boolean single, Boolean items,
 					break;
 				case TT_BIN_OR_UNOP:
 					if (curfact == NULL
-					        || curfact->getrank() == FR_GROUPING
-					        && curfact->getright() == NULL
-					        || curfact->getright() == NULL && curfact->getleft() != NULL)
+					    || (curfact->getrank() == FR_GROUPING
+					        && curfact->getright() == NULL)
+					    || (curfact->getright() == NULL && curfact->getleft() != NULL))
 					{
 						newfact = MCN_new_operator(te->which);
 						newfact->parse(*this, doingthe);
@@ -1728,6 +1694,12 @@ Parse_stat MCScriptPoint::parseexp(Boolean single, Boolean items,
 					break;
 				case TT_FUNCTION:
 					newfact = MCN_new_function(te->which);
+                    // SN-2014-11-25: [[ Bug 14088 ]] MCN_new_function returns NULL in case the function doesn't exist
+                    if (newfact == NULL)
+                    {
+                        MCperror->add(PE_EXPRESSION_BADFUNCTION, *this);
+                        return PS_ERROR;
+                    }
 					thesp = *this;
 					thesp.backup();
 					if (newfact->parse(*this, doingthe) != PS_NORMAL)
@@ -1855,6 +1827,7 @@ Parse_stat MCScriptPoint::parseexp(Boolean single, Boolean items,
 						else if (type == ST_LP)
 								newfact = new MCFuncref(t_name);
 						if (newfact == NULL)
+						{
 							if (MCexplicitvariables)
 							{
 								MCperror->add(PE_EXPRESSION_NOTLITERAL, *this);
@@ -1872,6 +1845,7 @@ Parse_stat MCScriptPoint::parseexp(Boolean single, Boolean items,
 								newvar->parsearray(*this);
 								newfact = newvar;
 							}
+						}
 					}
 					// MW-2007-08-30: [[ Bug 2633 ]] Things such as sum2(1, 2+) don't flag a parse error this is
 					//   because this parse method could fail - we now produce an error in this case.

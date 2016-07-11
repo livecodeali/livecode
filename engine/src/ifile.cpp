@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -26,11 +26,15 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "image.h"
 #include "stack.h"
 #include "sellst.h"
-//#include "execpt.h"
+
 
 #include "globals.h"
 #include "osspec.h"
 #include "context.h"
+
+#include "filepath.h"
+
+#include "module-resources.h"
 
 //////////////////////////////////////////////////////////////////////
 
@@ -69,7 +73,7 @@ bool MCImageCompress(MCImageBitmap *p_bitmap, bool p_dither, MCImageCompressedBi
 	else
 	{
 		uint32_t t_compression;
-		char *t_buffer = nil;
+		void *t_buffer = nil;
 		uindex_t t_size = 0;
 
 		IO_handle t_stream = nil;
@@ -94,7 +98,7 @@ bool MCImageCompress(MCImageBitmap *p_bitmap, bool p_dither, MCImageCompressedBi
 		}
 
 		if (t_stream != nil)
-			t_success = MCS_closetakingbuffer(t_stream, reinterpret_cast<void*&>(t_buffer), reinterpret_cast<size_t&>(t_size)) == IO_NORMAL;
+			t_success = MCS_closetakingbuffer_uint32(t_stream, t_buffer, t_size) == IO_NORMAL;
 
 		if (t_success)
 			t_success = MCImageCreateCompressedBitmap(t_compression, r_compressed);
@@ -324,7 +328,7 @@ bool MCImageExport(MCImageBitmap *p_bitmap, Export_format p_format, MCImagePalet
 	{
 		if (p_palette_settings != nil && p_palette_settings->type != kMCImagePaletteTypeEmpty)
 		{
-			t_success = MCImageQuantizeColors(p_bitmap, p_palette_settings, p_dither, p_format == F_GIF || p_format == F_PNG, t_indexed);
+			t_success = MCImageQuantizeColors(p_bitmap, p_palette_settings, p_dither, p_format == EX_GIF || p_format == EX_PNG, t_indexed);
 			if (t_success)
 				t_success = MCImageEncode(t_indexed, p_format, p_metadata, p_stream, t_size);
 		}
@@ -391,23 +395,7 @@ void MCImage::reopen(bool p_newfile, bool p_lock_size)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool MCPathIsAbsolute(MCStringRef p_path)
-{
-	if (p_path == nil)
-		return false;
-	
-	return (MCStringBeginsWith(p_path, MCSTR("/"), kMCStringOptionCompareExact) ||
-            MCStringBeginsWith(p_path, MCSTR(":"), kMCStringOptionCompareExact));
-}
-
-bool MCPathIsRemoteURL(MCStringRef p_path)
-{
-	return (MCStringBeginsWith(p_path, MCSTR("http://"), kMCStringOptionCompareCaseless) ||
-            MCStringBeginsWith(p_path, MCSTR("https://"), kMCStringOptionCompareCaseless) ||
-            MCStringBeginsWith(p_path, MCSTR("ftp://"), kMCStringOptionCompareCaseless));
-}
-
-bool MCImageGetFileRepForStackContext(MCStringRef p_filename, MCStack *p_stack, MCImageRep *&r_rep)
+bool MCImageGetRepForReferenceWithStackContext(MCStringRef p_reference, MCStack *p_stack, MCImageRep *&r_rep)
 {
 	bool t_success = true;
 	
@@ -416,50 +404,70 @@ bool MCImageGetFileRepForStackContext(MCStringRef p_filename, MCStack *p_stack, 
 	
     MCAutoStringRef t_prefixless;
 	// skip over any file: / binfile: url prefix
-	if (MCStringBeginsWith(p_filename, MCSTR("file:"), kMCStringOptionCompareCaseless))
+	if (MCStringBeginsWith(p_reference, MCSTR("file:"), kMCStringOptionCompareCaseless))
     {
-		MCStringCopySubstring(p_filename, MCRangeMake(5, UINDEX_MAX), &t_prefixless);
-        p_filename = *t_prefixless;
+		MCStringCopySubstring(p_reference, MCRangeMake(5, UINDEX_MAX), &t_prefixless);
+        p_reference = *t_prefixless;
     }
-	else if (MCStringBeginsWith(p_filename, MCSTR("binfile:"), kMCStringOptionCompareCaseless))
+	else if (MCStringBeginsWith(p_reference, MCSTR("binfile:"), kMCStringOptionCompareCaseless))
     {
-		MCStringCopySubstring(p_filename, MCRangeMake(8, UINDEX_MAX), &t_prefixless);
-        p_filename = *t_prefixless;
+		MCStringCopySubstring(p_reference, MCRangeMake(8, UINDEX_MAX), &t_prefixless);
+        p_reference = *t_prefixless;
     }
 
-	if (MCPathIsRemoteURL(p_filename))
-		t_success = MCImageRepGetReferenced(p_filename, t_rep);
+	if (MCPathIsRemoteURL(p_reference))
+		t_success = MCImageRepGetReferenced(p_reference, t_rep);
+	else
+		t_success = MCImageGetRepForFileWithStackContext(p_reference, p_stack, t_rep);
+	
+	if (t_success)
+		r_rep = t_rep;
+	
+	return t_success;
+}
+
+bool MCImageGetRepForFileWithStackContext(MCStringRef p_filename, MCStack *p_stack, MCImageRep *&r_rep)
+{
+	bool t_success;
+	t_success = true;
+	
+	MCImageRep *t_rep;
+	t_rep = nil;
+	
+	// with local filenames, first check if absolute path
+	if (MCPathIsAbsolute(p_filename))
+		t_success = MCImageRepGetDensityMapped(p_filename, t_rep);
 	else
 	{
-		// with local filenames, first check if absolute path
-		if (MCPathIsAbsolute(p_filename))
-			t_success = MCImageRepGetDensityMapped(p_filename, t_rep);
-		else
+		// else try to resolve from stack file location
+		MCAutoStringRef t_path;
+		t_success = p_stack->resolve_relative_path(p_filename, &t_path);
+		if (t_success)
+			t_success = MCImageRepGetDensityMapped(*t_path, t_rep);
+		
+		// else try to resolve from current folder
+		if (t_success && t_rep == nil)
 		{
-			// else try to resolve from stack file location
-			MCAutoStringRef t_path;
-			t_success = p_stack->resolve_relative_path(p_filename, &t_path);
+			MCAutoStringRef t_resolved;
+			t_success = MCS_resolvepath(p_filename, &t_resolved);
 			if (t_success)
-				t_success = MCImageRepGetDensityMapped(*t_path, t_rep);
-			
-			// else try to resolve from current folder
-			if (t_success && t_rep == nil)
-			{
-                MCAutoStringRef t_resolved;
-				t_success = MCS_resolvepath(p_filename, &t_resolved);
-				if (t_success)
-					t_success = MCImageRepGetDensityMapped(*t_resolved, t_rep);
-			}
+				t_success = MCImageRepGetDensityMapped(*t_resolved, t_rep);
 		}
-        // AL-2014-01-17: [[ Bug 11684 ]] If image file isn't found, return false
-        if (t_success)
-            t_success = t_rep != nil;
 	}
 	
 	if (t_success)
 		r_rep = t_rep;
 	
 	return t_success;
+}
+
+bool MCImageGetRepForResource(MCStringRef p_resource_file, MCImageRep *&r_rep)
+{
+	MCAutoStringRef t_path;
+	if (!MCResourceResolvePath(p_resource_file, &t_path))
+		return false;
+	
+	return MCImageRepGetDensityMapped(*t_path, r_rep);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

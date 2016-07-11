@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2013 Runtime Revolution Ltd.
+/* Copyright (C) 2003-2015 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -217,7 +217,7 @@ void REVXML_QUIT()
 }
 
 //------------------------------------UTILITY FUNCTIONS--------------------------
-void DispatchMetaCardMessage(char *messagename,char *tmessage)
+void DispatchMetaCardMessage(const char *messagename, const char *tmessage)
 {
 int retvalue = 0;
 SetGlobal("xmlvariable",tmessage,&retvalue);
@@ -227,7 +227,7 @@ sprintf(mcmessage,"global xmlvariable;try;send \"%s xmlvariable\" to current car
 SendCardMessage(mcmessage, &retvalue);
 }
 
-bool stringToBool(char *p_string)
+bool stringToBool(const char *p_string)
 {
 	if (stricmp(p_string, "true") == 0)
 		return true;
@@ -385,14 +385,15 @@ void XML_NewDocument(char *args[], int nargs, char **retstring,
 	*pass = False;
 	*error = False;
 	char *result = NULL;
-	CXMLDocument *newdoc = new CXMLDocument;
-	if (nargs < 2){
 
+	if (nargs < 2){
 
 		*error = True;
 		result = istrdup(xmlerrors[XMLERR_BADARGUMENTS]);
 	}
 	else{
+		CXMLDocument *newdoc = new CXMLDocument;
+
 		Bool wellformed = util_strnicmp(args[1],"TRUE",4) == 0;
 		
 		Bool buildtree = True;
@@ -573,9 +574,9 @@ void XML_NewDocumentFromFile(char *args[], int nargs, char **retstring,
 			sprintf(result,"%s\n%s",xmlerrors[XMLERR_BADXML],newdoc->GetError());
 			delete newdoc;
 		}
-		delete tfile;
+		free(tfile);
 		free(t_native_path);
-		free(t_resolved_path);
+		delete[] t_resolved_path; /* Allocated with new[] */
 		
 	}
 	*retstring = (result != NULL ? result : (char *)calloc(1,1));
@@ -1342,20 +1343,19 @@ void XML_SetElementContents(char *args[], int nargs, char **retstring, Bool *pas
                         t_new_node_list = xmlStringGetNodeList(tdoc -> GetDocPtr(), t_encoded_string);
 
                         // Create a new text element to hold the content
-                        CXMLElement *t_new_element;
-                        t_new_element = new CXMLElement();
-                        t_new_element -> SetNodePtr(t_new_node_list);
+                        CXMLElement t_new_element;
+                        t_new_element.SetNodePtr(t_new_node_list);
 
                         // Save the previous first child element
                         xmlNodePtr t_old_first_element;
                         t_old_first_element = telement . GetNodePtr() -> children;
 
                         // Set the new text element to be the first child
-                        telement . GetNodePtr() -> children = t_new_element -> GetNodePtr();
+                        telement . GetNodePtr() -> children = t_new_element.GetNodePtr();
                         telement . GetNodePtr() -> children -> next = t_old_first_element;
 
                         if (t_old_first_element != NULL)
-                            t_old_first_element -> prev = t_new_element -> GetNodePtr();
+                            t_old_first_element -> prev = t_new_element.GetNodePtr();
                     }
 				}
 				else
@@ -1863,7 +1863,7 @@ Input: [0]=xml document id
 [2]= attribute name
 [3]= attribute value
 Output: error message on bad attribute or bad element 
-Example: XML_SetAttributeValue docid,elementpath,"product","revolution"
+Example: XML_SetAttributeValue docid,elementpath,"product","livecode"
 */
 void XML_SetAttributeValue(char *args[], int nargs, char **retstring,
 						   Bool *pass, Bool *error)
@@ -2177,12 +2177,14 @@ void XML_FindElementByAttributeValue(char *args[], int nargs, char **retstring, 
 							t_comparison_result = util_strncmp(attvalue, tvalue, strlen(tvalue));
 						else
 							t_comparison_result = util_strnicmp(attvalue, tvalue, strlen(tvalue));
-
-						if (t_comparison_result == 0)
-						{
-							result = curelement -> GetPath();
-							break;
-						}
+                        
+                        delete tvalue;
+                        
+                        if (t_comparison_result == 0)
+                        {
+                            result = curelement -> GetPath();
+                            break;
+                        }
 					}
 
 				}
@@ -3121,6 +3123,6 @@ BOOL WINAPI DllMain(HINSTANCE tInstance, DWORD dwReason, LPVOID lpReserved)
 extern "C"
 {
 	extern struct LibInfo __libinfo;
-	__attribute((section("__DATA,__libs"))) volatile struct LibInfo *__libinfoptr_revxml = &__libinfo;
+	__attribute((section("__DATA,__libs"))) volatile struct LibInfo *__libinfoptr_revxml __attribute__((__visibility__("default"))) = &__libinfo;
 }
 #endif
