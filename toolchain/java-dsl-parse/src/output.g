@@ -273,6 +273,9 @@
 
     'rule' OutputType(string):
         OutputWrite("String")
+        
+    'rule' OutputType(nil):
+        OutputWrite("nothing")
 
     'rule' OutputType(named(_, Id, Parameters)):
         QuerySymbolId(Id -> SymbolInfo)

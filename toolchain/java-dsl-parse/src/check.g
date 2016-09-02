@@ -81,15 +81,6 @@
         CheckBindings(Inherits)
         CheckBindings(Definitions)
 
-    'rule' CheckBindings(TYPE'named(Position, Id, Parameters)):
-        (|
-            QuerySymbolId(Id -> Info)
-            Info'Type -> DefinedType
-            CheckParameters(Parameters, DefinedType)
-        ||
-            Error_GenericTypeMismatch(Position)
-        |)
-
 'condition' CheckParameters(TYPELIST, TYPE)
 
     'rule' CheckParameters(Typelist, template(_, Id, Parameters)):

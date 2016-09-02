@@ -543,6 +543,9 @@
 
     'rule' PrimitiveType(-> string(Position)):
         "String" @(-> Position)
+    
+    'rule' PrimitiveType(-> nil)
+        "nothing" @(-> Position)
 
 'nonterm' NamedType(-> TYPE)
 
