@@ -20,6 +20,7 @@
     bind
     check
     output
+    generate
     types
     support
 
@@ -50,6 +51,7 @@
                 ErrorsDidOccur()
             ||
                 OutputPackages(Packages)
+                GeneratePackages(Packages)
             |)
         |)
 
@@ -190,8 +192,8 @@
 -- Interface methods have different modifiers from class methods
 'nonterm' InterfaceMethodDef(-> DEFINITION)
 
-	'rule' InterfaceMethodDef(-> method(Position, interfacemethodmodifiers(Modifier), Name, Signature, Alias, Returns, Throws)):
-		InterfaceMethodModifier(-> Modifier) "method" @(-> Position) UnqualifiedId(-> Name) Signature(-> Signature) OptionalUnqualifiedAliasClause(-> Alias) OptionalThrowsClause(-> Throws) ReturnsClause(-> Returns)
+	'rule' InterfaceMethodDef(-> method(Position, interfacemethodmodifiers(Modifier), Name, signature(Parameters, Returns), Alias, Throws)):
+		InterfaceMethodModifier(-> Modifier) "method" @(-> Position) UnqualifiedId(-> Name) Parameters(-> Parameters) OptionalUnqualifiedAliasClause(-> Alias) OptionalThrowsClause(-> Throws) ReturnsClause(-> Returns)
 	
 'nonterm' InterfaceMethodModifier(-> MODIFIER)
 
@@ -273,8 +275,9 @@
 
 'nonterm' ConstructorDef(-> DEFINITION)
 
-	'rule' ConstructorDef(-> constructor(Position, Modifiers, Name, Signature, Alias)):
-		ConstructorModifiers(-> Modifiers) "constructor" @(-> Position) UnqualifiedId(-> Name) Signature(-> Signature) OptionalUnqualifiedAliasClause(-> Alias)
+	'rule' ConstructorDef(-> constructor(Position, Modifiers, Name, signature(Parameters, nil), Alias)):
+		ConstructorModifiers(-> Modifiers) "constructor" @(-> Position) UnqualifiedId(-> Name) Parameters(-> Parameters) OptionalUnqualifiedAliasClause(-> Alias)
+
 	
 'nonterm' ConstructorModifiers(-> MODIFIER)
 
@@ -285,8 +288,8 @@
 
 'nonterm' MethodDef(-> DEFINITION)
 	
-	'rule' MethodDef(-> method(Position, Modifiers, Name, Signature, Alias, Returns, Throws)):
-		MethodModifiers(-> Modifiers) "method" @(-> Position) UnqualifiedId(-> Name) Signature(-> Signature) OptionalUnqualifiedAliasClause(-> Alias) OptionalThrowsClause(-> Throws) ReturnsClause(-> Returns)
+	'rule' MethodDef(-> method(Position, Modifiers, Name, signature(Parameters, Returns), Alias, Throws)):
+		MethodModifiers(-> Modifiers) "method" @(-> Position) UnqualifiedId(-> Name) Parameters(-> Parameters) OptionalUnqualifiedAliasClause(-> Alias) OptionalThrowsClause(-> Throws) ReturnsClause(-> Returns)
 	
 'nonterm' MethodModifiers(-> MODIFIER)
 
@@ -425,10 +428,10 @@
 	'rule' QualifiedAliasClause(-> Alias):
 		"named" PackageId(-> Alias)
 
-'nonterm' Signature(-> SIGNATURE)
+'nonterm' Parameters(-> PARAMETERLIST)
 
-    'rule' Signature(-> signature(Parameters, Result)):
-        "(" OptionalParameterList(-> Parameters) ")" OptionalReturnsClause(-> Result)
+    'rule' Parameters(-> Parameters):
+        "(" OptionalParameterList(-> Parameters) ")"
 
 'nonterm' ReturnsClause(-> TYPE)
 

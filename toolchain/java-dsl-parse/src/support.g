@@ -59,6 +59,7 @@
     IsStringSuitableForKeyword
 
     OutputBegin
+    OutputLCBBegin
     OutputEnd
     OutputWrite
     OutputWriteI
@@ -156,6 +157,7 @@
 --------------------------------------------------------------------------------
 
 'action' OutputBegin()
+'action' OutputLCBBegin()
 'action' OutputEnd()
 'action' OutputWrite(STRING)
 'action' OutputWriteI(STRING, NAME, STRING)

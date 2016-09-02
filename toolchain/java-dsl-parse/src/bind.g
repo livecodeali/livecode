@@ -31,7 +31,7 @@
 'action' Bind(PACKAGE, PACKAGELIST)
 
     'rule' Bind(Package:package(Position, Name, Alias, Definitions), ImportedPackages):
-        DefinePackageId(Name)
+        DefinePackageId(Name, Alias)
 
         -- Make sure all the imported modules are bound
         BindImports(Definitions, ImportedPackages)
@@ -72,10 +72,11 @@
         (|
             FindPackageInList(Name, Imports -> Package)
             Package'Name -> PackageId
+            Package'Alias -> PackageAlias
             (|
                 QueryId(PackageId -> package(Info))
             ||
-                DefinePackageId(PackageId)
+                DefinePackageId(PackageId, PackageAlias)
                 Bind(Package, Imports)
             |)
         ||
@@ -127,7 +128,7 @@
     'rule' DeclareImportedDefinitions(variable(Position, _, Name, _)):
         DeclareId(Name)
 
-    'rule' DeclareImportedDefinitions(method(Position, _, Name, _, _, _, _)):
+    'rule' DeclareImportedDefinitions(method(Position, _, Name, _, _, _)):
         DeclareId(Name)
 
     'rule' DeclareImportedDefinitions(constructor(Position, _, Name, _, _)):
@@ -216,7 +217,7 @@
         GetUnqualifiedIdName(QualifiedName -> DefName)
         IsNameEqualToName(Name, DefName)
 
-    'rule' IsNameOfDefinition(Name, method(_, _, Id, _, Alias, _, _)):
+    'rule' IsNameOfDefinition(Name, method(_, _, Id, _, Alias, _)):
         (|
             where(Alias -> id(AliasId))
             AliasId'Name -> QualifiedName
@@ -268,7 +269,7 @@
     'rule' Declare(variable(Position, _, Name, _)):
         DeclareId(Name)
 
-    'rule' Declare(method(Position, _, Name, _, Alias, _, _)):
+    'rule' Declare(method(Position, _, Name, _, Alias, _)):
         (|
             where(Alias -> id(AliasName))
             DeclareId(AliasName)
@@ -338,12 +339,12 @@
     'rule' Define(PackageId, variable(Position, Modifiers, Name, Type)):
         DefineSymbolId(Name, Modifiers, PackageId, variable, Type)
 
-    'rule' Define(PackageId, method(Position, Modifiers, Name, signature(Params, _), Alias, Type, Throws)):
+    'rule' Define(PackageId, method(Position, Modifiers, Name, signature(Params, Returns), Alias, Throws)):
         (|
             where(Alias -> id(AliasName))
-            DefineSymbolId(AliasName, Modifiers, PackageId, method, Type)
+            DefineSymbolId(AliasName, Modifiers, PackageId, method, Returns)
         ||
-            DefineSymbolId(Name, Modifiers, PackageId, method, Type)
+            DefineSymbolId(Name, Modifiers, PackageId, method, Returns)
         |)
         DefineParameters(PackageId, Params)
 
@@ -464,7 +465,7 @@
         ApplyId(Id)
         Apply(Type)
 
-    'rule' Apply(DEFINITION'method(_, _, Id, signature(Params, _), Alias, Returns, Throws)):
+    'rule' Apply(DEFINITION'method(_, _, Id, signature(Params, Returns), Alias, Throws)):
         (|
             where(Alias -> id(AliasName))
             ApplyId(AliasName)
@@ -570,12 +571,13 @@
 
 --------------------------------------------------------------------------------
 
-'action' DefinePackageId(ID)
+'action' DefinePackageId(ID, ID)
 
-    'rule' DefinePackageId(Id):
+    'rule' DefinePackageId(Id, Alias):
         Info::PACKAGEINFO
         Info'Index <- -1
         Info'Generator <- -1
+        Info'Alias <- Alias
         Id'Meaning <- package(Info)
 
 'action' DefineSymbolId(ID, MODIFIER, ID, SYMBOLKIND, TYPE)
@@ -621,7 +623,7 @@
     'rule' DumpBindings(DEFINITION'variable(_, _, Name, Type)):
         DumpId("variable", Name)
         DumpBindings(Type)
-    'rule' DumpBindings(DEFINITION'method(_, _, Name, _, _, Type, _)):
+    'rule' DumpBindings(DEFINITION'method(_, _, Name, signature(_, Type), _, _)):
         DumpId("method", Name)
         DumpBindings(Type)
     'rule' DumpBindings(DEFINITION'constructor(_, _, Name, _, _)):

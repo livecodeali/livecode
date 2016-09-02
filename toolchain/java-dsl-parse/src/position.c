@@ -122,6 +122,7 @@ static FileRef s_files;
 static FileRef s_current_file;
 static unsigned int s_next_file_index;
 static const char *s_output_file = NULL;
+static const char *s_output_lcb_file = NULL;
 
 void InitializeFiles(void)
 {
@@ -260,11 +261,28 @@ void GetOutputFile(const char **r_output)
     *r_output = s_output_file;
 }
 
+void SetOutputLCBFile(const char *p_output)
+{
+    s_output_lcb_file = p_output;
+}
+
+void GetOutputLCBFile(const char **r_output)
+{
+    *r_output = s_output_lcb_file;
+}
+
 FILE *OpenOutputFile(void)
 {
     if (s_output_file == NULL)
         return NULL;
     return fopen(s_output_file, "w");
+}
+
+FILE *OpenLCBOutputFile(void)
+{
+    if (s_output_lcb_file == NULL)
+        return NULL;
+    return fopen(s_output_lcb_file, "w");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

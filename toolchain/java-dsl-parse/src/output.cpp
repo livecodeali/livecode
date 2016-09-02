@@ -28,6 +28,7 @@
 
 
 extern "C" void OutputBegin(void);
+extern "C" void OutputLCBBegin(void);
 extern "C" void OutputEnd(void);
 extern "C" void OutputWrite(const char *msg);
 extern "C" void OutputWriteI(const char *left, NameRef name, const char *right);
@@ -60,6 +61,11 @@ static FILE *s_output = NULL;
 void OutputBegin(void)
 {
     s_output = OpenOutputFile();
+}
+
+void OutputLCBBegin(void)
+{
+    s_output = OpenLCBOutputFile();
 }
 
 void OutputWrite(const char *p_string)
