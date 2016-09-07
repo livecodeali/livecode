@@ -1293,37 +1293,18 @@ static bool MCScriptInstanceGetJavaSignatureString(MCScriptInstanceRef p_instanc
         MCTypeInfoRef t_type;
         t_type = MCHandlerTypeInfoGetParameterType(t_signature, t_arg_index);
         
-        
-        // Target foreign descriptor.
-        const MCForeignTypeDescriptor *t_descriptor;
-        if (MCTypeInfoIsForeign(t_type))
-            t_descriptor = MCForeignTypeInfoGetDescriptor(t_type);
-        else
-            t_descriptor = nil;
-
-        if (t_descriptor != nil && t_descriptor -> layout != nil)
+        if (MCTypeInfoIsNamed(t_type) || MCTypeInfoIsHandler(t_type) || MCTypeInfoIsOptional(t_type))
         {
-            switch (*(t_descriptor -> layout))
-            {
-                case kMCForeignPrimitiveTypeBool:
-                    MCStringAppendNativeChar(*t_format, 'Z');
-                    break;
-                case kMCForeignPrimitiveTypeSInt8:
-                    MCStringAppendNativeChar(*t_format, 'B');
-                    break;
-                case kMCForeignPrimitiveTypeSInt16:
-                    MCStringAppendNativeChar(*t_format, 'S');
-                    break;
-                case kMCForeignPrimitiveTypeSInt32:
-                    MCStringAppendNativeChar(*t_format, 'I');
-                    break;
-                case kMCForeignPrimitiveTypeSInt64:
-                    MCStringAppendNativeChar(*t_format, 'J');
-                    break;
-                default:
-                    MCStringAppend(*t_format, MCSTR("?"));
-                    break;
-            }
+            if (MCTypeInfoConforms(t_type, kMCBooleanTypeInfo))
+                MCStringAppendNativeChar(*t_format, 'Z');
+            else if (MCTypeInfoConforms(t_type, kMCDataTypeInfo))
+                MCStringAppendNativeChars(*t_format, (const char_t *)"[B", 2);
+            else if (MCTypeInfoConforms(t_type, kMCIntTypeInfo))
+                MCStringAppendNativeChar(*t_format, 'I');
+            else if (MCTypeInfoConforms(t_type, kMCNumberTypeInfo))
+                MCStringAppendNativeChar(*t_format, 'J');
+            else
+                MCStringAppend(*t_format, MCSTR("?"));
         }
         else if (MCTypeInfoIsJava(t_type))
             MCStringAppendFormat(*t_format, "L%@", MCJavaTypeInfoGetName(t_type));

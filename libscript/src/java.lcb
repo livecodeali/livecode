@@ -18,14 +18,28 @@
 module com.livecode.java
 
 use com.livecode.foreign
+use com.livecode.reflect
 
-public foreign type JavaObject binds to "MCJavaObjectTypeInfo"
+foreign handler MCJavaTypeInfoCreate(in pClass as String, out rType as Type) returns nothing binds to "<builtin>"
 
-foreign handler _Object_getName(in pIndex as Int32) returns JavaObject binds to "java:java.lang.Object>getName!static"
+public handler JavaObject_ObjectType() returns Type
+    variable tClassName as String
+    put "java.lang.object" into tClassName
 
-foreign handler MCJavaStringFromJavaString(in pString as JavaObject, out rString as String) returns nothing binds to "<builtin>"
+    variable tClassType as Type
+    unsafe
+        MCJavaTypeInfoCreate(tClassName, tClassType)
+    end unsafe
+    return tClassType
+end handler
 
-public handler StringFromJavaString(in pObj as JavaObject) returns String
+public foreign type JavaObject_Object binds to "JavaObject_ObjectType"
+
+foreign handler _Object_getName(in pIndex as Int32) returns JavaObject_Object binds to "java:java.lang.Object>getName!static"
+
+foreign handler MCJavaStringFromJavaString(in pString as JavaObject_Object, out rString as String) returns nothing binds to "<builtin>"
+
+public handler StringFromJavaString(in pObj as JavaObject_Object) returns String
 	variable tString as String
     unsafe
 	MCJavaStringFromJavaString(pObj, tString)
@@ -37,7 +51,7 @@ public handler TestJava()
 	variable tInt as Integer
 	put 500 into tInt
 	
-	variable tObject as JavaObject
+	variable tObject as JavaObject_Object
 	unsafe
 		put _Object_getName(tInt) into tObject
 	end unsafe
