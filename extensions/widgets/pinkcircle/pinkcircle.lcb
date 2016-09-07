@@ -18,6 +18,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 widget com.livecode.extensions.beaumont.pinkCircle
 
 use com.livecode.canvas
+use com.livecode.java
 
 metadata title is "My Pink Circle"
 metadata author is "LiveCode"
@@ -29,6 +30,7 @@ private variable mMargin as Real
 
 public handler onCreate() 
 	put 0 into mMargin
+	TestJava()
 end handler
 
 public handler OnPaint()

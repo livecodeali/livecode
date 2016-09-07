@@ -278,7 +278,6 @@
         OutputWrite("nothing")
 
     'rule' OutputType(named(_, Id, Parameters)):
-        QuerySymbolId(Id -> SymbolInfo)
         ResolveIdName(Id -> SymbolName)
         OutputWriteI("", SymbolName, "")
         (|
@@ -290,7 +289,6 @@
         |)
 
     'rule' OutputType(template(_, Id, Parameters)):
-        QuerySymbolId(Id -> SymbolInfo)
         ResolveIdName(Id -> SymbolName)
         OutputWriteI("", SymbolName, "")
         (|
@@ -310,7 +308,8 @@
     'rule' OutputType(jarray(_, Type, Dimension)):
         OutputJArray(Type, Dimension)
 
-    'rule' OutputType(nil):
+    'rule' OutputType(named(_, Id, Parameters)):
+        print(Id)
 
 
 'action' OutputTypeList(TYPELIST)

@@ -1,4 +1,4 @@
-MODE ?= release
+MODE ?= debug
 top_srcdir ?= ..
 
 include $(top_srcdir)/Makefile.common

@@ -640,6 +640,7 @@ typedef struct __MCError *MCErrorRef;
 typedef struct __MCStream *MCStreamRef;
 typedef struct __MCProperList *MCProperListRef;
 typedef struct __MCForeignValue *MCForeignValueRef;
+typedef struct __MCJavaObject *MCJavaObjectRef;
 
 // Forward declaration
 typedef struct __MCLocale* MCLocaleRef;
@@ -1292,6 +1293,7 @@ enum
 	kMCValueTypeCodeTypeInfo,
     kMCValueTypeCodeError,
     kMCValueTypeCodeForeignValue,
+    kMCValueTypeCodeJava,
 };
 
 enum
@@ -1305,6 +1307,7 @@ enum
 struct MCValueCustomCallbacks
 {
 	bool is_singleton : 1;
+    
 	void (*destroy)(MCValueRef value);
 	bool (*copy)(MCValueRef value, bool release, MCValueRef& r_value);
 	bool (*equal)(MCValueRef value, MCValueRef other_value);
@@ -1770,7 +1773,12 @@ MC_DLLEXPORT bool MCNamedCustomTypeInfoCreate(MCNameRef p_name, MCTypeInfoRef ba
 	
 // Create a named typeinfo bound to a foreign typeinfo.
 MC_DLLEXPORT bool MCNamedForeignTypeInfoCreate(MCNameRef p_name, const MCForeignTypeDescriptor *p_descriptor, MCTypeInfoRef& r_typeinfo);
-	
+
+//////////
+    
+MC_DLLEXPORT MCNameRef MCJavaTypeInfoGetName(MCTypeInfoRef self);
+MC_DLLEXPORT bool MCTypeInfoIsJava(MCTypeInfoRef self);
+MC_DLLEXPORT bool MCJavaTypeInfoCreate(MCNameRef p_class, MCTypeInfoRef& r_typeinfo);
 ////////////////////////////////////////////////////////////////////////////////
 //
 //  BOOLEAN DEFINITIONS

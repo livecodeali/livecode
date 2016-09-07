@@ -21,6 +21,10 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include <stdio.h>
 
 
+#ifdef TARGET_SUBPLATFORM_ANDROID
+#include <jni.h>
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////
 
 #ifdef __LINUX__
@@ -115,7 +119,17 @@ struct __MCTypeInfo: public __MCValue
             MCForeignTypeDescriptor descriptor;
             void *ffi_layout_type;
         } foreign;
+        struct
+        {
+            MCNameRef class_name;
+            MCJavaObjectRef object;
+        } java;
     };
+};
+
+struct __MCJavaObject: public __MCValue
+{
+    void *jobject;
 };
 
 //////////

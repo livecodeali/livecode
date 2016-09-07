@@ -1668,6 +1668,7 @@ void MCInterfaceExecDrag(MCExecContext& ctxt, uint2 p_which, MCPoint p_start, MC
 		MCbuttonstate = oldbstate;
 		MCmousex = oldx;
 		MCmousey = oldy;
+        MCdefaultstackptr->mfocus(oldx, oldy);
 		return;
 	}
 	MCscreen->sync(MCdefaultstackptr->getw());
@@ -1715,6 +1716,7 @@ void MCInterfaceExecDrag(MCExecContext& ctxt, uint2 p_which, MCPoint p_start, MC
 	MCbuttonstate = oldbstate;
 	MCmousex = oldx;
 	MCmousey = oldy;
+    MCdefaultstackptr->mfocus(oldx, oldy);
 	MCscreen->setlockmods(False);
 	MCdragging = False;
 	if (abort)

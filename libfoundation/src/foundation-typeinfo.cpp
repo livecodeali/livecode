@@ -114,6 +114,13 @@ bool MCTypeInfoIsCustom(MCTypeInfoRef self)
 }
 
 MC_DLLEXPORT_DEF
+bool MCTypeInfoIsJava(MCTypeInfoRef self)
+{
+    __MCAssertIsTypeInfo(self);
+    return __MCTypeInfoGetExtendedTypeCode(self) == kMCValueTypeCodeJava;
+}
+
+MC_DLLEXPORT_DEF
 MCValueRef MCTypeInfoGetDefault(MCTypeInfoRef self)
 {
     __MCAssertIsTypeInfo(self);
@@ -1187,6 +1194,41 @@ const MCValueCustomCallbacks *MCCustomTypeInfoGetCallbacks(MCTypeInfoRef unresol
 
     MCAssert(MCTypeInfoIsCustom(self));
     return &self -> custom . callbacks;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+MC_DLLEXPORT_DEF
+MCNameRef MCJavaTypeInfoGetName(MCTypeInfoRef self)
+{
+    return self -> java . class_name;
+}
+
+MC_DLLEXPORT_DEF
+bool MCJavaUnmanagedTypeInfoCreate(MCNameRef p_class, MCTypeInfoRef& r_typeinfo)
+{
+    return false;
+}
+
+MC_DLLEXPORT_DEF
+bool MCJavaTypeInfoCreate(MCNameRef p_class, MCTypeInfoRef& r_typeinfo)
+{
+    __MCAssertIsName(p_class);
+    
+    __MCTypeInfo *self;
+    if (!__MCValueCreate(kMCValueTypeCodeTypeInfo, self))
+        return false;
+    
+    self -> flags |= kMCValueTypeCodeJava;
+    
+    self -> java . class_name = MCValueRetain(p_class);
+    
+    if (MCValueInterAndRelease(self, r_typeinfo))
+        return true;
+    
+    MCValueRelease(self);
+    
+    return false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
