@@ -27,7 +27,7 @@ metadata version is "1.0.0"
 property circleMargin get mMargin set setMargin
 
 private variable mMargin as Real
-
+private variable mName as String
 public handler onCreate() 
 	put 0 into mMargin
 	TestJava()
@@ -37,15 +37,18 @@ public handler OnPaint()
    // Create a path with a radius of half the width of the canvas
    // Set the paint to a solid pink color
    // Fill the path
-   variable tCirclePath as Path
-   put circle path centered at point [my width / 2, my height / 2] with radius ((my width - mMargin)/2) into tCirclePath
-   set the paint of this canvas to solid paint with color [1, 0, 1]
-   fill tCirclePath on this canvas
+	fill text mName at center of my bounds on this canvas
 end handler
 
 public handler setMargin(in pMargin as Real)
 	put pMargin into mMargin
 	redraw all
+end handler
+
+public handler TestJava()
+	variable tObject as JavaObject
+	put GetObject() into tObject
+	put GetClassName(tObject) into mName
 end handler
 	
 end widget

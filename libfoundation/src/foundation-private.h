@@ -119,17 +119,7 @@ struct __MCTypeInfo: public __MCValue
             MCForeignTypeDescriptor descriptor;
             void *ffi_layout_type;
         } foreign;
-        struct
-        {
-            MCNameRef class_name;
-            MCJavaObjectRef object;
-        } java;
     };
-};
-
-struct __MCJavaObject: public __MCValue
-{
-    void *jobject;
 };
 
 //////////

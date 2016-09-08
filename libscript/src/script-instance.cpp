@@ -1306,8 +1306,10 @@ static bool MCScriptInstanceGetJavaSignatureString(MCScriptInstanceRef p_instanc
             else
                 MCStringAppend(*t_format, MCSTR("?"));
         }
+        /*
         else if (MCTypeInfoIsJava(t_type))
             MCStringAppendFormat(*t_format, "L%@", MCJavaTypeInfoGetName(t_type));
+         */
         else
             MCStringAppend(*t_format, MCSTR("?"));
     }

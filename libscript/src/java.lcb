@@ -18,43 +18,37 @@
 module com.livecode.java
 
 use com.livecode.foreign
-use com.livecode.reflect
 
-foreign handler MCJavaTypeInfoCreate(in pClass as String, out rType as Type) returns nothing binds to "<builtin>"
+public foreign type JavaObject binds to "MCJavaObjectTypeInfo"
 
-public handler JavaObject_ObjectType() returns Type
-    variable tClassName as String
-    put "java.lang.object" into tClassName
+foreign handler _Class_getName(in pObject as JavaObject) returns String binds to "java:java.lang.Class>getName"
 
-    variable tClassType as Type
-    unsafe
-        MCJavaTypeInfoCreate(tClassName, tClassType)
-    end unsafe
-    return tClassType
+foreign handler _Object_getClass(in pObject as JavaObject) returns JavaObject binds to "java:java.lang.Object>getClass"
+
+foreign handler MCJavaStringFromJavaString(in pString as JavaObject, out rString as String) returns nothing binds to "<builtin>"
+
+foreign handler MCJavaNewObject(in pString as String, in pArgs as List, out rObj as JavaObject) returns CBool binds to "<builtin>"
+
+public handler GetClassName(in pObj as JavaObject) returns String
+	unsafe
+		return _Object_getClass(_Class_getName(pObj))
+	end unsafe
 end handler
 
-public foreign type JavaObject_Object binds to "JavaObject_ObjectType"
+public handler GetObject() returns JavaObject
+	variable tObject as JavaObject
+	variable tResult as Boolean
+	unsafe
+		put MCJavaNewObject("java.lang.Object", [], tObject) into tResult
+	end unsafe
+	return tObject
+end handler
 
-foreign handler _Object_getName(in pIndex as Int32) returns JavaObject_Object binds to "java:java.lang.Object>getName!static"
-
-foreign handler MCJavaStringFromJavaString(in pString as JavaObject_Object, out rString as String) returns nothing binds to "<builtin>"
-
-public handler StringFromJavaString(in pObj as JavaObject_Object) returns String
+public handler StringFromJavaString(in pObj as JavaObject) returns String
 	variable tString as String
     unsafe
 	MCJavaStringFromJavaString(pObj, tString)
     end unsafe
 	return tString
-end handler
-
-public handler TestJava()
-	variable tInt as Integer
-	put 500 into tInt
-	
-	variable tObject as JavaObject_Object
-	unsafe
-		put _Object_getName(tInt) into tObject
-	end unsafe
-	
 end handler
 end module

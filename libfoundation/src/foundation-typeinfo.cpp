@@ -1197,13 +1197,7 @@ const MCValueCustomCallbacks *MCCustomTypeInfoGetCallbacks(MCTypeInfoRef unresol
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
-MC_DLLEXPORT_DEF
-MCNameRef MCJavaTypeInfoGetName(MCTypeInfoRef self)
-{
-    return self -> java . class_name;
-}
-
+#if 0
 MC_DLLEXPORT_DEF
 bool MCJavaUnmanagedTypeInfoCreate(MCNameRef p_class, MCTypeInfoRef& r_typeinfo)
 {
@@ -1230,7 +1224,7 @@ bool MCJavaTypeInfoCreate(MCNameRef p_class, MCTypeInfoRef& r_typeinfo)
     
     return false;
 }
-
+#endif
 ////////////////////////////////////////////////////////////////////////////////
 
 MCTypeInfoRef __MCTypeInfoResolve(__MCTypeInfo *self)
