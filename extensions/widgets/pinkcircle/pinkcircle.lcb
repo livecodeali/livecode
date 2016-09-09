@@ -30,13 +30,14 @@ private variable mMargin as Real
 private variable mName as String
 public handler onCreate() 
 	put 0 into mMargin
+	put "didn't get" into mName
 	TestJava()
 end handler
 
 public handler OnPaint()
-   // Create a path with a radius of half the width of the canvas
-   // Set the paint to a solid pink color
-   // Fill the path
+	set the stroke width of this canvas to 5
+   	stroke rectangle path of my bounds on this canvas
+   
 	fill text mName at center of my bounds on this canvas
 end handler
 
@@ -44,7 +45,7 @@ public handler setMargin(in pMargin as Real)
 	put pMargin into mMargin
 	redraw all
 end handler
-
+ 
 public handler TestJava()
 	variable tObject as JavaObject
 	put GetObject() into tObject

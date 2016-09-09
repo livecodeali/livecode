@@ -20,19 +20,22 @@ module com.livecode.java
 use com.livecode.foreign
 
 public foreign type JavaObject binds to "MCJavaObjectTypeInfo"
+public foreign type JavaClass binds to "MCJavaClassTypeInfo"
 
-foreign handler _Class_getName(in pObject as JavaObject) returns String binds to "java:java.lang.Class>getName"
+foreign handler _Class_getName(in pObject as JavaClass) returns JavaObject binds to "java:java.lang.Class>getName"
 
-foreign handler _Object_getClass(in pObject as JavaObject) returns JavaObject binds to "java:java.lang.Object>getClass"
+foreign handler _Object_getClass(in pObject as JavaObject) returns JavaClass binds to "java:java.lang.Object>getClass"
 
 foreign handler MCJavaStringFromJavaString(in pString as JavaObject, out rString as String) returns nothing binds to "<builtin>"
 
 foreign handler MCJavaNewObject(in pString as String, in pArgs as List, out rObj as JavaObject) returns CBool binds to "<builtin>"
 
 public handler GetClassName(in pObj as JavaObject) returns String
+	variable tString as JavaObject
 	unsafe
-		return _Object_getClass(_Class_getName(pObj))
+		put _Class_getName(_Object_getClass(pObj)) into tString
 	end unsafe
+	return StringFromJavaString(tString)
 end handler
 
 public handler GetObject() returns JavaObject

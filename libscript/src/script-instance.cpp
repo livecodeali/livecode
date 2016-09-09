@@ -1293,25 +1293,44 @@ static bool MCScriptInstanceGetJavaSignatureString(MCScriptInstanceRef p_instanc
         MCTypeInfoRef t_type;
         t_type = MCHandlerTypeInfoGetParameterType(t_signature, t_arg_index);
         
-        if (MCTypeInfoIsNamed(t_type) || MCTypeInfoIsHandler(t_type) || MCTypeInfoIsOptional(t_type))
+        MCResolvedTypeInfo t_resolved_type;
+        MCTypeInfoResolve(t_type, t_resolved_type);
+        
+        MCTypeInfoRef t_res;
+        t_res = t_resolved_type . type;
+        
+        if (MCTypeInfoIsNamed(t_res) || MCTypeInfoIsHandler(t_res) || MCTypeInfoIsOptional(t_res))
         {
-            if (MCTypeInfoConforms(t_type, kMCBooleanTypeInfo))
+            MCLog("base type info is named");
+            if (MCTypeInfoConforms(t_res, kMCBooleanTypeInfo))
                 MCStringAppendNativeChar(*t_format, 'Z');
-            else if (MCTypeInfoConforms(t_type, kMCDataTypeInfo))
+            else if (MCTypeInfoConforms(t_res, kMCDataTypeInfo))
                 MCStringAppendNativeChars(*t_format, (const char_t *)"[B", 2);
-            else if (MCTypeInfoConforms(t_type, kMCIntTypeInfo))
+            else if (MCTypeInfoConforms(t_res, kMCIntTypeInfo))
                 MCStringAppendNativeChar(*t_format, 'I');
-            else if (MCTypeInfoConforms(t_type, kMCNumberTypeInfo))
+            else if (MCTypeInfoConforms(t_res, kMCNumberTypeInfo))
                 MCStringAppendNativeChar(*t_format, 'J');
             else
                 MCStringAppend(*t_format, MCSTR("?"));
         }
-        /*
-        else if (MCTypeInfoIsJava(t_type))
-            MCStringAppendFormat(*t_format, "L%@", MCJavaTypeInfoGetName(t_type));
-         */
+        else if (MCTypeInfoIsCustom(t_res))
+        {
+            MCLog("base type info is custom");
+            MCTypeInfoRef t_base = MCCustomTypeInfoGetBaseType(t_res);
+            if (MCTypeInfoIsJava(t_base))
+                MCStringAppendFormat(*t_format, "L%@", MCJavaTypeInfoGetName(t_base));
+            else
+                MCLog("base type info is not java");
+        }
+        else if (MCTypeInfoIsJava(t_res))
+        {
+            MCLog("java type!!");
+            MCStringAppendFormat(*t_format, "L%@", MCJavaTypeInfoGetName(t_res));
+        }
         else
-            MCStringAppend(*t_format, MCSTR("?"));
+        {
+            MCLog("not named or custom");
+        }
     }
     
     return MCStringCopy(*t_format, r_signature);
@@ -1408,24 +1427,39 @@ static bool MCScriptResolveForeignFunctionBinding(MCScriptInstanceRef p_instance
         r_bound = false;
         return true;
 #else
+        extern JNIEnv *MCJavaGetThreadEnv();
+        JNIEnv *t_env = MCJavaGetThreadEnv();
+        
         MCAutoStringRef t_signature_string;
-        MCScriptInstanceGetJavaSignatureString(p_instance, p_handler, t_signature_string);
+        MCScriptInstanceGetJavaSignatureString(p_instance, p_handler, &t_signature_string);
         
         MCAutoStringRefAsCString t_class_cstring;
-        t_class_cstring.Lock(t_class);
+        t_class_cstring.Lock(*t_class);
 
         MCAutoStringRefAsCString t_signature_cstring;
-        t_class_cstring.Lock(t_signature_string);
+        t_signature_cstring.Lock(*t_signature_string);
+
+        MCAutoStringRefAsCString t_method_cstring;
+        t_method_cstring.Lock(*t_function);
         
         jclass t_java_class;
-        t_java_class = JNIenv->FindClass(*t_class_cstring);
+        t_java_class = t_env->FindClass(*t_class_cstring);
         
         jmethodID t_method_id;
-        t_method_id = JNIenv->GetMethodID(t_java_class, MCStringGetCString(t_method), t_signature);
+        t_method_id = t_env->GetMethodID(t_java_class, *t_method_cstring, *t_signature_cstring);
+
+        p_handler -> is_java = true;
+        p_handler -> method_id = &t_method_id;
         
-        /* store in foreign handler definition */
+        if (MCStringIsEqualToCString(*t_calling, "", kMCStringOptionCompareCaseless))
+            p_handler -> call_type = MCJavaCallTypeInstance
+        else if (MCStringIsEqualToCString(*t_calling, "instance", kMCStringOptionCompareCaseless))
+            p_handler -> call_type = MCJavaCallTypeInstance
+        else if (MCStringIsEqualToCString(*t_calling, "static", kMCStringOptionCompareCaseless))
+            p_handler -> call_type = MCJavaCallTypeStatic
+        else if (MCStringIsEqualToCString(*t_calling, "nonvirtual", kMCStringOptionCompareCaseless))
+            p_handler -> call_type = MCJavaCallTypeNonVirtual
         
-        return MCErrorCreateAndThrow(kMCGenericErrorTypeInfo, "reason", MCSTR("java binding not implemented yet"), nil);
 #endif
     }
     

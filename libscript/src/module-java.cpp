@@ -19,21 +19,19 @@
 
 #ifdef TARGET_SUBPLATFORM_ANDROID
 #include <jni.h>
-#include <mblandroidjava.h>
 
-
-void MCJavaGetJObject(MCNameRef p_classname)
-{
-    jclass cls1 = (*env)->GetObjectClass(env, obj);
-    if (cls1 == 0)
-        ... /* error */
-        cls = (*env)->NewGlobalRef(env, cls1);
-}
+extern JNIEnv *MCJavaGetThreadEnv();
+extern JNIEnv *MCJavaAttachCurrentThread();
+extern void MCJavaDetachCurrentThread();
 #endif
 
 MC_DLLEXPORT_DEF MCTypeInfoRef kMCJavaObjectTypeInfo;
 
 extern "C" MC_DLLEXPORT_DEF MCTypeInfoRef MCJavaObjectTypeInfo() { return kMCJavaObjectTypeInfo; }
+
+MC_DLLEXPORT_DEF MCTypeInfoRef kMCJavaClassTypeInfo;
+
+extern "C" MC_DLLEXPORT_DEF MCTypeInfoRef MCJavaClassTypeInfo() { return kMCJavaClassTypeInfo; }
 
 struct __MCJavaObjectImpl
 {
@@ -103,29 +101,24 @@ static hash_t __MCJavaObjectHash(MCValueRef p_value)
 }
 
 #ifdef TARGET_SUBPLATFORM_ANDROID
-static void MCJavaStringFromJString(jobject p_string, MCStringRef& r_string)
+static void MCJavaStringFromJString(jstring p_string, MCStringRef& r_string)
 {
     JNIEnv *t_env = MCJavaGetThreadEnv();
     const char *nativeString = t_env->GetStringUTFChars(p_string, 0);
     
-    MCStringCreateWithCString(nativeString, &r_string);
+    MCStringCreateWithCString(nativeString, r_string);
     
     t_env->ReleaseStringUTFChars(p_string, nativeString);
 }
-#endif
 
-static bool __MCJavaObjectDescribe(MCValueRef p_value, MCStringRef &r_desc)
+static jstring MCJavaGetClassName(MCJavaObjectRef p_obj)
 {
-	MCJavaObjectRef t_obj = static_cast<MCJavaObjectRef>(p_value);
-    
     __MCJavaObjectImpl *t_impl;
-    t_impl = MCJavaObjectGet(t_obj);
+    t_impl = MCJavaObjectGet(p_obj);
     
-#ifdef TARGET_SUBPLATFORM_ANDROID
     jobject t_object;
     t_object = *(jobject *)t_impl -> object;
-    
-    MCAutoStringRef t_class_name;
+
     JNIEnv *t_env = MCJavaGetThreadEnv();
     jclass t_class = t_env->GetObjectClass(t_object);
     
@@ -143,7 +136,17 @@ static bool __MCJavaObjectDescribe(MCValueRef p_value, MCStringRef &r_desc)
     t_env->DeleteLocalRef(t_class);
     t_env->DeleteLocalRef(cls);
     
-    MCJavaStringFromJavaString(className, &t_class_name);
+    return className;
+}
+#endif
+
+static bool __MCJavaObjectDescribe(MCValueRef p_value, MCStringRef &r_desc)
+{
+#ifdef TARGET_SUBPLATFORM_ANDROID
+    MCJavaObjectRef t_obj = static_cast<MCJavaObjectRef>(p_value);
+    
+    MCAutoStringRef t_class_name;
+    MCJavaStringFromJString(MCJavaGetClassName(t_obj), &t_class_name);
     return MCStringFormat (r_desc, "<java: %@>", *t_class_name);
 #else
     return MCStringFormat (r_desc, "<java: %s>", "not supported");
@@ -170,9 +173,9 @@ extern "C" MC_DLLEXPORT_DEF void MCJavaStringFromJavaString(MCJavaObjectRef p_ob
     __MCJavaObjectImpl *t_impl;
     t_impl = MCJavaObjectGet(p_object);
 #ifdef TARGET_SUBPLATFORM_ANDROID
-    jobject t_object;
-    t_object = *(jobject *)t_impl -> object;
-    MCJavaStringFromJString(t_object, r_string);
+    jstring t_string;
+    t_string = *(jstring *)t_impl -> object;
+    MCJavaStringFromJString(t_string, r_string);
 #else
     r_string = MCValueRetain(kMCEmptyString);
 #endif
@@ -192,12 +195,9 @@ extern "C" MC_DLLEXPORT_DEF bool MCJavaNewObject(MCStringRef p_class_name, MCLis
     JNIEnv *t_env = MCJavaGetThreadEnv();
     jclass t_class = t_env->FindClass(*t_class_cstring);
     
-    jmethodID t_constructor = t_env->GetMethodID(t_class, "<init>", "(V)");
+    jmethodID t_constructor = t_env->GetMethodID(t_class, "<init>", "()V");
     
     jobject t_object = t_env->NewObject(t_class, t_constructor);
-
-    self -> object = &t_object;
-    r_object = self;
     
     return MCJavaObjectCreate(MCJavaObjectImplMake(&t_object), r_object);
 #else
@@ -209,7 +209,18 @@ extern "C" MC_DLLEXPORT_DEF bool MCJavaNewObject(MCStringRef p_class_name, MCLis
 
 extern "C" bool com_livecode_java_Initialize(void)
 {
-	if (!MCNamedCustomTypeInfoCreate(MCNAME("com.livecode.java.JavaObject"), kMCNullTypeInfo, &kMCJavaObjectCustomValueCallbacks, kMCJavaObjectTypeInfo))
+    MCTypeInfoRef t_class, t_object;
+
+    if (!MCJavaTypeInfoCreate(MCNAME("java.lang.class"), t_class))
+        return false;
+
+    if (!MCJavaTypeInfoCreate(MCNAME("java.lang.object"), t_object))
+        return false;
+
+    if (!MCNamedCustomTypeInfoCreate(MCNAME("com.livecode.java.JavaClass"), t_class, &kMCJavaObjectCustomValueCallbacks, kMCJavaClassTypeInfo))
+        return false;
+
+	if (!MCNamedCustomTypeInfoCreate(MCNAME("com.livecode.java.JavaObject"), t_object, &kMCJavaObjectCustomValueCallbacks, kMCJavaObjectTypeInfo))
 		return false;
     
     return true;

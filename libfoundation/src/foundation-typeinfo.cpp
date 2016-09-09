@@ -1177,6 +1177,7 @@ bool MCCustomTypeInfoCreate(MCTypeInfoRef p_base, const MCValueCustomCallbacks *
     return false;
 }
 
+MC_DLLEXPORT_DEF
 MCTypeInfoRef MCCustomTypeInfoGetBaseType(MCTypeInfoRef unresolved_self)
 {
     MCTypeInfoRef self;
@@ -1197,7 +1198,7 @@ const MCValueCustomCallbacks *MCCustomTypeInfoGetCallbacks(MCTypeInfoRef unresol
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-#if 0
+
 MC_DLLEXPORT_DEF
 bool MCJavaUnmanagedTypeInfoCreate(MCNameRef p_class, MCTypeInfoRef& r_typeinfo)
 {
@@ -1224,7 +1225,15 @@ bool MCJavaTypeInfoCreate(MCNameRef p_class, MCTypeInfoRef& r_typeinfo)
     
     return false;
 }
-#endif
+
+MC_DLLEXPORT_DEF
+MCNameRef MCJavaTypeInfoGetName(MCTypeInfoRef self)
+{
+    MCAssert(MCTypeInfoIsJava(self));
+    
+    return self -> java . class_name;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 MCTypeInfoRef __MCTypeInfoResolve(__MCTypeInfo *self)

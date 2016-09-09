@@ -1679,6 +1679,8 @@ MC_DLLEXPORT bool MCCustomTypeInfoCreate(MCTypeInfoRef base, const MCValueCustom
 
 MC_DLLEXPORT const MCValueCustomCallbacks *MCCustomTypeInfoGetCallbacks(MCTypeInfoRef typeinfo);
 
+MC_DLLEXPORT MCTypeInfoRef MCCustomTypeInfoGetBaseType(MCTypeInfoRef unresolved_self);
+    
 //////////
 
 struct MCRecordTypeFieldInfo
@@ -1778,6 +1780,7 @@ MC_DLLEXPORT bool MCNamedForeignTypeInfoCreate(MCNameRef p_name, const MCForeign
 MC_DLLEXPORT MCNameRef MCJavaTypeInfoGetName(MCTypeInfoRef self);
 MC_DLLEXPORT bool MCTypeInfoIsJava(MCTypeInfoRef self);
 MC_DLLEXPORT bool MCJavaTypeInfoCreate(MCNameRef p_class, MCTypeInfoRef& r_typeinfo);
+    
 ////////////////////////////////////////////////////////////////////////////////
 //
 //  BOOLEAN DEFINITIONS

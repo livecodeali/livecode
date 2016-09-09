@@ -119,6 +119,10 @@ struct __MCTypeInfo: public __MCValue
             MCForeignTypeDescriptor descriptor;
             void *ffi_layout_type;
         } foreign;
+        struct
+        {
+            MCNameRef class_name;
+        } java;
     };
 };
 
