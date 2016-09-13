@@ -43,8 +43,12 @@ extern const char *__MCSysCharset;
 
 enum
 {
+    // The shift required to access the typecode
+    kMCValueTypeCodeMask = 0xff000000,
+    kMCValueTypeCodeShift = 24,
+    
 	// If set, then this value is in the unique table.
-	kMCValueFlagIsInterred = 1 << 27,
+	kMCValueFlagIsInterred = 1 << 23,
 };
 
 struct __MCValue
@@ -68,6 +72,7 @@ enum
     kMCTypeInfoTypeIsAlias = 253,
     kMCTypeInfoTypeIsOptional = 252,
     kMCTypeInfoTypeIsForeign = 251,
+    kMCTypeInfoTypeIsJava = 250,
 };
 
 struct MCHandlerTypeLayout
@@ -445,6 +450,13 @@ struct __MCHandler: public __MCValue
     char context[1];
 };
 
+////////
+
+struct __MCJavaObject : public __MCValue
+{
+    void *object;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 extern const uindex_t __kMCValueHashTableSizes[];
@@ -457,7 +469,7 @@ bool __MCValueImmutableCopy(__MCValue *value, bool release, __MCValue*& r_new_va
 
 inline MCValueTypeCode __MCValueGetTypeCode(__MCValue *self)
 {
-	return (self -> flags >> 28);
+	return (self -> flags >> kMCValueTypeCodeShift);
 }
 
 template<class T> inline bool __MCValueCreate(MCValueTypeCode p_type_code, T*& r_value)
@@ -579,6 +591,18 @@ bool __MCHandlerCopyDescription(__MCHandler *self, MCStringRef& r_description);
 
 bool __MCStreamInitialize(void);
 void __MCStreamFinalize(void);
+
+#ifdef TARGET_PLATFORM_MACOS_X
+bool __MCJavaInitialize(void);
+void __MCJavaFinalize(void);
+#endif
+bool __MCJavaObjectInitialize(void);
+void __MCJavaObjectFinalize(void);
+void __MCJavaObjectDestroy(__MCJavaObject *string);
+hash_t __MCJavaObjectHash(__MCJavaObject *string);
+bool __MCJavaObjectIsEqualTo(__MCJavaObject *string, __MCJavaObject *other_string);
+bool __MCJavaObjectCopyDescription(__MCJavaObject *string, __MCJavaObject& r_string);
+bool __MCJavaObjectImmutableCopy(__MCJavaObject *string, bool release, __MCJavaObject*& r_immutable_value);
 
 /* Default implementations of each of the function members of struct &
  * MCValueCustomCallbacks */

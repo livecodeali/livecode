@@ -117,7 +117,7 @@ MC_DLLEXPORT_DEF
 bool MCTypeInfoIsJava(MCTypeInfoRef self)
 {
     __MCAssertIsTypeInfo(self);
-    return __MCTypeInfoGetExtendedTypeCode(self) == kMCValueTypeCodeJava;
+    return __MCTypeInfoGetExtendedTypeCode(self) == kMCTypeInfoTypeIsJava;
 }
 
 MC_DLLEXPORT_DEF
@@ -220,10 +220,13 @@ bool MCTypeInfoResolve(MCTypeInfoRef self, MCResolvedTypeInfo& r_resolution)
 MC_DLLEXPORT_DEF
 bool MCTypeInfoConforms(MCTypeInfoRef source, MCTypeInfoRef target)
 {
+    if (source == target)
+        return true;
+    
     // We require that source is concrete for all but handler types (as handlers
     // have unnamed typeinfos which we need to compare with potentially named
     // handler type typeinfos).
-    MCAssert(MCTypeInfoIsNamed(source) || MCTypeInfoIsHandler(source) || MCTypeInfoIsOptional(source));
+    MCAssert(MCTypeInfoIsJava(source) || MCTypeInfoIsNamed(source) || MCTypeInfoIsHandler(source) || MCTypeInfoIsOptional(source));
     
     // Resolve the source type.
     MCResolvedTypeInfo t_resolved_source;
@@ -308,7 +311,7 @@ bool MCResolvedTypeInfoConforms(const MCResolvedTypeInfo& source, const MCResolv
         for(MCTypeInfoRef t_supertype = source . type; t_supertype != kMCNullTypeInfo; t_supertype = __MCTypeInfoResolve(t_supertype) -> custom . base)
             if (target . named_type == t_supertype)
                 return true;
-        
+
         return false;
     }
     
@@ -1199,40 +1202,6 @@ const MCValueCustomCallbacks *MCCustomTypeInfoGetCallbacks(MCTypeInfoRef unresol
 
 ////////////////////////////////////////////////////////////////////////////////
 
-MC_DLLEXPORT_DEF
-bool MCJavaUnmanagedTypeInfoCreate(MCNameRef p_class, MCTypeInfoRef& r_typeinfo)
-{
-    return false;
-}
-
-MC_DLLEXPORT_DEF
-bool MCJavaTypeInfoCreate(MCNameRef p_class, MCTypeInfoRef& r_typeinfo)
-{
-    __MCAssertIsName(p_class);
-    
-    __MCTypeInfo *self;
-    if (!__MCValueCreate(kMCValueTypeCodeTypeInfo, self))
-        return false;
-    
-    self -> flags |= kMCValueTypeCodeJava;
-    
-    self -> java . class_name = MCValueRetain(p_class);
-    
-    if (MCValueInterAndRelease(self, r_typeinfo))
-        return true;
-    
-    MCValueRelease(self);
-    
-    return false;
-}
-
-MC_DLLEXPORT_DEF
-MCNameRef MCJavaTypeInfoGetName(MCTypeInfoRef self)
-{
-    MCAssert(MCTypeInfoIsJava(self));
-    
-    return self -> java . class_name;
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1370,6 +1339,10 @@ hash_t __MCTypeInfoHash(__MCTypeInfo *self)
         // All custom typeinfos are unique regardless of callbacks passed. So just hash the pointer.
         t_hash = MCHashPointer(self);
     }
+    else if (t_code == kMCTypeInfoTypeIsJava)
+    {
+        t_hash = MCHashBytesStream(t_hash, &self -> java . class_name, sizeof(self -> java . class_name));
+    }
 
     return t_hash;
 }
@@ -1398,6 +1371,9 @@ bool __MCTypeInfoIsEqualTo(__MCTypeInfo *self, __MCTypeInfo *other_self)
     
     if (t_code == kMCTypeInfoTypeIsForeign)
         return self == other_self;
+    
+    if (t_code == kMCTypeInfoTypeIsJava)
+        return MCNameIsEqualTo(self -> java . class_name, other_self -> java . class_name);
     
     if (t_code == kMCValueTypeCodeRecord)
     {

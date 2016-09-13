@@ -640,6 +640,7 @@ typedef struct __MCError *MCErrorRef;
 typedef struct __MCStream *MCStreamRef;
 typedef struct __MCProperList *MCProperListRef;
 typedef struct __MCForeignValue *MCForeignValueRef;
+typedef struct __MCJavaObject *MCJavaObjectRef;
 
 // Forward declaration
 typedef struct __MCLocale* MCLocaleRef;
@@ -1779,7 +1780,21 @@ MC_DLLEXPORT bool MCNamedForeignTypeInfoCreate(MCNameRef p_name, const MCForeign
     
 MC_DLLEXPORT MCNameRef MCJavaTypeInfoGetName(MCTypeInfoRef self);
 MC_DLLEXPORT bool MCTypeInfoIsJava(MCTypeInfoRef self);
+MC_DLLEXPORT bool MCNamedJavaTypeInfoCreate(MCNameRef p_name, MCNameRef p_class, MCTypeInfoRef& r_typeinfo);
 MC_DLLEXPORT bool MCJavaTypeInfoCreate(MCNameRef p_class, MCTypeInfoRef& r_typeinfo);
+MC_DLLEXPORT MCTypeInfoRef MCJavaGetObjectTypeInfo();
+MC_DLLEXPORT bool MCJavaCreateJavaObjectTypeInfo();
+    
+MC_DLLEXPORT bool MCJavaObjectCreate(MCNameRef p_class, void *value, MCJavaObjectRef& r_obj);
+MC_DLLEXPORT void *MCJavaObjectGetObject(const MCJavaObjectRef p_obj);
+
+MC_DLLEXPORT bool MCJavaCallJNI(MCNameRef p_class, void *p_method_id, int p_call_type, MCValueRef&r_return, const MCValueRef *p_args);
+MC_DLLEXPORT bool MCJavaCallConstructor(MCNameRef p_class_name, MCListRef p_args, MCJavaObjectRef& r_object);
+MC_DLLEXPORT void *MCJavaGetMethodId(MCStringRef p_class, MCStringRef p_method_name, MCStringRef p_signature);
+
+#if defined(TARGET_PLATFORM_MACOS_X) || defined(TARGET_SUBPLATFORM_ANDROID)
+void *MCJavaGetEnv();
+#endif
     
 ////////////////////////////////////////////////////////////////////////////////
 //

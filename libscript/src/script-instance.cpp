@@ -21,10 +21,16 @@
 
 #include "foundation-auto.h"
 
+#include "module-java.h"
+
 #ifdef _WIN32
 #include <windows.h>
 #else
 #include <dlfcn.h>
+#endif
+
+#ifdef TARGET_SUBPLATFORM_ANDROID
+#include <jni.h>
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1278,6 +1284,40 @@ static bool MCScriptLoadSharedLibrary(MCScriptModuleRef p_module, MCStringRef p_
     return false;
 }
 
+static bool MCScriptInstanceGetJavaTypeCode(MCTypeInfoRef p_type, MCStringRef& r_signature)
+{
+    MCResolvedTypeInfo t_resolved_type;
+    MCTypeInfoResolve(p_type, t_resolved_type);
+    
+    MCTypeInfoRef t_res;
+    t_res = t_resolved_type . type;
+    
+    if (MCTypeInfoIsNamed(t_res) || MCTypeInfoIsHandler(t_res) || MCTypeInfoIsOptional(t_res))
+    {
+        MCLog("base type info is named");
+        if (MCTypeInfoConforms(t_res, kMCBooleanTypeInfo))
+            return MCStringFormat(r_signature, "Z");
+        else if (MCTypeInfoConforms(t_res, kMCDataTypeInfo))
+            return MCStringFormat(r_signature, "[B");
+        else if (MCTypeInfoConforms(t_res, kMCIntTypeInfo))
+            return MCStringFormat(r_signature, "I");
+        else if (MCTypeInfoConforms(t_res, kMCNumberTypeInfo))
+            return MCStringFormat(r_signature, "J");
+        else
+            return MCStringFormat(r_signature, "?");
+    }
+    else if (MCTypeInfoIsJava(t_res))
+    {
+        MCLog("java type!!");
+        return MCStringFormat(r_signature, "L%@;", MCJavaTypeInfoGetName(t_res));
+    }
+    else
+    {
+        MCLog("not named or custom");
+    }
+    return MCStringFormat(r_signature, "?");
+}
+
 static bool MCScriptInstanceGetJavaSignatureString(MCScriptInstanceRef p_instance, MCScriptForeignHandlerDefinition *p_handler, MCStringRef& r_signature)
 {
     MCTypeInfoRef t_signature;
@@ -1287,51 +1327,27 @@ static bool MCScriptInstanceGetJavaSignatureString(MCScriptInstanceRef p_instanc
    if (!MCStringCreateMutable(0, &t_format))
        return false;
     
+    MCStringAppendNativeChar(*t_format, '(');
+    
+    MCTypeInfoRef t_type;
     uindex_t t_arg_index;
     for(t_arg_index = 0; t_arg_index < MCHandlerTypeInfoGetParameterCount(t_signature); t_arg_index++)
     {
-        MCTypeInfoRef t_type;
         t_type = MCHandlerTypeInfoGetParameterType(t_signature, t_arg_index);
         
-        MCResolvedTypeInfo t_resolved_type;
-        MCTypeInfoResolve(t_type, t_resolved_type);
-        
-        MCTypeInfoRef t_res;
-        t_res = t_resolved_type . type;
-        
-        if (MCTypeInfoIsNamed(t_res) || MCTypeInfoIsHandler(t_res) || MCTypeInfoIsOptional(t_res))
-        {
-            MCLog("base type info is named");
-            if (MCTypeInfoConforms(t_res, kMCBooleanTypeInfo))
-                MCStringAppendNativeChar(*t_format, 'Z');
-            else if (MCTypeInfoConforms(t_res, kMCDataTypeInfo))
-                MCStringAppendNativeChars(*t_format, (const char_t *)"[B", 2);
-            else if (MCTypeInfoConforms(t_res, kMCIntTypeInfo))
-                MCStringAppendNativeChar(*t_format, 'I');
-            else if (MCTypeInfoConforms(t_res, kMCNumberTypeInfo))
-                MCStringAppendNativeChar(*t_format, 'J');
-            else
-                MCStringAppend(*t_format, MCSTR("?"));
-        }
-        else if (MCTypeInfoIsCustom(t_res))
-        {
-            MCLog("base type info is custom");
-            MCTypeInfoRef t_base = MCCustomTypeInfoGetBaseType(t_res);
-            if (MCTypeInfoIsJava(t_base))
-                MCStringAppendFormat(*t_format, "L%@", MCJavaTypeInfoGetName(t_base));
-            else
-                MCLog("base type info is not java");
-        }
-        else if (MCTypeInfoIsJava(t_res))
-        {
-            MCLog("java type!!");
-            MCStringAppendFormat(*t_format, "L%@", MCJavaTypeInfoGetName(t_res));
-        }
-        else
-        {
-            MCLog("not named or custom");
-        }
+        MCAutoStringRef t_code;
+        MCScriptInstanceGetJavaTypeCode(t_type, &t_code);
+        MCStringAppend(*t_format, *t_code);
+        t_type = MCHandlerTypeInfoGetParameterType(t_signature, t_arg_index);
     }
+    
+    MCStringAppendNativeChar(*t_format, ')');
+    
+    t_type = MCHandlerTypeInfoGetReturnType(t_signature);
+    
+    MCAutoStringRef t_return_code;
+    MCScriptInstanceGetJavaTypeCode(t_type, &t_return_code);
+    MCStringAppend(*t_format, *t_return_code);
     
     return MCStringCopy(*t_format, r_signature);
 }
@@ -1420,47 +1436,38 @@ static bool MCScriptResolveForeignFunctionBinding(MCScriptInstanceRef p_instance
     }
     else if (MCStringIsEqualToCString(*t_language, "java", kMCStringOptionCompareExact))
     {
-#if !defined(TARGET_SUBPLATFORM_ANDROID)
-        if (p_throw)
-            return MCErrorCreateAndThrow(kMCGenericErrorTypeInfo, "reason", MCSTR("java binding not supported on this platform"), nil);
+        if (MCStringIsEqualToCString(*t_calling, "", kMCStringOptionCompareCaseless))
+            p_handler -> java . call_type = MCJavaCallTypeInstance;
+        else if (MCStringIsEqualToCString(*t_calling, "instance", kMCStringOptionCompareCaseless))
+            p_handler -> java . call_type = MCJavaCallTypeInstance;
+        else if (MCStringIsEqualToCString(*t_calling, "static", kMCStringOptionCompareCaseless))
+            p_handler -> java . call_type = MCJavaCallTypeStatic;
+        else if (MCStringIsEqualToCString(*t_calling, "nonvirtual", kMCStringOptionCompareCaseless))
+            p_handler -> java . call_type = MCJavaCallTypeNonVirtual;
         
-        r_bound = false;
-        return true;
-#else
-        extern JNIEnv *MCJavaGetThreadEnv();
-        JNIEnv *t_env = MCJavaGetThreadEnv();
+        p_handler -> is_java = true;
         
+        MCNewAutoNameRef t_class_name;
+        MCNameCreate(*t_library, &t_class_name);
+        MCJavaTypeInfoCreate(*t_class_name, p_handler -> java . class_type);
+
         MCAutoStringRef t_signature_string;
         MCScriptInstanceGetJavaSignatureString(p_instance, p_handler, &t_signature_string);
         
-        MCAutoStringRefAsCString t_class_cstring;
-        t_class_cstring.Lock(*t_class);
-
-        MCAutoStringRefAsCString t_signature_cstring;
-        t_signature_cstring.Lock(*t_signature_string);
-
-        MCAutoStringRefAsCString t_method_cstring;
-        t_method_cstring.Lock(*t_function);
+        void *t_method_id;
+        t_method_id = MCJavaGetMethodId(*t_library, *t_function, *t_signature_string);
         
-        jclass t_java_class;
-        t_java_class = t_env->FindClass(*t_class_cstring);
-        
-        jmethodID t_method_id;
-        t_method_id = t_env->GetMethodID(t_java_class, *t_method_cstring, *t_signature_cstring);
-
-        p_handler -> is_java = true;
-        p_handler -> method_id = &t_method_id;
-        
-        if (MCStringIsEqualToCString(*t_calling, "", kMCStringOptionCompareCaseless))
-            p_handler -> call_type = MCJavaCallTypeInstance
-        else if (MCStringIsEqualToCString(*t_calling, "instance", kMCStringOptionCompareCaseless))
-            p_handler -> call_type = MCJavaCallTypeInstance
-        else if (MCStringIsEqualToCString(*t_calling, "static", kMCStringOptionCompareCaseless))
-            p_handler -> call_type = MCJavaCallTypeStatic
-        else if (MCStringIsEqualToCString(*t_calling, "nonvirtual", kMCStringOptionCompareCaseless))
-            p_handler -> call_type = MCJavaCallTypeNonVirtual
-        
-#endif
+        if (t_method_id != nil)
+        {
+            p_handler -> java . method_id = &t_method_id;
+        }
+        else
+        {
+            if (p_throw)
+                return MCErrorCreateAndThrow(kMCGenericErrorTypeInfo, "reason", MCSTR("java binding not supported on this platform"), nil);
+            r_bound = false;
+            return true;
+        }
     }
     
 #ifdef _WIN32
@@ -1487,7 +1494,13 @@ static bool MCScriptPrepareForeignFunction(MCScriptInstanceRef p_instance, MCScr
     if (!p_throw && !r_bound)
         return true;
     
-    if (p_handler -> native . function == nil)
+    bool t_resolved;
+    if (p_handler -> is_java)
+        t_resolved = p_handler -> java . method_id != nil;
+    else
+        t_resolved = p_handler -> native . function != nil;
+    
+    if (!t_resolved)
     {
         if (p_throw)
             return MCScriptThrowUnableToResolveForeignHandlerError(p_instance -> module, p_handler);
@@ -1497,11 +1510,17 @@ static bool MCScriptPrepareForeignFunction(MCScriptInstanceRef p_instance, MCScr
         return true;
     }
     
+    if (p_handler -> is_java)
+        return true;
+    
     MCTypeInfoRef t_signature;
     t_signature = p_instance -> module -> types[p_handler -> type] -> typeinfo;
     
     if (!MCHandlerTypeInfoGetLayoutType(t_signature, t_abi, p_handler -> native . function_cif))
+    {
+        // Should throw proper error message?
         return MCErrorThrowGeneric(nil);
+    }
     
     if (!p_throw)
         r_bound = true;
@@ -1776,7 +1795,18 @@ static bool MCScriptPerformForeignInvoke(MCScriptFrame*& x_frame, MCScriptInstan
     if (t_success)
     {
         uint8_t t_result[64];
-        ffi_call((ffi_cif *)p_handler -> native . function_cif, (void(*)())p_handler -> native . function, &t_result, t_args);
+        
+        if (p_handler -> is_java)
+        {
+            MCValueRef t_valueref_result;
+            MCJavaCallJNI(MCJavaTypeInfoGetName(p_handler -> java . class_type),
+                            p_handler -> java . method_id,
+                            p_handler -> java . call_type,
+                            t_valueref_result,
+                            (const MCValueRef *)t_args);
+        }
+        else
+            ffi_call((ffi_cif *)p_handler -> native . function_cif, (void(*)())p_handler -> native . function, &t_result, t_args);
         
         // If no error is pending then do the copyback of the result, and then
         // arguments. Otherwise we just continue the throw.

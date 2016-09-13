@@ -735,27 +735,52 @@ bool MCScriptEnsureModuleIsUsable(MCScriptModuleRef self)
                 MCScriptForeignType *t_type;
                 t_type = static_cast<MCScriptForeignType *>(self -> types[i]);
                 
-                void *t_symbol;
-#ifdef _WIN32
-				t_symbol = GetProcAddress(GetModuleHandle(NULL), MCStringGetCString(t_type -> binding));
-#elif defined(__EMSCRIPTEN__)
-				void *t_handle = dlopen(NULL, RTLD_LAZY);
-				t_symbol = dlsym(t_handle, MCStringGetCString(t_type->binding));
-				dlclose(t_handle);
-#else
-                t_symbol = dlsym(RTLD_DEFAULT, MCStringGetCString(t_type -> binding));
-#endif
-                if (t_symbol == nil)
+                MCAutoStringRef t_head, t_tail;
+                if (!MCStringDivideAtChar(t_type -> binding, ':', kMCStringOptionCompareExact, &t_head, &t_tail))
+                    goto error_cleanup; // oom
+                
+                if (MCStringIsEmpty(*t_tail))
                 {
-                    MCErrorThrowGenericWithMessage(MCSTR("%{name} not usable - unable to resolve foreign type '%{type}'"),
-                                                   "type", t_type -> binding,
-                                                   nil);
-					goto error_cleanup;
-                }
+                    // Binds to a builtin foreign function
+                    void *t_symbol;
+#ifdef _WIN32
+                    t_symbol = GetProcAddress(GetModuleHandle(NULL), MCStringGetCString(t_type -> binding));
+#elif defined(__EMSCRIPTEN__)
+                    void *t_handle = dlopen(NULL, RTLD_LAZY);
+                    t_symbol = dlsym(t_handle, MCStringGetCString(t_type->binding));
+                    dlclose(t_handle);
+#else
+                    t_symbol = dlsym(RTLD_DEFAULT, MCStringGetCString(t_type -> binding));
+#endif
+                    if (t_symbol == nil)
+                    {
+                        MCErrorThrowGenericWithMessage(MCSTR("%{name} not usable - unable to resolve foreign type '%{type}'"),
+                                                       "type", t_type -> binding,
+                                                       nil);
+                        goto error_cleanup;
+                    }
 
-                /* The symbol is a function that returns a type info reference. */
-                MCTypeInfoRef (*t_type_func)(void) = (MCTypeInfoRef (*)(void)) t_symbol;
-                t_typeinfo = MCValueRetain(t_type_func());
+                    /* The symbol is a function that returns a type info reference. */
+                    MCTypeInfoRef (*t_type_func)(void) = (MCTypeInfoRef (*)(void)) t_symbol;
+                    t_typeinfo = MCValueRetain(t_type_func());
+                }
+                else if (MCStringIsEqualToCString(*t_head, "java", kMCStringOptionCompareExact))
+                {
+                    MCNewAutoNameRef t_class_name;
+                    if (!MCNameCreate(*t_tail, &t_class_name))
+                        goto error_cleanup;
+                    
+                    // Create a typeinfo for the java type
+                    if (!MCJavaTypeInfoCreate(*t_class_name, &t_typeinfo))
+                        goto error_cleanup;
+                }
+                else
+                {
+                    MCErrorThrowGenericWithMessage(MCSTR("%{name} not usable - %{language} binding not yet implemented"),
+                                                   "language", *t_head,
+                                                   nil);
+                    goto error_cleanup;
+                }
             }
             break;
             case kMCScriptTypeKindRecord:

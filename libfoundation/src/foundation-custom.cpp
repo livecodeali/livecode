@@ -76,6 +76,13 @@ __MCCustomDefaultMutableCopy (MCValueRef self,
 }
 
 bool
+__MCCustomDefaultConformsTo (MCTypeInfoRef source,
+                             MCTypeInfoRef target)
+{
+    return false;
+}
+
+bool
 __MCCustomCopyDescription (MCValueRef self,
                            MCStringRef & r_desc)
 {

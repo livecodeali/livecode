@@ -526,6 +526,8 @@ uindex_t kMCValuePoolCount = kMCValueTypeCodeList + 1;
 
 bool __MCValueCreate(MCValueTypeCode p_type_code, size_t p_size, __MCValue*& r_value)
 {
+    MCAssert((p_type_code & (kMCValueTypeCodeMask >> kMCValueTypeCodeShift)) == p_type_code);
+    
 	void *t_value;
 	
     // MW-2014-03-21: [[ Faster ]] If we are pooling this typecode, and the
@@ -568,7 +570,7 @@ bool __MCValueCreate(MCValueTypeCode p_type_code, size_t p_size, __MCValue*& r_v
 	__MCValue *self = (__MCValue *)t_value;
 
 	self -> references = 1;
-	self -> flags = (p_type_code << 28);
+	self -> flags = (p_type_code << kMCValueTypeCodeShift);
     
 	r_value = self;
 

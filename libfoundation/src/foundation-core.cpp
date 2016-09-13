@@ -76,7 +76,11 @@ bool MCInitialize(void)
     
     if (!__MCStreamInitialize())
         return false;
-    
+
+#ifdef TARGET_PLATFORM_MACOS_X
+    if (!__MCJavaInitialize())
+        return false;
+#endif
 	return true;
 }
 
@@ -98,6 +102,7 @@ void MCFinalize(void)
 	__MCStringFinalize();
 	__MCValueFinalize();
     __MCUnicodeFinalize();
+    __MCJavaFinalize();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
