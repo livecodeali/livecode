@@ -764,16 +764,6 @@ bool MCScriptEnsureModuleIsUsable(MCScriptModuleRef self)
                     MCTypeInfoRef (*t_type_func)(void) = (MCTypeInfoRef (*)(void)) t_symbol;
                     t_typeinfo = MCValueRetain(t_type_func());
                 }
-                else if (MCStringIsEqualToCString(*t_head, "java", kMCStringOptionCompareExact))
-                {
-                    MCNewAutoNameRef t_class_name;
-                    if (!MCNameCreate(*t_tail, &t_class_name))
-                        goto error_cleanup;
-                    
-                    // Create a typeinfo for the java type
-                    if (!MCJavaTypeInfoCreate(*t_class_name, &t_typeinfo))
-                        goto error_cleanup;
-                }
                 else
                 {
                     MCErrorThrowGenericWithMessage(MCSTR("%{name} not usable - %{language} binding not yet implemented"),

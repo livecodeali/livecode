@@ -17,12 +17,6 @@
 #include <foundation.h>
 #include <foundation-auto.h>
 
-#ifdef TARGET_SUBPLATFORM_ANDROID
-#include <jni.h>
-#elif TARGET_PLATFORM_MACOS_X
-#include <JavaVM/jni.h>
-#endif
-
 extern "C" MC_DLLEXPORT_DEF MCTypeInfoRef MCJavaObjectTypeInfo() { return MCJavaGetObjectTypeInfo(); }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -34,6 +28,35 @@ extern "C" MC_DLLEXPORT_DEF bool MCJavaNewObject(MCStringRef p_class_name, MCLis
     return MCJavaCallConstructor(*t_name, p_args, r_object);
 }
 
+extern "C" MC_DLLEXPORT_DEF void MCJavaStringFromJString(MCJavaObjectRef p_object, MCStringRef &r_string)
+{
+    MCJavaConvertJStringToStringRef(p_object, r_string);
+}
+
+extern "C" MC_DLLEXPORT_DEF void MCJavaNumberFromJByte(MCJavaObjectRef p_object, MCNumberRef &r_number)
+{
+    MCJavaConvertJByteToNumberRef(p_object, r_number);
+}
+
+extern "C" MC_DLLEXPORT_DEF void MCJavaNumberFromJShort(MCJavaObjectRef p_object, MCNumberRef &r_number)
+{
+    MCJavaConvertJShortToNumberRef(p_object, r_number);
+}
+
+extern "C" MC_DLLEXPORT_DEF void MCJavaNumberFromJInt(MCJavaObjectRef p_object, MCNumberRef &r_number)
+{
+    MCJavaConvertJIntToNumberRef(p_object, r_number);
+}
+
+extern "C" MC_DLLEXPORT_DEF void MCJavaNumberFromJLong(MCJavaObjectRef p_object, MCNumberRef &r_number)
+{
+    MCJavaConvertJLongToNumberRef(p_object, r_number);
+}
+
+extern "C" MC_DLLEXPORT_DEF void MCJavaBooleanFromJBoolean(MCJavaObjectRef p_object, MCBooleanRef &r_number)
+{
+    MCJavaConvertJBooleanToBooleanRef(p_object, r_number);
+}
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 extern "C" bool com_livecode_java_Initialize(void)

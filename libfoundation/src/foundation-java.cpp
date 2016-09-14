@@ -21,15 +21,21 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #ifdef TARGET_PLATFORM_MACOS_X
 #include <JavaVM/jni.h>
+#elif TARGET_SUBPLATFORM_ANDROID
+#include <jni.h>
+extern JNIEnv *MCJavaGetThreadEnv();
+extern JNIEnv *MCJavaAttachCurrentThread();
+extern void MCJavaDetachCurrentThread();
 #endif
 
-#if defined(TARGET_PLATFORM_MACOS_X) || defined(TARGET_SUBPLATFORM_ANDROID)
+#if TARGET_PLATFORM_MACOS_X || TARGET_SUBPLATFORM_ANDROID
 #define TARGET_SUPPORTS_JAVA
 #endif
 
 #ifdef TARGET_SUPPORTS_JAVA
 static JNIEnv *s_env;
 static JavaVM *s_jvm;
+#endif
 
 bool __MCJavaInitialize()
 {
@@ -45,9 +51,8 @@ bool __MCJavaInitialize()
     vm_args.options = options;
     vm_args.ignoreUnrecognized = false;
     
-    JNI_CreateJavaVM(&s_jvm, (void **)&s_env, &vm_args);
-#else
-    extern JNIEnv *MCJavaGetThreadEnv();
+    jint ret = JNI_CreateJavaVM(&s_jvm, (void **)&s_env, &vm_args);
+#elif TARGET_SUBPLATFORM_ANDROID
     s_env = MCJavaGetThreadEnv();
 #endif
     return true;
@@ -60,18 +65,53 @@ void __MCJavaFinalize()
 #endif
 }
 
+#ifdef TARGET_PLATFORM_MACOS_X
+void MCJavaAttachCurrentThread()
+{
+    s_jvm -> AttachCurrentThread((void **)&s_env, nil);
+}
+#endif
+
+#ifdef TARGET_SUPPORTS_JAVA
 void *MCJavaGetEnv()
 {
     return s_env;
 }
 
-static void MCJavaStringFromJString(jstring p_string, MCStringRef& r_string)
+static bool __MCJavaStringFromJString(jstring p_string, MCStringRef& r_string)
 {
     const char *nativeString = s_env -> GetStringUTFChars(p_string, 0);
     
-    MCStringCreateWithCString(nativeString, r_string);
+    bool t_success;
+    t_success = MCStringCreateWithCString(nativeString, r_string);
     
     s_env->ReleaseStringUTFChars(p_string, nativeString);
+    return t_success;
+}
+
+static bool __MCJavaNumberFromJByte(jbyte p_byte, MCNumberRef& r_number)
+{
+    return MCNumberCreateWithInteger((integer_t)p_byte, r_number);
+}
+
+static bool __MCJavaNumberFromJShort(jshort p_short, MCNumberRef& r_number)
+{
+    return MCNumberCreateWithInteger((integer_t)p_short, r_number);
+}
+
+static bool __MCJavaNumberFromJLong(jlong p_long, MCNumberRef& r_number)
+{
+    return MCNumberCreateWithReal((real64_t)p_long, r_number);
+}
+
+static bool __MCJavaNumberFromJInt(jint p_int, MCNumberRef& r_number)
+{
+    return MCNumberCreateWithInteger((integer_t)p_int, r_number);
+}
+
+static bool __MCJavaBooleanFromJBoolean(jboolean p_bool, MCBooleanRef& r_bool)
+{
+    return MCBooleanCreateWithBool((bool)p_bool, r_bool);
 }
 
 static jstring MCJavaGetJObjectClassName(jobject p_obj)
@@ -96,7 +136,6 @@ MC_DLLEXPORT_DEF MCTypeInfoRef MCJavaGetObjectTypeInfo() { return kMCJavaObjectT
 
 struct __MCJavaObjectImpl
 {
-    MCNameRef class_name;
     void *object;
 };
 
@@ -105,11 +144,10 @@ __MCJavaObjectImpl *MCJavaObjectGet(MCJavaObjectRef p_obj)
     return (__MCJavaObjectImpl*)MCValueGetExtraBytesPtr(p_obj);
 }
 
-static inline __MCJavaObjectImpl MCJavaObjectImplMake(MCNameRef p_class, void* p_obj)
+static inline __MCJavaObjectImpl MCJavaObjectImplMake(void* p_obj)
 {
     __MCJavaObjectImpl t_obj;
     t_obj.object = p_obj;
-    t_obj.class_name = MCValueRetain(p_class);
     return t_obj;
 }
 
@@ -145,10 +183,10 @@ static bool __MCJavaObjectDescribe(MCValueRef p_value, MCStringRef &r_desc)
 #ifdef TARGET_SUPPORTS_JAVA
     MCJavaObjectRef t_obj = static_cast<MCJavaObjectRef>(p_value);
     
-    jobject t_target = *(jobject *)MCJavaObjectGetObject(t_obj);
+    jobject t_target = (jobject)MCJavaObjectGetObject(t_obj);
     
     MCAutoStringRef t_class_name;
-    MCJavaStringFromJString(MCJavaGetJObjectClassName(t_target), &t_class_name);
+    __MCJavaStringFromJString(MCJavaGetJObjectClassName(t_target), &t_class_name);
     return MCStringFormat (r_desc, "<java: %@>", *t_class_name);
 #else
     return MCStringFormat (r_desc, "<java: %s>", "not supported");
@@ -168,7 +206,7 @@ static MCValueCustomCallbacks kMCJavaObjectCustomValueCallbacks =
     nil,
 };
 
-MC_DLLEXPORT_DEF bool MCJavaObjectCreate(MCNameRef p_class_name, void *p_object, MCJavaObjectRef &r_object)
+MC_DLLEXPORT_DEF bool MCJavaObjectCreate(void *p_object, MCJavaObjectRef &r_object)
 {
     bool t_success;
     t_success = true;
@@ -176,15 +214,11 @@ MC_DLLEXPORT_DEF bool MCJavaObjectCreate(MCNameRef p_class_name, void *p_object,
     MCJavaObjectRef t_obj;
     t_obj = nil;
     
-    MCTypeInfoRef t_type_info;
-    if (!MCNamedCustomTypeInfoCreate(p_class_name, kMCJavaObjectTypeInfo, &kMCJavaObjectCustomValueCallbacks, t_type_info))
-        return false;
-    
-    t_success = MCValueCreateCustom(t_type_info, sizeof(__MCJavaObjectImpl), t_obj);
+    t_success = MCValueCreateCustom(kMCJavaObjectTypeInfo, sizeof(__MCJavaObjectImpl), t_obj);
     
     if (t_success)
     {
-        *MCJavaObjectGet(t_obj) = MCJavaObjectImplMake(p_class_name, p_object);
+        *MCJavaObjectGet(t_obj) = MCJavaObjectImplMake(p_object);
         r_object = t_obj;
     }
 
@@ -198,10 +232,24 @@ bool MCJavaCreateJavaObjectTypeInfo()
 
 MC_DLLEXPORT_DEF void *MCJavaObjectGetObject(const MCJavaObjectRef p_obj)
 {
-    return p_obj -> object;
+    __MCJavaObjectImpl *t_impl;
+    t_impl = MCJavaObjectGet(p_obj);
+    return t_impl -> object;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+static bool MCJavaClassNameToPathString(MCNameRef p_class_name, MCStringRef& r_string)
+{
+    MCAutoStringRef t_escaped;
+    if (!MCStringMutableCopy(MCNameGetString(p_class_name), &t_escaped))
+        return false;
+    
+    if (!MCStringFindAndReplaceChar(*t_escaped, '.', '/', kMCStringOptionCompareExact))
+        return false;
+    
+    return MCStringCopy(*t_escaped, r_string);
+}
 
 enum MCJavaCallType {
     MCJavaCallTypeInstance,
@@ -210,61 +258,159 @@ enum MCJavaCallType {
 };
 
 MC_DLLEXPORT_DEF
-bool MCJavaCallJNI(MCNameRef p_class, void *p_method_id, int p_call_type, MCValueRef& r_return, const MCValueRef *p_args)
+bool MCJavaCallJNIMethod(MCNameRef p_class_name, void *p_method_id, int p_call_type, MCValueRef& r_return, const MCValueRef *p_args, uindex_t p_arg_count)
 {
 #ifdef TARGET_SUPPORTS_JAVA
-    jmethodID t_method_id = *(jmethodID *)p_method_id;
     
-    jobject t_target = *(jobject *)MCJavaObjectGetObject(*(MCJavaObjectRef *)p_args[0]);
-    jclass t_target_class = s_env -> GetObjectClass(t_target);
+    MCJavaAttachCurrentThread();
     
-    MCAssert(p_args != nil && MCValueGetTypeCode(*p_args) == kMCValueTypeCodeJava);
+    jmethodID t_method_id = (jmethodID)p_method_id;
     
-    jobject *t_param = nil;
-    if (p_args[1] != nil)
+    bool t_is_instance = p_call_type != MCJavaCallTypeStatic;
+    
+    jobject t_instance = nil;
+    if (t_is_instance)
     {
-        t_param = (jobject *)MCJavaObjectGetObject(*(MCJavaObjectRef *)p_args[1]);
+        // Java object on which to call instance method should always be first argument.
+        t_instance = (jobject )MCJavaObjectGetObject(*(MCJavaObjectRef *)p_args[0]);
+    }
+
+    jvalue *t_params = nil;
+    /*
+    convert_params_to_jvalue_array
+    */
+    // At the moment just look at one jobject param
+    MCJavaObjectRef t_param = (t_is_instance ? *(MCJavaObjectRef *)p_args[1] : *(MCJavaObjectRef *)p_args[0]);
+    jvalue t_first_param;
+    if (t_param != nil)
+    {
+        t_first_param . l = (jobject)MCJavaObjectGetObject(t_param);
+        t_params = &t_first_param;
     }
     
-    jobject t_result;
+    MCAutoStringRef t_class;
+    MCAutoStringRefAsCString t_class_cstring;
+    MCJavaClassNameToPathString(p_class_name, &t_class);
+    t_class_cstring . Lock(*t_class);
+    
+    jobject t_result = nil;
+    jclass t_target_class = nil;
     switch (p_call_type)
     {
         case MCJavaCallTypeInstance:
-        case MCJavaCallTypeStatic:
-            if (t_param != nil)
-                t_result = s_env -> CallObjectMethod(t_target_class, t_method_id, t_param);
+        {
+            /*
+            if (t_params != nil)
+                t_result = s_env -> CallObjectMethodA(t_instance, t_method_id, t_params);
             else
-                t_result = s_env -> CallObjectMethod(t_target_class, t_method_id);
+             */
+                t_result = s_env -> CallObjectMethodA(t_instance, t_method_id, nil);
+        }
+            break;
+        case MCJavaCallTypeStatic:
+            t_target_class = s_env -> FindClass(*t_class_cstring);
+            
+            if (t_params != nil)
+                t_result = s_env -> CallStaticObjectMethodA(t_target_class, t_method_id, t_params);
+            else
+                t_result = s_env -> CallStaticObjectMethod(t_target_class, t_method_id);
+            break;
         case MCJavaCallTypeNonVirtual:
+            t_target_class = s_env -> FindClass(*t_class_cstring);
+            
+            if (t_params != nil)
+                t_result = s_env -> CallNonvirtualObjectMethodA(t_instance, t_target_class, t_method_id, t_params);
+            else
+                t_result = s_env -> CallNonvirtualObjectMethod(t_instance, t_target_class, t_method_id);
             break;
     }
     
-    return MCJavaObjectCreate(p_class, &t_result, (MCJavaObjectRef&)r_return);
+    return MCJavaObjectCreate(t_result, (MCJavaObjectRef&)r_return);
 #else
-    return MCJavaObjectCreate(p_class, nil, (MCJavaObjectRef&)r_return);
+    return MCJavaObjectCreate(nil, (MCJavaObjectRef&)r_return);
 #endif
 }
 
-MC_DLLEXPORT_DEF void MCJavaStringFromJString(MCJavaObjectRef p_object, MCStringRef &r_string)
+MC_DLLEXPORT_DEF bool MCJavaConvertJStringToStringRef(MCJavaObjectRef p_object, MCStringRef &r_string)
 {
 #ifdef TARGET_SUPPORTS_JAVA
     jstring t_string;
-    t_string = *(jstring *)MCJavaObjectGetObject(p_object);
-    MCJavaStringFromJString(t_string, r_string);
+    t_string = (jstring)MCJavaObjectGetObject(p_object);
+   return __MCJavaStringFromJString(t_string, r_string);
 #else
     r_string = MCValueRetain(kMCEmptyString);
+    return true;
+#endif
+}
+
+MC_DLLEXPORT_DEF bool MCJavaConvertJByteToNumberRef(MCJavaObjectRef p_object, MCNumberRef &r_number)
+{
+#ifdef TARGET_SUPPORTS_JAVA
+    jbyte t_byte;
+    t_byte = *(jbyte *)MCJavaObjectGetObject(p_object);
+    return __MCJavaNumberFromJByte(t_byte, r_number);
+#else
+    r_number = MCValueRetain(kMCZero);
+    return true;
+#endif
+}
+
+MC_DLLEXPORT_DEF bool MCJavaConvertJShortToNumberRef(MCJavaObjectRef p_object, MCNumberRef &r_number)
+{
+#ifdef TARGET_SUPPORTS_JAVA
+    jshort t_short;
+    t_short = *(jshort *)MCJavaObjectGetObject(p_object);
+    return __MCJavaNumberFromJShort(t_short, r_number);
+#else
+    r_number = MCValueRetain(kMCZero);
+    return true;
+#endif
+}
+
+MC_DLLEXPORT_DEF bool MCJavaConvertJIntToNumberRef(MCJavaObjectRef p_object, MCNumberRef &r_number)
+{
+#ifdef TARGET_SUPPORTS_JAVA
+    jint t_int;
+    t_int = *(jint *)MCJavaObjectGetObject(p_object);
+    return __MCJavaNumberFromJInt(t_int, r_number);
+#else
+    r_number = MCValueRetain(kMCZero);
+    return true;
+#endif
+}
+
+MC_DLLEXPORT_DEF bool MCJavaConvertJLongToNumberRef(MCJavaObjectRef p_object, MCNumberRef &r_number)
+{
+#ifdef TARGET_SUPPORTS_JAVA
+    jlong t_long;
+    t_long = *(jlong *)MCJavaObjectGetObject(p_object);
+    return __MCJavaNumberFromJLong(t_long, r_number);
+#else
+    r_number = MCValueRetain(kMCZero);
+    return true;
+#endif
+}
+
+MC_DLLEXPORT_DEF bool MCJavaConvertJBooleanToBooleanRef(MCJavaObjectRef p_object, MCBooleanRef &r_bool)
+{
+#ifdef TARGET_SUPPORTS_JAVA
+    jboolean t_bool;
+    t_bool = *(jboolean *)MCJavaObjectGetObject(p_object);
+    return __MCJavaBooleanFromJBoolean(t_bool, r_bool);
+#else
+    r_number = MCValueRetain(kMCFalse);
+    return true;
 #endif
 }
 
 MC_DLLEXPORT_DEF bool MCJavaCallConstructor(MCNameRef p_class_name, MCListRef p_args, MCJavaObjectRef& r_object)
 {
-    MCAutoStringRef t_escaped;
-    MCStringMutableCopy(MCNameGetString(p_class_name), &t_escaped);
-    
-    MCStringFindAndReplaceChar(*t_escaped, '.', '/', kMCStringOptionCompareExact);
-    
+    MCAutoStringRef t_class_path;
+    if (!MCJavaClassNameToPathString(p_class_name, &t_class_path))
+        return false;
+
     MCAutoStringRefAsCString t_class_cstring;
-    t_class_cstring . Lock(*t_escaped);
+    t_class_cstring . Lock(*t_class_path);
     
 #ifdef TARGET_SUPPORTS_JAVA
     jclass t_class = s_env->FindClass(*t_class_cstring);
@@ -272,24 +418,29 @@ MC_DLLEXPORT_DEF bool MCJavaCallConstructor(MCNameRef p_class_name, MCListRef p_
     jmethodID t_constructor = s_env->GetMethodID(t_class, "<init>", "()V");
     
     jobject t_object = s_env->NewObject(t_class, t_constructor);
-    
+
     MCAutoStringRef t_class_name;
-    MCJavaStringFromJString(MCJavaGetJObjectClassName(t_object), &t_class_name);
+    __MCJavaStringFromJString(MCJavaGetJObjectClassName(t_object), &t_class_name);
     MCLog("created: %@", *t_class_name);
-    
-    return MCJavaObjectCreate(p_class_name, &t_object, r_object);
+    \
+    return MCJavaObjectCreate(s_env -> NewGlobalRef(t_object), r_object);
 #else
-    return MCJavaObjectCreate(p_class_name, nil, r_object);
+    return MCJavaObjectCreate(nil, r_object);
 #endif
 }
 
-MC_DLLEXPORT_DEF void *MCJavaGetMethodId(MCStringRef p_class, MCStringRef p_method_name, MCStringRef p_signature)
+MC_DLLEXPORT_DEF void *MCJavaGetMethodId(MCNameRef p_class_name, MCStringRef p_method_name, MCStringRef p_signature)
 {
+    MCAutoStringRef t_class_path;
+    if (!MCJavaClassNameToPathString(p_class_name, &t_class_path))
+        return nil;
+    
     MCAutoStringRefAsCString t_class_cstring, t_method_cstring, t_signature_cstring;
-    t_class_cstring . Lock(p_class);
+    t_class_cstring . Lock(*t_class_path);
     t_method_cstring . Lock(p_method_name);
     t_signature_cstring . Lock(p_signature);
-    
+
+#ifdef TARGET_SUPPORTS_JAVA
     jclass t_java_class;
     t_java_class = s_env->FindClass(*t_class_cstring);
     
@@ -297,17 +448,9 @@ MC_DLLEXPORT_DEF void *MCJavaGetMethodId(MCStringRef p_class, MCStringRef p_meth
     t_method_id = s_env->GetMethodID(t_java_class, *t_method_cstring, *t_signature_cstring);
     
     return (void *)t_method_id;
-}
-
-MC_DLLEXPORT_DEF
-bool MCJavaUnmanagedTypeInfoCreate(MCNameRef p_class, MCTypeInfoRef& r_typeinfo)
-{
-    return false;
-}
-
-bool MCJavaTypeInfoCreate(MCNameRef p_class, MCTypeInfoRef& r_typeinfo)
-{
-    return MCNamedCustomTypeInfoCreate(p_class, kMCJavaObjectTypeInfo, &kMCJavaObjectCustomValueCallbacks, r_typeinfo);
+#else
+    return nil;
+#endif
 }
 
 MC_DLLEXPORT_DEF

@@ -450,13 +450,6 @@ struct __MCHandler: public __MCValue
     char context[1];
 };
 
-////////
-
-struct __MCJavaObject : public __MCValue
-{
-    void *object;
-};
-
 ////////////////////////////////////////////////////////////////////////////////
 
 extern const uindex_t __kMCValueHashTableSizes[];
@@ -592,10 +585,9 @@ bool __MCHandlerCopyDescription(__MCHandler *self, MCStringRef& r_description);
 bool __MCStreamInitialize(void);
 void __MCStreamFinalize(void);
 
-#ifdef TARGET_PLATFORM_MACOS_X
 bool __MCJavaInitialize(void);
 void __MCJavaFinalize(void);
-#endif
+
 bool __MCJavaObjectInitialize(void);
 void __MCJavaObjectFinalize(void);
 void __MCJavaObjectDestroy(__MCJavaObject *string);

@@ -18,7 +18,10 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 widget com.livecode.extensions.beaumont.pinkCircle
 
 use com.livecode.canvas
+use com.livecode.foreign
 use com.livecode.java
+
+foreign handler MCJavaNewObject(in pString as String, in pArgs as List, out rObj as JavaObject) returns CBool binds to "<builtin>"
 
 metadata title is "My Pink Circle"
 metadata author is "LiveCode"
@@ -45,10 +48,19 @@ public handler setMargin(in pMargin as Real)
 	put pMargin into mMargin
 	redraw all
 end handler
- 
+
+public handler GetObjectNew()
+	variable tObject as JavaObject
+	variable tResult as Boolean
+	unsafe
+		put MCJavaNewObject("java.lang.String", [], tObject) into tResult
+	end unsafe
+	return tObject
+end handler
+
 public handler TestJava()
 	variable tObject as JavaObject
-	put GetObject() into tObject
+	put GetObjectNew() into tObject
 	put GetClassName(tObject) into mName
 end handler
 	
