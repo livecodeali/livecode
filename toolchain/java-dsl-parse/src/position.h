@@ -55,7 +55,11 @@ int GetCurrentFile(FileRef *r_file);
 void SetOutputFile(const char *filename);
 void GetOutputFile(const char **r_filename);
     
+void SetOutputLCBFile(const char *filename);
+void GetOutputLCBFile(const char **r_filename);
+    
 FILE *OpenOutputFile(void);
+FILE *OpenLCBOutputFile(void);
 
 #ifdef __cplusplus
 }

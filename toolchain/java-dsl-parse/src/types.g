@@ -47,7 +47,7 @@
     class(Position: POS, Modifiers: MODIFIER, Type: TYPE, Definitions: DEFINITION, Inherits: TYPELIST, Implements: TYPELIST)
     interface(Position: POS, Type: TYPE, Definitions: DEFINITION, Inherits: TYPELIST)
     constructor(Position: POS, Modifiers: MODIFIER, Name: ID, Signature: SIGNATURE, Alias: OPTIONALID)
-    method(Position: POS, Modifiers: MODIFIER, Name: ID, Signature: SIGNATURE, Alias: OPTIONALID, Return: TYPE, Throws: OPTIONALID)
+    method(Position: POS, Modifiers: MODIFIER, Name: ID, Signature: SIGNATURE, Alias: OPTIONALID, Throws: OPTIONALID)
     variable(Position: POS, Modifiers: MODIFIER, Name: ID, Type: TYPE)
     constant(Position: POS, Name: ID, Type: TYPE, Value: EXPRESSION)
     nil
@@ -140,7 +140,7 @@
     interface
     placeholder
 
-'table' PACKAGEINFO(Index: INT, Generator: INT)	
+'table' PACKAGEINFO(Index: INT, Generator: INT, Alias: ID)
 'table' SYMBOLINFO(Index: INT, Generator: INT, Parent: ID, Modifiers: MODIFIER, Kind: SYMBOLKIND, Type: TYPE)
 
 'table' ID(Position: POS, Name: QUALIFIEDNAME, Meaning: MEANING)

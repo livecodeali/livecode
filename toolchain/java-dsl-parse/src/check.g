@@ -170,5 +170,20 @@
         
     'rule' QueryId(Id -> Meaning):
         Id'Meaning -> Meaning
-        
+
+'action' QueryPackageOfId(ID -> ID)
+
+    'rule' QueryPackageOfId(Id -> PackageId):
+        QuerySymbolId(Id -> Info)
+        Info'Parent -> PackageId
+
 'condition' QuerySymbolId(ID -> SYMBOLINFO)
+
+    'rule' QuerySymbolId(Id -> Info):
+        QueryId(Id -> symbol(Info))
+
+'condition' QueryPackageId(ID -> PACKAGEINFO)
+
+    'rule' QueryPackageId(Id -> Info):
+        QueryId(Id -> package(Info))
+

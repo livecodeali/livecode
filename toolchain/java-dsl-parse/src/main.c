@@ -67,6 +67,11 @@ static void full_main(int argc, char *argv[])
                 SetOutputFile(argv[++argi]);
                 continue;
             }
+            if (0 == strcmp(opt, "--outputlcb") && optarg)
+            {
+                SetOutputLCBFile(argv[++argi]);
+                continue;
+            }
             /* FIXME This should be expanded to support "-W error",
              * "--warn error", "--warn=error", etc.  Also options for
              * enabling/disabling/errorifying particular warning

@@ -25,13 +25,13 @@
 
 --------------------------------------------------------------------------------
 
-'var' GeneratingPackageIndex : INT
+'var' OutputPackageIndex : INT
 
 'action' OutputPackages(PACKAGELIST)
 
     'rule' OutputPackages(List):
         OutputBegin()
-        GeneratingPackageIndex <- 1
+        OutputPackageIndex <- 1
         OutputForEachPackage(List)
         OutputEnd()
     
@@ -39,8 +39,8 @@
 
     'rule' OutputForEachPackage(packagelist(Head, Rest)):
         OutputSinglePackage(Head)
-        GeneratingPackageIndex -> CurrentIndex
-        GeneratingPackageIndex <- CurrentIndex + 1
+        OutputPackageIndex -> CurrentIndex
+        OutputPackageIndex <- CurrentIndex + 1
         OutputForEachPackage(Rest)
         
     'rule' OutputForEachPackage(nil):
@@ -98,7 +98,7 @@
             OutputWrite(" -- interface\n")
         |)
 
-        GeneratingPackageIndex -> Generator
+        OutputPackageIndex -> Generator
         SymbolInfo'Generator <- Generator
         
     'rule' OutputImportedDefinition(Id):
@@ -137,7 +137,7 @@
         OutputType(Type)
         OutputWrite("\n")
 
-    'rule' OutputDefinitions(method(_, Modifiers, Id, Signature, Alias, Return, Throws)):
+    'rule' OutputDefinitions(method(_, Modifiers, Id, signature(Parameters, Returns), Alias, Throws)):
         (|
             where(Alias -> id(AliasName))
             QuerySymbolId(AliasName -> SymbolInfo)
@@ -148,14 +148,14 @@
         OutputWrite("   ")
         OutputModifiers(Modifiers)
         OutputWriteI("method ", Name, "")
-        OutputSignature(Signature)
+        OutputSignature(Parameters)
         OutputOptionalAlias(Alias)
         OutputOptionalThrows(Throws)
-        OutputReturns(Return)
+        OutputReturns(Returns)
 
         OutputWrite("\n")
 
-    'rule' OutputDefinitions(constructor(_, Modifiers, Id, Signature, Alias)):
+    'rule' OutputDefinitions(constructor(_, Modifiers, Id, signature(Params, _), Alias)):
         (|
             where(Alias -> id(AliasName))
             QuerySymbolId(AliasName -> SymbolInfo)
@@ -166,7 +166,7 @@
         OutputWrite("   ")
         OutputModifiers(Modifiers)
         OutputWriteI("constructor ", Name, "")
-        OutputSignature(Signature)
+        OutputSignature(Params)
         OutputOptionalAlias(Alias)
 
         OutputWrite("\n")
@@ -415,18 +415,12 @@
 
     'rule' OutputModifiers(inferred):
 
-'action' OutputSignature(SIGNATURE)
+'action' OutputSignature(PARAMETERLIST)
 
-    'rule' OutputSignature(signature(Params, ReturnType)):
+    'rule' OutputSignature(Params):
         OutputWrite("(")
         OutputParams(Params)
         OutputWrite(")")
-        (|
-            where(ReturnType -> nil)
-        ||
-            OutputWrite(" returns ")
-            OutputType(ReturnType)
-        |)
 
 'action' OutputParams(PARAMETERLIST)
 
@@ -451,52 +445,13 @@
 
 --------------------------------------------------------------------------------
 
-'condition' IsUngeneratedExternalId(ID)
-
-    'rule' IsUngeneratedExternalId(Id):
-        -- Ungenerated if generator is not the current generator
-        QuerySymbolId(Id -> Info)
-        Info'Generator -> Generator
-        Id'Name -> Name
-        GeneratingPackageIndex -> CurrentGenerator
-        ne(Generator, CurrentGenerator)
-
-        -- Extenal if module index is not CurrentGenerator
-        Info'Parent -> PackageId
-        QueryPackageId(PackageId -> PackageInfo)
-        PackageInfo'Generator -> ModGenerator
-
-        ne(ModGenerator, CurrentGenerator)
-
-'condition' IsExternalId(ID)
-
-    'rule' IsExternalId(Id):
-        -- Extenal if module index is not 0
-        QuerySymbolId(Id -> Info)
-        Info'Parent -> PackageId
-        QueryPackageId(PackageId -> PackageInfo)
-        PackageInfo'Generator -> ModGenerator
-        GeneratingPackageIndex -> CurrentGenerator
-        ne(ModGenerator, CurrentGenerator)
-
-'action' QueryPackageOfId(ID -> ID)
-
-    'rule' QueryPackageOfId(Id -> PackageId):
-        QuerySymbolId(Id -> Info)
-        Info'Parent -> PackageId
-
-'condition' QuerySymbolId(ID -> SYMBOLINFO)
-
-    'rule' QuerySymbolId(Id -> Info):
-        QueryId(Id -> symbol(Info))
-
-'condition' QueryPackageId(ID -> PACKAGEINFO)
-
-    'rule' QueryPackageId(Id -> Info):
-        QueryId(Id -> package(Info))
-        
 -- Defined in check.g
 'action' QueryId(ID -> MEANING)
+'action' QueryPackageOfId(ID -> ID)
+
+'condition' QuerySymbolId(ID -> SYMBOLINFO)
+'condition' QueryPackageId(ID -> PACKAGEINFO)
+
 -- Defined in bind.g
 'action' ResolveIdName(ID -> NAME)
 --------------------------------------------------------------------------------
