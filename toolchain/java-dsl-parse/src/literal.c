@@ -367,6 +367,26 @@ void ConcatenateNameParts(NameRef p_left, NameRef p_right, NameRef *r_output)
     MakeNameLiteral(t_output, r_output);
 }
 
+void JavaQualifiedNameToClassPath(NameRef p_input, NameRef *r_output)
+{
+    const char* t_input;
+    GetStringOfNameLiteral(p_input, &t_input);
+
+    char *t_output;
+    t_output = malloc(strlen(t_input) + 1);
+    if (t_output == NULL)
+        Fatal_OutOfMemory();
+    
+    for (unsigned long i = 0; i < strlen(t_input); i++) {
+        if (t_input[i] == '.')
+            t_output[i] = '/';
+        else
+            t_output[i] = t_input[i];
+    }
+    
+    MakeNameLiteral(t_output, r_output);
+}
+
 void NegateReal(long p_real, long *r_real)
 {
     double *t_value;

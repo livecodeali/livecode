@@ -413,6 +413,8 @@ MC_DLLEXPORT_DEF bool MCJavaCallConstructor(MCNameRef p_class_name, MCListRef p_
     t_class_cstring . Lock(*t_class_path);
     
 #ifdef TARGET_SUPPORTS_JAVA
+    MCJavaAttachCurrentThread();
+    
     jclass t_class = s_env->FindClass(*t_class_cstring);
     
     jmethodID t_constructor = s_env->GetMethodID(t_class, "<init>", "()V");

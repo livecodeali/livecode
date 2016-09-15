@@ -50,6 +50,7 @@
     MakeNameLiteral
     GetStringOfNameLiteral
     ConcatenateNameParts
+    JavaQualifiedNameToClassPath
     IsNameEqualToName
     IsNameNotEqualToName
     IsNameEqualToString
@@ -130,6 +131,7 @@
 'action' GetStringOfNameLiteral(Name: NAME -> String: STRING)
 
 'action' ConcatenateNameParts(NAME, NAME -> NAME)
+'action' JavaQualifiedNameToClassPath(NAME -> NAME)
 
 'condition' IsNameEqualToString(NAME, STRING)
 'condition' IsStringEqualToString(STRING, STRING)

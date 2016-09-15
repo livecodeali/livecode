@@ -45,7 +45,7 @@ public handler GetObject() returns JavaObject
 	return tObject
 end handler
 
-public handler StringFromJavaString(in pObj as JavaObject) returns String
+public handler StringFromJString(in pObj as JavaObject) returns String
 	variable tString as String
     unsafe
 	MCJavaStringFromJString(pObj, tString)

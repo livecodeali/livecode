@@ -187,3 +187,31 @@
     'rule' QueryPackageId(Id -> Info):
         QueryId(Id -> package(Info))
 
+'action' ResolveIdName(ID -> NAME)
+
+    'rule' ResolveIdName(Id -> Name)
+        Id'Name -> QualifiedName
+        GetUnqualifiedIdName(QualifiedName -> Name)
+
+'action' ResolveIdQualifiedName(ID -> NAME)
+
+    'rule' ResolveIdQualifiedName(Id -> Name)
+        QuerySymbolId(Id -> SymbolInfo)
+        Id'Name -> QualifiedName
+        SymbolInfo'Parent -> ParentId
+        GetQualifiedName(ParentId, QualifiedName -> Name)
+
+    'rule' ResolveIdQualifiedName(Id -> Name)
+        Id'Name -> QName
+        QName'Name -> Name
+        print("to resolve")
+
+'action' GetQualifiedName(ID, QUALIFIEDNAME -> NAME)
+
+    'rule' GetQualifiedName(ParentId, unqualified(UnqName) -> Name)
+        ResolveIdName(ParentId -> ParentName)
+        ConcatenateNameParts(ParentName, UnqName -> Name)
+
+
+'action' GetUnqualifiedIdName(QUALIFIEDNAME -> NAME)
+'action' GetQualifiedIdName(QUALIFIEDNAME -> NAME)

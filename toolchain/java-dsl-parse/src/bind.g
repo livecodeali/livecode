@@ -151,17 +151,9 @@
 -- These simply extract the relevant data from
 -- a qualified name if it is of the correct type
 
-'action' ResolveIdName(ID -> NAME)
-
-    'rule' ResolveIdName(Id -> Name)
-        Id'Name -> QualifiedName
-        GetUnqualifiedIdName(QualifiedName -> Name)
-
-
 'action' GetPackageIdName(QUALIFIEDNAME -> QUALIFIEDNAME)
 
     'rule' GetPackageIdName(qualified(Name, Qualifier) -> Qualifier):
-
         
 'action' GetUnqualifiedIdName(QUALIFIEDNAME -> NAME)
 
@@ -172,6 +164,19 @@
     'rule' GetUnqualifiedIdName(package(Name, Tail) -> PackageName):
         GetUnqualifiedIdName(Tail -> TailName)
         ConcatenateNameParts(Name, TailName -> PackageName)
+
+'action' GetQualifiedIdName(QUALIFIEDNAME -> NAME)
+
+    'rule' GetQualifiedIdName(qualified(Name, Qualifier) -> Name):
+        GetQualifiedIdName(Qualifier -> HeadName)
+        ConcatenateNameParts(HeadName, Name -> QualifiedName)
+
+    'rule' GetQualifiedIdName(package(Name, Tail) -> PackageName):
+        GetUnqualifiedIdName(Tail -> TailName)
+        ConcatenateNameParts(Name, TailName -> PackageName)
+
+    'rule' GetQualifiedIdName(unqualified(Name) -> Name):
+        -- todo - don't do this
 --
 
 'condition' FindPackageInList(QUALIFIEDNAME, PACKAGELIST -> PACKAGE)

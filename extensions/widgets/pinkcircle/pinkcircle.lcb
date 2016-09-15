@@ -15,53 +15,460 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
-widget com.livecode.extensions.beaumont.pinkCircle
-
-use com.livecode.canvas
-use com.livecode.foreign
-use com.livecode.java
-
-foreign handler MCJavaNewObject(in pString as String, in pArgs as List, out rObj as JavaObject) returns CBool binds to "<builtin>"
-
-metadata title is "My Pink Circle"
-metadata author is "LiveCode"
-metadata version is "1.0.0"
-
-property circleMargin get mMargin set setMargin
-
-private variable mMargin as Real
-private variable mName as String
-public handler onCreate() 
-	put 0 into mMargin
-	put "didn't get" into mName
-	TestJava()
+module com.livecode.wrapped.java.reflect
+foreign handler _JNI_Constructor_equals(in pObj as /* Constructor<T> */ JavaObject, in obj as JavaObject) returns Boolean binds to "java:Constructor>equals(JAVA OBJECT)Z"
+foreign handler _JNI_Constructor_getDeclaringClass(in pObj as /* Constructor<T> */ JavaObject) returns /* Class */ JavaObject binds to "java:Constructor>getDeclaringClass()JAVA OBJECT"
+foreign handler _JNI_Constructor_getExceptionTypes(in pObj as /* Constructor<T> */ JavaObject) returns /* List of /* Class */ JavaObject */ List"java:Constructor>getExceptionTypes()JAVA OBJECT[]"
+foreign handler _JNI_Constructor_getGenericExceptionTypes(in pObj as /* Constructor<T> */ JavaObject) returns /* List of /* Type */ JavaObject */ List"java:Constructor>getGenericExceptionTypes()JAVA OBJECT[]"
+foreign handler _JNI_Constructor_getGenericParameterTypes(in pObj as /* Constructor<T> */ JavaObject) returns /* List of /* Type */ JavaObject */ List"java:Constructor>getGenericParameterTypes()JAVA OBJECT[]"
+foreign handler _JNI_Constructor_getModifiers(in pObj as /* Constructor<T> */ JavaObject) returns Number"java:Constructor>getModifiers()I"
+foreign handler _JNI_Constructor_getName(in pObj as /* Constructor<T> */ JavaObject) returns String"java:Constructor>getName()Ljava/lang/String;"
+foreign handler _JNI_Constructor_getParameterTypes(in pObj as /* Constructor<T> */ JavaObject) returns /* List of /* Class */ JavaObject */ List"java:Constructor>getParameterTypes()JAVA OBJECT[]"
+foreign handler _JNI_Constructor_getTypeParameters(in pObj as /* Constructor<T> */ JavaObject) returns /* List of /* TypeVariable</* Constructor */ JavaObject> */ JavaObject */ List"java:Constructor>getTypeParameters()JAVA OBJECT[]"
+foreign handler _JNI_Constructor_hashCode(in pObj as /* Constructor<T> */ JavaObject) returns Number"java:Constructor>hashCode()I"
+foreign handler _JNI_Constructor_isSynthetic(in pObj as /* Constructor<T> */ JavaObject) returns Boolean"java:Constructor>isSynthetic()Z"
+foreign handler _JNI_Constructor_isVarArgs(in pObj as /* Constructor<T> */ JavaObject) returns Boolean"java:Constructor>isVarArgs()Z"
+foreign handler _JNI_Constructor_toGenericString(in pObj as /* Constructor<T> */ JavaObject) returns String"java:Constructor>toGenericString()Ljava/lang/String;"
+foreign handler _JNI_Constructor_toString(in pObj as /* Constructor<T> */ JavaObject) returns String"java:Constructor>toString()Ljava/lang/String;"
+foreign handler _JNI_Field_equals(in pObj as /* Field */ JavaObject, in obj as /* ) returns Boolean"java:Field>equals(JAVA OBJECT)Z"
+foreign handler _JNI_Field_get(in pObj as /* Field */ JavaObject, in obj as /* ) returns /* Object */ JavaObject"java:Field>get(JAVA OBJECT)JAVA OBJECT"
+foreign handler _JNI_Field_getBoolean(in pObj as /* Field */ JavaObject, in obj as /* ) returns Boolean"java:Field>getBoolean(JAVA OBJECT)Z"
+foreign handler _JNI_Field_getByte(in pObj as /* Field */ JavaObject, in obj as /* ) returns Number"java:Field>getByte(JAVA OBJECT)B"
+foreign handler _JNI_Field_getChar(in pObj as /* Field */ JavaObject, in obj as /* ) returns Number"java:Field>getChar(JAVA OBJECT)C"
+foreign handler _JNI_Field_getDeclaringClass(in pObj as /* Field */ JavaObject) returns /* Class */ JavaObject"java:Field>getDeclaringClass()JAVA OBJECT"
+foreign handler _JNI_Field_getDouble(in pObj as /* Field */ JavaObject, in obj as /* ) returns Number"java:Field>getDouble(JAVA OBJECT)D"
+foreign handler _JNI_Field_getFloat(in pObj as /* Field */ JavaObject, in obj as /* ) returns Number"java:Field>getFloat(JAVA OBJECT)F"
+foreign handler _JNI_Field_getGenericType(in pObj as /* Field */ JavaObject) returns /* Type */ JavaObject"java:Field>getGenericType()JAVA OBJECT"
+foreign handler _JNI_Field_getInt(in pObj as /* Field */ JavaObject, in obj as /* ) returns Number"java:Field>getInt(JAVA OBJECT)I"
+foreign handler _JNI_Field_getLong(in pObj as /* Field */ JavaObject, in obj as /* ) returns Number"java:Field>getLong(JAVA OBJECT)J"
+foreign handler _JNI_Field_getModifiers(in pObj as /* Field */ JavaObject) returns Number"java:Field>getModifiers()I"
+foreign handler _JNI_Field_getName(in pObj as /* Field */ JavaObject) returns String"java:Field>getName()Ljava/lang/String;"
+foreign handler _JNI_Field_getShort(in pObj as /* Field */ JavaObject, in obj as /* ) returns Number"java:Field>getShort(JAVA OBJECT)S"
+foreign handler _JNI_Field_getType(in pObj as /* Field */ JavaObject) returns /* Class */ JavaObject"java:Field>getType()JAVA OBJECT"
+foreign handler _JNI_Field_hashCode(in pObj as /* Field */ JavaObject) returns Number"java:Field>hashCode()I"
+foreign handler _JNI_Field_isEnumConstant(in pObj as /* Field */ JavaObject) returns Boolean"java:Field>isEnumConstant()Z"
+foreign handler _JNI_Field_isSynthetic(in pObj as /* Field */ JavaObject) returns Boolean"java:Field>isSynthetic()Z"
+foreign handler _JNI_Field_set(in pObj as /* Field */ JavaObject, in obj as /* , in value as /* ) returns "java:Field>set(JAVA OBJECT, JAVA OBJECT)"
+foreign handler _JNI_Field_setBoolean(in pObj as /* Field */ JavaObject, in obj as /* , in z as Boolean) returns "java:Field>setBoolean(JAVA OBJECT, Z)"
+foreign handler _JNI_Field_setByte(in pObj as /* Field */ JavaObject, in obj as /* , in b as Number) returns "java:Field>setByte(JAVA OBJECT, B)"
+foreign handler _JNI_Field_setChar(in pObj as /* Field */ JavaObject, in obj as /* , in c as Number) returns "java:Field>setChar(JAVA OBJECT, C)"
+foreign handler _JNI_Field_setDouble(in pObj as /* Field */ JavaObject, in obj as /* , in d as Number) returns "java:Field>setDouble(JAVA OBJECT, D)"
+foreign handler _JNI_Field_setFloat(in pObj as /* Field */ JavaObject, in obj as /* , in f as Number) returns "java:Field>setFloat(JAVA OBJECT, F)"
+foreign handler _JNI_Field_setInt(in pObj as /* Field */ JavaObject, in obj as /* , in i as Number) returns "java:Field>setInt(JAVA OBJECT, I)"
+foreign handler _JNI_Field_setLong(in pObj as /* Field */ JavaObject, in obj as /* , in l as Number) returns "java:Field>setLong(JAVA OBJECT, J)"
+foreign handler _JNI_Field_setShort(in pObj as /* Field */ JavaObject, in obj as /* , in s as Number) returns "java:Field>setShort(JAVA OBJECT, S)"
+foreign handler _JNI_Field_toGenericString(in pObj as /* Field */ JavaObject) returns String"java:Field>toGenericString()Ljava/lang/String;"
+foreign handler _JNI_Field_toString(in pObj as /* Field */ JavaObject) returns String"java:Field>toString()Ljava/lang/String;"
+foreign handler _JNI_Method_equals(in pObj as /* Method */ JavaObject, in obj as /* ) returns Boolean"java:Method>equals(JAVA OBJECT)Z"
+foreign handler _JNI_Method_getDeclaringClass(in pObj as /* Method */ JavaObject) returns /* Class */ JavaObject"java:Method>getDeclaringClass()JAVA OBJECT"
+foreign handler _JNI_Method_getDefaultValue(in pObj as /* Method */ JavaObject) returns /* Object */ JavaObject"java:Method>getDefaultValue()JAVA OBJECT"
+foreign handler _JNI_Method_getExceptionTypes(in pObj as /* Method */ JavaObject) returns /* List of /* Class */ JavaObject */ List"java:Method>getExceptionTypes()JAVA OBJECT[]"
+foreign handler _JNI_Method_getGenericExceptionTypes(in pObj as /* Method */ JavaObject) returns /* List of /* Type */ JavaObject */ List"java:Method>getGenericExceptionTypes()JAVA OBJECT[]"
+foreign handler _JNI_Method_getGenericParameterTypes(in pObj as /* Method */ JavaObject) returns /* List of /* Type */ JavaObject */ List"java:Method>getGenericParameterTypes()JAVA OBJECT[]"
+foreign handler _JNI_Method_getGenericReturnType(in pObj as /* Method */ JavaObject) returns /* Type */ JavaObject"java:Method>getGenericReturnType()JAVA OBJECT"
+foreign handler _JNI_Method_getModifiers(in pObj as /* Method */ JavaObject) returns Number"java:Method>getModifiers()I"
+foreign handler _JNI_Method_getName(in pObj as /* Method */ JavaObject) returns String"java:Method>getName()Ljava/lang/String;"
+foreign handler _JNI_Method_getParameterTypes(in pObj as /* Method */ JavaObject) returns /* List of /* Class */ JavaObject */ List"java:Method>getParameterTypes()JAVA OBJECT[]"
+foreign handler _JNI_Method_getReturnType(in pObj as /* Method */ JavaObject) returns /* Class */ JavaObject"java:Method>getReturnType()JAVA OBJECT"
+foreign handler _JNI_Method_getTypeParameters(in pObj as /* Method */ JavaObject) returns /* List of /* TypeVariable</* Method */ JavaObject> */ JavaObject */ List"java:Method>getTypeParameters()JAVA OBJECT[]"
+foreign handler _JNI_Method_hashCode(in pObj as /* Method */ JavaObject) returns Number"java:Method>hashCode()I"
+foreign handler _JNI_Method_isBridge(in pObj as /* Method */ JavaObject) returns Boolean"java:Method>isBridge()Z"
+foreign handler _JNI_Method_isSynthetic(in pObj as /* Method */ JavaObject) returns Boolean"java:Method>isSynthetic()Z"
+foreign handler _JNI_Method_isVarArgs(in pObj as /* Method */ JavaObject) returns Boolean"java:Method>isVarArgs()Z"
+foreign handler _JNI_Method_toGenericString(in pObj as /* Method */ JavaObject) returns String"java:Method>toGenericString()Ljava/lang/String;"
+foreign handler _JNI_Method_toString(in pObj as /* Method */ JavaObject) returns String"java:Method>toString()Ljava/lang/String;"
+handler getTypeName(in pObj as /* Type */ JavaObject) returns String
+	variable tJNIResult as JavaObject
+	put _JNI_Type_getTypeName() into tJNIResult
+	returnStringFromJJavaObject(tJNIResult)
 end handler
 
-public handler OnPaint()
-	set the stroke width of this canvas to 5
-   	stroke rectangle path of my bounds on this canvas
-   
-	fill text mName at center of my bounds on this canvas
+handler getGenericComponentType(in pObj as /* GenericArrayType */ JavaObject) returns /* Type */ JavaObject
+	variable tJNIResult as JavaObject
+	put _JNI_GenericArrayType_getGenericComponentType() into tJNIResult
+	return tJNIResult
 end handler
 
-public handler setMargin(in pMargin as Real)
-	put pMargin into mMargin
-	redraw all
+handler getBounds(in pObj as /* TypeVariable<D> */ JavaObject) returns /* List of /* Type */ JavaObject */ List
+	variable tJNIResult as JavaObject
+	put _JNI_TypeVariable_getBounds() into tJNIResult
+	return/* List of /* Type */ JavaObject */ ListFromJJavaObject(tJNIResult)
 end handler
 
-public handler GetObjectNew()
-	variable tObject as JavaObject
-	variable tResult as Boolean
-	unsafe
-		put MCJavaNewObject("java.lang.String", [], tObject) into tResult
-	end unsafe
-	return tObject
+handler getGenericDeclaration(in pObj as /* TypeVariable<D> */ JavaObject) returns /* D */ JavaObject
+	variable tJNIResult as JavaObject
+	put _JNI_TypeVariable_getGenericDeclaration() into tJNIResult
+	return tJNIResult
 end handler
 
-public handler TestJava()
-	variable tObject as JavaObject
-	put GetObjectNew() into tObject
-	put GetClassName(tObject) into mName
+handler getName(in pObj as /* TypeVariable<D> */ JavaObject) returns String
+	variable tJNIResult as JavaObject
+	put _JNI_TypeVariable_getName() into tJNIResult
+	returnStringFromJJavaObject(tJNIResult)
 end handler
-	
-end widget
+
+handler getTypeParameters(in pObj as /* GenericDeclaration */ JavaObject) returns /* List of /* TypeVariable */ JavaObject */ List
+	variable tJNIResult as JavaObject
+	put _JNI_GenericDeclaration_getTypeParameters() into tJNIResult
+	return/* List of /* TypeVariable */ JavaObject */ ListFromJJavaObject(tJNIResult)
+end handler
+
+handler Member_GetDECLARED(in pObj as /* Member */ JavaObject) returns Number
+end handler
+handler Member_GetPUBLIC(in pObj as /* Member */ JavaObject) returns Number
+end handler
+handler getDeclaringClass(in pObj as /* Member */ JavaObject) returns /* Class */ JavaObject
+	variable tJNIResult as JavaObject
+	put _JNI_Member_getDeclaringClass() into tJNIResult
+	return tJNIResult
+end handler
+
+handler equals(in pObj as /* Constructor<T> */ JavaObject, in obj as /* ) returns Boolean
+	variable tJNIResult as JavaObject
+	put _JNI_Constructor_equals() into tJNIResult
+	returnBooleanFromJJavaObject(tJNIResult)
+end handler
+
+handler getDeclaringClass(in pObj as /* Constructor<T> */ JavaObject) returns /* Class */ JavaObject
+	variable tJNIResult as JavaObject
+	put _JNI_Constructor_getDeclaringClass() into tJNIResult
+	return tJNIResult
+end handler
+
+handler getExceptionTypes(in pObj as /* Constructor<T> */ JavaObject) returns /* List of /* Class */ JavaObject */ List
+	variable tJNIResult as JavaObject
+	put _JNI_Constructor_getExceptionTypes() into tJNIResult
+	return/* List of /* Class */ JavaObject */ ListFromJJavaObject(tJNIResult)
+end handler
+
+handler getGenericExceptionTypes(in pObj as /* Constructor<T> */ JavaObject) returns /* List of /* Type */ JavaObject */ List
+	variable tJNIResult as JavaObject
+	put _JNI_Constructor_getGenericExceptionTypes() into tJNIResult
+	return/* List of /* Type */ JavaObject */ ListFromJJavaObject(tJNIResult)
+end handler
+
+handler getGenericParameterTypes(in pObj as /* Constructor<T> */ JavaObject) returns /* List of /* Type */ JavaObject */ List
+	variable tJNIResult as JavaObject
+	put _JNI_Constructor_getGenericParameterTypes() into tJNIResult
+	return/* List of /* Type */ JavaObject */ ListFromJJavaObject(tJNIResult)
+end handler
+
+handler getModifiers(in pObj as /* Constructor<T> */ JavaObject) returns Number
+	variable tJNIResult as JavaObject
+	put _JNI_Constructor_getModifiers() into tJNIResult
+	returnNumberFromJJavaObject(tJNIResult)
+end handler
+
+handler getName(in pObj as /* Constructor<T> */ JavaObject) returns String
+	variable tJNIResult as JavaObject
+	put _JNI_Constructor_getName() into tJNIResult
+	returnStringFromJJavaObject(tJNIResult)
+end handler
+
+handler getParameterTypes(in pObj as /* Constructor<T> */ JavaObject) returns /* List of /* Class */ JavaObject */ List
+	variable tJNIResult as JavaObject
+	put _JNI_Constructor_getParameterTypes() into tJNIResult
+	return/* List of /* Class */ JavaObject */ ListFromJJavaObject(tJNIResult)
+end handler
+
+handler getTypeParameters(in pObj as /* Constructor<T> */ JavaObject) returns /* List of /* TypeVariable</* Constructor */ JavaObject> */ JavaObject */ List
+	variable tJNIResult as JavaObject
+	put _JNI_Constructor_getTypeParameters() into tJNIResult
+	return/* List of /* TypeVariable</* Constructor */ JavaObject> */ JavaObject */ ListFromJJavaObject(tJNIResult)
+end handler
+
+handler hashCode(in pObj as /* Constructor<T> */ JavaObject) returns Number
+	variable tJNIResult as JavaObject
+	put _JNI_Constructor_hashCode() into tJNIResult
+	returnNumberFromJJavaObject(tJNIResult)
+end handler
+
+handler isSynthetic(in pObj as /* Constructor<T> */ JavaObject) returns Boolean
+	variable tJNIResult as JavaObject
+	put _JNI_Constructor_isSynthetic() into tJNIResult
+	returnBooleanFromJJavaObject(tJNIResult)
+end handler
+
+handler isVarArgs(in pObj as /* Constructor<T> */ JavaObject) returns Boolean
+	variable tJNIResult as JavaObject
+	put _JNI_Constructor_isVarArgs() into tJNIResult
+	returnBooleanFromJJavaObject(tJNIResult)
+end handler
+
+handler toGenericString(in pObj as /* Constructor<T> */ JavaObject) returns String
+	variable tJNIResult as JavaObject
+	put _JNI_Constructor_toGenericString() into tJNIResult
+	returnStringFromJJavaObject(tJNIResult)
+end handler
+
+handler toString(in pObj as /* Constructor<T> */ JavaObject) returns String
+	variable tJNIResult as JavaObject
+	put _JNI_Constructor_toString() into tJNIResult
+	returnStringFromJJavaObject(tJNIResult)
+end handler
+
+handler equals(in pObj as /* Field */ JavaObject, in obj as /* ) returns Boolean
+	variable tJNIResult as JavaObject
+	put _JNI_Field_equals() into tJNIResult
+	returnBooleanFromJJavaObject(tJNIResult)
+end handler
+
+handler get(in pObj as /* Field */ JavaObject, in obj as /* ) returns /* Object */ JavaObject
+	variable tJNIResult as JavaObject
+	put _JNI_Field_get() into tJNIResult
+	return tJNIResult
+end handler
+
+handler getBoolean(in pObj as /* Field */ JavaObject, in obj as /* ) returns Boolean
+	variable tJNIResult as JavaObject
+	put _JNI_Field_getBoolean() into tJNIResult
+	returnBooleanFromJJavaObject(tJNIResult)
+end handler
+
+handler getByte(in pObj as /* Field */ JavaObject, in obj as /* ) returns Number
+	variable tJNIResult as JavaObject
+	put _JNI_Field_getByte() into tJNIResult
+	returnNumberFromJJavaObject(tJNIResult)
+end handler
+
+handler getChar(in pObj as /* Field */ JavaObject, in obj as /* ) returns Number
+	variable tJNIResult as JavaObject
+	put _JNI_Field_getChar() into tJNIResult
+	returnNumberFromJJavaObject(tJNIResult)
+end handler
+
+handler getDeclaringClass(in pObj as /* Field */ JavaObject) returns /* Class */ JavaObject
+	variable tJNIResult as JavaObject
+	put _JNI_Field_getDeclaringClass() into tJNIResult
+	return tJNIResult
+end handler
+
+handler getDouble(in pObj as /* Field */ JavaObject, in obj as /* ) returns Number
+	variable tJNIResult as JavaObject
+	put _JNI_Field_getDouble() into tJNIResult
+	returnNumberFromJJavaObject(tJNIResult)
+end handler
+
+handler getFloat(in pObj as /* Field */ JavaObject, in obj as /* ) returns Number
+	variable tJNIResult as JavaObject
+	put _JNI_Field_getFloat() into tJNIResult
+	returnNumberFromJJavaObject(tJNIResult)
+end handler
+
+handler getGenericType(in pObj as /* Field */ JavaObject) returns /* Type */ JavaObject
+	variable tJNIResult as JavaObject
+	put _JNI_Field_getGenericType() into tJNIResult
+	return tJNIResult
+end handler
+
+handler getInt(in pObj as /* Field */ JavaObject, in obj as /* ) returns Number
+	variable tJNIResult as JavaObject
+	put _JNI_Field_getInt() into tJNIResult
+	returnNumberFromJJavaObject(tJNIResult)
+end handler
+
+handler getLong(in pObj as /* Field */ JavaObject, in obj as /* ) returns Number
+	variable tJNIResult as JavaObject
+	put _JNI_Field_getLong() into tJNIResult
+	returnNumberFromJJavaObject(tJNIResult)
+end handler
+
+handler getModifiers(in pObj as /* Field */ JavaObject) returns Number
+	variable tJNIResult as JavaObject
+	put _JNI_Field_getModifiers() into tJNIResult
+	returnNumberFromJJavaObject(tJNIResult)
+end handler
+
+handler getName(in pObj as /* Field */ JavaObject) returns String
+	variable tJNIResult as JavaObject
+	put _JNI_Field_getName() into tJNIResult
+	returnStringFromJJavaObject(tJNIResult)
+end handler
+
+handler getShort(in pObj as /* Field */ JavaObject, in obj as /* ) returns Number
+	variable tJNIResult as JavaObject
+	put _JNI_Field_getShort() into tJNIResult
+	returnNumberFromJJavaObject(tJNIResult)
+end handler
+
+handler getType(in pObj as /* Field */ JavaObject) returns /* Class */ JavaObject
+	variable tJNIResult as JavaObject
+	put _JNI_Field_getType() into tJNIResult
+	return tJNIResult
+end handler
+
+handler hashCode(in pObj as /* Field */ JavaObject) returns Number
+	variable tJNIResult as JavaObject
+	put _JNI_Field_hashCode() into tJNIResult
+	returnNumberFromJJavaObject(tJNIResult)
+end handler
+
+handler isEnumConstant(in pObj as /* Field */ JavaObject) returns Boolean
+	variable tJNIResult as JavaObject
+	put _JNI_Field_isEnumConstant() into tJNIResult
+	returnBooleanFromJJavaObject(tJNIResult)
+end handler
+
+handler isSynthetic(in pObj as /* Field */ JavaObject) returns Boolean
+	variable tJNIResult as JavaObject
+	put _JNI_Field_isSynthetic() into tJNIResult
+	returnBooleanFromJJavaObject(tJNIResult)
+end handler
+
+handler set(in pObj as /* Field */ JavaObject, in obj as /* , in value as /* ) returns 
+	_JNI_Field_set()
+end handler
+
+handler setBoolean(in pObj as /* Field */ JavaObject, in obj as /* , in z as Boolean) returns 
+	_JNI_Field_setBoolean()
+end handler
+
+handler setByte(in pObj as /* Field */ JavaObject, in obj as /* , in b as Number) returns 
+	_JNI_Field_setByte()
+end handler
+
+handler setChar(in pObj as /* Field */ JavaObject, in obj as /* , in c as Number) returns 
+	_JNI_Field_setChar()
+end handler
+
+handler setDouble(in pObj as /* Field */ JavaObject, in obj as /* , in d as Number) returns 
+	_JNI_Field_setDouble()
+end handler
+
+handler setFloat(in pObj as /* Field */ JavaObject, in obj as /* , in f as Number) returns 
+	_JNI_Field_setFloat()
+end handler
+
+handler setInt(in pObj as /* Field */ JavaObject, in obj as /* , in i as Number) returns 
+	_JNI_Field_setInt()
+end handler
+
+handler setLong(in pObj as /* Field */ JavaObject, in obj as /* , in l as Number) returns 
+	_JNI_Field_setLong()
+end handler
+
+handler setShort(in pObj as /* Field */ JavaObject, in obj as /* , in s as Number) returns 
+	_JNI_Field_setShort()
+end handler
+
+handler toGenericString(in pObj as /* Field */ JavaObject) returns String
+	variable tJNIResult as JavaObject
+	put _JNI_Field_toGenericString() into tJNIResult
+	returnStringFromJJavaObject(tJNIResult)
+end handler
+
+handler toString(in pObj as /* Field */ JavaObject) returns String
+	variable tJNIResult as JavaObject
+	put _JNI_Field_toString() into tJNIResult
+	returnStringFromJJavaObject(tJNIResult)
+end handler
+
+handler equals(in pObj as /* Method */ JavaObject, in obj as /* ) returns Boolean
+	variable tJNIResult as JavaObject
+	put _JNI_Method_equals() into tJNIResult
+	returnBooleanFromJJavaObject(tJNIResult)
+end handler
+
+handler getDeclaringClass(in pObj as /* Method */ JavaObject) returns /* Class */ JavaObject
+	variable tJNIResult as JavaObject
+	put _JNI_Method_getDeclaringClass() into tJNIResult
+	return tJNIResult
+end handler
+
+handler getDefaultValue(in pObj as /* Method */ JavaObject) returns /* Object */ JavaObject
+	variable tJNIResult as JavaObject
+	put _JNI_Method_getDefaultValue() into tJNIResult
+	return tJNIResult
+end handler
+
+handler getExceptionTypes(in pObj as /* Method */ JavaObject) returns /* List of /* Class */ JavaObject */ List
+	variable tJNIResult as JavaObject
+	put _JNI_Method_getExceptionTypes() into tJNIResult
+	return/* List of /* Class */ JavaObject */ ListFromJJavaObject(tJNIResult)
+end handler
+
+handler getGenericExceptionTypes(in pObj as /* Method */ JavaObject) returns /* List of /* Type */ JavaObject */ List
+	variable tJNIResult as JavaObject
+	put _JNI_Method_getGenericExceptionTypes() into tJNIResult
+	return/* List of /* Type */ JavaObject */ ListFromJJavaObject(tJNIResult)
+end handler
+
+handler getGenericParameterTypes(in pObj as /* Method */ JavaObject) returns /* List of /* Type */ JavaObject */ List
+	variable tJNIResult as JavaObject
+	put _JNI_Method_getGenericParameterTypes() into tJNIResult
+	return/* List of /* Type */ JavaObject */ ListFromJJavaObject(tJNIResult)
+end handler
+
+handler getGenericReturnType(in pObj as /* Method */ JavaObject) returns /* Type */ JavaObject
+	variable tJNIResult as JavaObject
+	put _JNI_Method_getGenericReturnType() into tJNIResult
+	return tJNIResult
+end handler
+
+handler getModifiers(in pObj as /* Method */ JavaObject) returns Number
+	variable tJNIResult as JavaObject
+	put _JNI_Method_getModifiers() into tJNIResult
+	returnNumberFromJJavaObject(tJNIResult)
+end handler
+
+handler getName(in pObj as /* Method */ JavaObject) returns String
+	variable tJNIResult as JavaObject
+	put _JNI_Method_getName() into tJNIResult
+	returnStringFromJJavaObject(tJNIResult)
+end handler
+
+handler getParameterTypes(in pObj as /* Method */ JavaObject) returns /* List of /* Class */ JavaObject */ List
+	variable tJNIResult as JavaObject
+	put _JNI_Method_getParameterTypes() into tJNIResult
+	return/* List of /* Class */ JavaObject */ ListFromJJavaObject(tJNIResult)
+end handler
+
+handler getReturnType(in pObj as /* Method */ JavaObject) returns /* Class */ JavaObject
+	variable tJNIResult as JavaObject
+	put _JNI_Method_getReturnType() into tJNIResult
+	return tJNIResult
+end handler
+
+handler getTypeParameters(in pObj as /* Method */ JavaObject) returns /* List of /* TypeVariable</* Method */ JavaObject> */ JavaObject */ List
+	variable tJNIResult as JavaObject
+	put _JNI_Method_getTypeParameters() into tJNIResult
+	return/* List of /* TypeVariable</* Method */ JavaObject> */ JavaObject */ ListFromJJavaObject(tJNIResult)
+end handler
+
+handler hashCode(in pObj as /* Method */ JavaObject) returns Number
+	variable tJNIResult as JavaObject
+	put _JNI_Method_hashCode() into tJNIResult
+	returnNumberFromJJavaObject(tJNIResult)
+end handler
+
+handler isBridge(in pObj as /* Method */ JavaObject) returns Boolean
+	variable tJNIResult as JavaObject
+	put _JNI_Method_isBridge() into tJNIResult
+	returnBooleanFromJJavaObject(tJNIResult)
+end handler
+
+handler isSynthetic(in pObj as /* Method */ JavaObject) returns Boolean
+	variable tJNIResult as JavaObject
+	put _JNI_Method_isSynthetic() into tJNIResult
+	returnBooleanFromJJavaObject(tJNIResult)
+end handler
+
+handler isVarArgs(in pObj as /* Method */ JavaObject) returns Boolean
+	variable tJNIResult as JavaObject
+	put _JNI_Method_isVarArgs() into tJNIResult
+	returnBooleanFromJJavaObject(tJNIResult)
+end handler
+
+handler toGenericString(in pObj as /* Method */ JavaObject) returns String
+	variable tJNIResult as JavaObject
+	put _JNI_Method_toGenericString() into tJNIResult
+	returnStringFromJJavaObject(tJNIResult)
+end handler
+
+handler toString(in pObj as /* Method */ JavaObject) returns String
+	variable tJNIResult as JavaObject
+	put _JNI_Method_toString() into tJNIResult
+	returnStringFromJJavaObject(tJNIResult)
+end handler
+
+end module
