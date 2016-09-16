@@ -556,7 +556,7 @@
         UnqualifiedId(-> Name) @(-> Position)
 
 	'rule' NamedType(-> named(Position, Name, Parameter)):
-		UnqualifiedId(-> Name) @(-> Position) "<" NamedTypeList(-> Parameter) ">"
+		UnqualifiedId(-> Name) @(-> Position) "<" GenericTypeList(-> Parameter) ">"
 
 'nonterm' NamedTypeList(-> TYPELIST)
 

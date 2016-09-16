@@ -14,30 +14,64 @@
  You should have received a copy of the GNU General Public License
  along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
  
- 
 module com.livecode.java
 
 use com.livecode.foreign
 
-public foreign type JavaObject binds to "MCJavaObjectTypeInfo"
+public foreign type JObject binds to "MCJavaObjectTypeInfo"
+public type JByte is JObject
+public type JChar is JObject
+public type JShort is JObject
+public type JInt is JObject
+public type JLong is JObject
+public type JFloat is JObject
+public type JDouble is JObject
+public type JString is JObject
+public type JBoolean is JObject
+public type JArray is JObject
 
-foreign handler _JNI_Class_getName(in pObject as JavaObject) returns JavaObject binds to "java:java.lang.Class>getName()Ljava/lang/String;"
-foreign handler _JNI_Object_getClass(in pObject as JavaObject) returns JavaObject binds to "java:java.lang.Object>getClass()Ljava/lang/Class;"
+foreign handler _JNI_Class_getName(in pObject as JObject) returns JObject binds to "java:java.lang.Class>getName()Ljava/lang/String;"
+foreign handler _JNI_Object_getClass(in pObject as JObject) returns JObject binds to "java:java.lang.Object>getClass()Ljava/lang/Class;"
 
-foreign handler MCJavaStringFromJString(in pString as JavaObject, out rString as String) returns nothing binds to "<builtin>"
+foreign handler MCJavaStringFromJString(in pString as JObject, out rString as String) returns nothing binds to "<builtin>"
+foreign handler MCJavaNumberFromJShort(in pShort as JShort, out rNumber as Number) returns nothing binds to "<builtin>"
+foreign handler MCJavaNumberFromJInt(in pInt as JInt, out rNumber as Number) returns nothing binds to "<builtin>"
+foreign handler MCJavaNumberFromJLong(in pLong as JLong, out rNumber as Number) returns nothing binds to "<builtin>"
+foreign handler MCJavaNumberFromJByte(in pByte as JByte, out rNumber as Number) returns nothing binds to "<builtin>"
+foreign handler MCJavaNumberFromJChar(in pChar as JChar, out rNumber as Number) returns nothing binds to "<builtin>"
+foreign handler MCJavaNumberFromJFloat(in pFloat as JFloat, out rNumber as Number) returns nothing binds to "<builtin>"
+foreign handler MCJavaNumberFromJDouble(in pDouble as JDouble, out rNumber as Number) returns nothing binds to "<builtin>"
 
-foreign handler MCJavaNewObject(in pString as String, in pArgs as List, out rObj as JavaObject) returns CBool binds to "<builtin>"
+foreign handler MCJavaDataFromJBytes(in pData as JArray, out rData as Data) returns nothing binds to "<builtin>"
+foreign handler MCJavaBooleanFromJBoolean(in pBool as JBoolean, out rBool as Boolean) returns nothing binds to "<builtin>"
 
-public handler GetClassName(in pObj as JavaObject) returns String
-	variable tString as JavaObject
+foreign handler MCJavaStringToJString(in pString as String, out rString as JObject) returns nothing binds to "<builtin>"
+foreign handler MCJavaNumberToJShort(in pShort as Number, out rNumber as JShort) returns nothing binds to "<builtin>"
+foreign handler MCJavaNumberToJInt(in pInt as Number, out rNumber as JInt) returns nothing binds to "<builtin>"
+foreign handler MCJavaNumberToJLong(in pLong as Number, out rNumber as JLong) returns nothing binds to "<builtin>"
+foreign handler MCJavaNumberToJByte(in pByte as Number, out rNumber as JByte) returns nothing binds to "<builtin>"
+foreign handler MCJavaNumberToJChar(in pChar as Number, out rNumber as JChar) returns nothing binds to "<builtin>"
+foreign handler MCJavaNumberToJFloat(in pFloat as Number, out rNumber as JFloat) returns nothing binds to "<builtin>"
+foreign handler MCJavaNumberToJDouble(in pDouble as Number, out rNumber as JDouble) returns nothing binds to "<builtin>"
+
+foreign handler MCJavaDataToJBytes(in pData as Data, out rData as JArray) returns nothing binds to "<builtin>"
+foreign handler MCJavaBooleanToJBoolean(in pBool as Boolean, out rBool as JBoolean) returns nothing binds to "<builtin>"
+
+foreign handler MCJavaListToJArray(in pArray as List, out rList as JArray) returns nothing binds to "<builtin>"
+foreign handler MCJavaListFromJArray(in pArray as JArray, out rList as List) returns nothing binds to "<builtin>"
+
+foreign handler MCJavaNewObject(in pString as String, in pArgs as List, out rObj as JObject) returns CBool binds to "<builtin>"
+
+public handler GetClassName(in pObj as JObject) returns String
+	variable tString as JObject
 	unsafe
 		put _JNI_Class_getName(_JNI_Object_getClass(pObj)) into tString
 	end unsafe
-	return StringFromJavaString(tString)
+	return StringFromJString(tString)
 end handler
 
-public handler GetObject() returns JavaObject
-	variable tObject as JavaObject
+public handler GetObject() returns JObject
+	variable tObject as JObject
 	variable tResult as Boolean
 	unsafe
 		put MCJavaNewObject("java.lang.String", [], tObject) into tResult
@@ -45,11 +79,179 @@ public handler GetObject() returns JavaObject
 	return tObject
 end handler
 
-public handler StringFromJString(in pObj as JavaObject) returns String
+public handler StringFromJString(in pObj as JString) returns String
 	variable tString as String
     unsafe
-	MCJavaStringFromJString(pObj, tString)
+		MCJavaStringFromJString(pObj, tString)
     end unsafe
 	return tString
+end handler
+
+public handler BooleanFromJBoolean(in pObj as JBoolean) returns Boolean
+	variable tBool as Boolean
+    unsafe
+		MCJavaBooleanFromJBoolean(pObj, tBool)
+    end unsafe
+	return tBool
+end handler
+
+public handler NumberFromJShort(in pObj as JShort) returns Number
+	variable tNumber as Number
+    unsafe
+		MCJavaNumberFromJShort(pObj, tNumber)
+    end unsafe
+	return tNumber
+end handler
+
+public handler NumberFromJInt(in pObj as JInt) returns Number
+	variable tNumber as Number
+    unsafe
+		MCJavaNumberFromJInt(pObj, tNumber)
+    end unsafe
+	return tNumber
+end handler
+
+public handler NumberFromJLong(in pObj as JLong) returns Number
+	variable tNumber as Number
+    unsafe
+		MCJavaNumberFromJLong(pObj, tNumber)
+    end unsafe
+	return tNumber
+end handler
+
+public handler NumberFromJByte(in pObj as JByte) returns Number
+	variable tNumber as Number
+    unsafe
+		MCJavaNumberFromJByte(pObj, tNumber)
+    end unsafe
+	return tNumber
+end handler
+
+public handler NumberFromJChar(in pObj as JChar) returns Number
+	variable tNumber as Number
+    unsafe
+		MCJavaNumberFromJChar(pObj, tNumber)
+    end unsafe
+	return tNumber
+end handler
+
+public handler NumberFromJDouble(in pObj as JDouble) returns Number
+	variable tNumber as Number
+    unsafe
+		MCJavaNumberFromJByte(pObj, tNumber)
+    end unsafe
+	return tNumber
+end handler
+
+public handler NumberFromJFloat(in pObj as JFloat) returns Number
+	variable tNumber as Number
+    unsafe
+		MCJavaNumberFromJFloat(pObj, tNumber)
+    end unsafe
+	return tNumber
+end handler
+
+public handler DataFromJBytes(in pObj as JArray) returns Data
+	variable tData as Data
+    unsafe
+		MCJavaDataFromJBytes(pObj, tData)
+    end unsafe
+	return tData
+end handler
+
+public handler ListFromJArray(in pArray as JArray) returns List
+	variable tList as List
+	unsafe
+		MCJavaListFromJArray(pArray, tList)
+	end unsafe
+	return tList
+end handler
+
+public handler StringToJString(in pString as String) returns JString
+	variable tString as JString
+    unsafe
+		MCJavaStringToJString(pString, tString)
+    end unsafe
+	return tString
+end handler
+
+public handler BooleanToJBoolean(in pBoolean as Boolean) returns JBoolean
+	variable tBool as JBoolean
+    unsafe
+		MCJavaBooleanToJBoolean(pBoolean, tBool)
+    end unsafe
+	return tBool
+end handler
+
+public handler NumberToJShort(in pNumber as Number) returns JShort
+	variable tNumber as JShort
+    unsafe
+		MCJavaNumberToJShort(pNumber, tNumber)
+    end unsafe
+	return tNumber
+end handler
+
+public handler NumberToJInt(in pNumber as Number) returns JInt
+	variable tNumber as JInt
+    unsafe
+		MCJavaNumberToJInt(pNumber, tNumber)
+    end unsafe
+	return tNumber
+end handler
+
+public handler NumberToJLong(in pNumber as Number) returns JLong
+	variable tNumber as JLong
+    unsafe
+		MCJavaNumberToJLong(pNumber, tNumber)
+    end unsafe
+	return tNumber
+end handler
+
+public handler NumberToJByte(in pNumber as Number) returns JByte
+	variable tNumber as JByte
+    unsafe
+		MCJavaNumberToJByte(pNumber, tNumber)
+    end unsafe
+	return tNumber
+end handler
+
+public handler NumberToJChar(in pNumber as Number) returns JChar
+	variable tNumber as JChar
+    unsafe
+		MCJavaNumberToJChar(pNumber, tNumber)
+    end unsafe
+	return tNumber
+end handler
+
+public handler NumberToJDouble(in pNumber as Number) returns JDouble
+	variable tNumber as JDouble
+    unsafe
+		MCJavaNumberToJByte(pNumber, tNumber)
+    end unsafe
+	return tNumber
+end handler
+
+public handler NumberToJFloat(in pNumber as Number) returns JFloat
+	variable tNumber as JFloat
+    unsafe
+		MCJavaNumberToJFloat(pNumber, tNumber)
+    end unsafe
+	return tNumber
+end handler
+
+public handler DataToJBytes(in pData as Data) returns JArray
+	variable tData as JArray
+    unsafe
+		MCJavaDataToJBytes(pData, tData)
+    end unsafe
+	return tData
+end handler
+
+public handler ListToJArray(in pList as JArray) returns List
+	variable tList as List
+	unsafe
+		MCJavaListToJArray(pList, tList)
+	end unsafe
+	return tList
 end handler
 end module

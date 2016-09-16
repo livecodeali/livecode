@@ -33,8 +33,11 @@
 
     'rule' GeneratePackages(List):
         OutputLCBBegin()
+        OutputWrite("module com.livecode.wrapped.java \n\n")
+        OutputWrite("use com.livecode.java\n")
         GeneratingPackageIndex <- 1
         GenerateForEachPackage(List)
+        OutputWrite("end module \n\n")
         OutputEnd()
     
 'action' GenerateForEachPackage(PACKAGELIST)
@@ -53,8 +56,8 @@
     'rule' GenerateSinglePackage(Package:package(_, _, WrappedId, Definitions)):
         ModuleDependencyList <- nil
         ResolveIdName(WrappedId -> Name)
-        OutputWriteI("module ", Name, "\n\n")
-        OutputWrite("use com.livecode.java\n")
+        OutputWriteI("/* module ", Name, " */\n\n")
+        OutputWrite("/* use com.livecode.java */\n")
         CollectImports(Definitions)
         ModuleDependencyList -> List
         OutputImports(List)
@@ -62,7 +65,7 @@
         GenerateForeignHandlers(Definitions)
         OutputWrite("\n")
         GenerateDefinitions(Definitions)
-        OutputWrite("end module\n\n")
+        OutputWrite("/* end module */\n\n")
 
 ----------
 
@@ -130,7 +133,7 @@
 'action' OutputImport(NAME)
 
     'rule' OutputImport(Name):
-        OutputWriteI("use ", Name, "\n")
+        OutputWriteI("/* use ", Name, " */\n")
 ----
 
 'action' GenerateForeignHandlers(DEFINITION)
@@ -140,6 +143,9 @@
     	GenerateForeignHandlers(Tail)
     	
     'rule' GenerateForeignHandlers(class(_, _, Type, Definitions, _, _)):
+        GenerateForeignHandlersOfClass(Type, Definitions)
+
+    'rule' GenerateForeignHandlers(interface(_, Type, Definitions, _)):
         GenerateForeignHandlersOfClass(Type, Definitions)
 
     'rule' GenerateForeignHandlers(Definition):
@@ -200,10 +206,10 @@
             where(Params -> nil)
         ||
             OutputWrite(", ")
-            GenerateParams(Params)
+            GenerateJavaParams(Params)
         |)
         OutputWrite(")")
-        GenerateReturns(ReturnType)
+        GenerateJavaReturns(ReturnType)
         
 'action' OutputBindingString(TYPE, NAME, SIGNATURE)
 
@@ -246,7 +252,6 @@
         GenerateClassDefinitions(ObjType, Right)
 
     'rule' GenerateClassDefinitions(ObjType, constant(_, Id, Type, Value)):
-        QuerySymbolId(Id -> SymbolInfo)
         ResolveIdName(Id -> SymbolName)
         TypeToUnqualifiedName(ObjType -> ObjName)
         (|
@@ -259,7 +264,7 @@
             OutputWrite("\n")
             OutputWrite("end handler")
         ||
-            OutputWriteI("constant ", SymbolName, "")
+            OutputWriteI("public constant ", SymbolName, "")
             OutputWrite(" as ")
             GenerateType(Type)
             OutputWrite(" is ")
@@ -268,11 +273,10 @@
         OutputWrite("\n")
 
     'rule' GenerateClassDefinitions(ObjType, variable(_, Modifiers, Id, Type)):
-        QuerySymbolId(Id -> SymbolInfo)
         ResolveIdName(Id -> SymbolName)
         TypeToUnqualifiedName(ObjType -> ObjName)
-        OutputWriteI("handler ", ObjName, "_")
-        OutputWriteI("Get", SymbolName, "(in pObj as ")
+        OutputWriteI("public handler ", ObjName, "_")
+        OutputWriteI("Get_", SymbolName, "(in pObj as ")
         GenerateReturns(Type)
         OutputWrite("\n")
         OutputWrite("end handler")
@@ -285,11 +289,12 @@
         ||
             ResolveIdName(Id -> Name)
         |)
-
-        OutputWriteI("handler ", Name, "")
+        TypeToUnqualifiedName(ObjType -> ObjName)
+        OutputWriteI("public handler ", ObjName, "_")
+        OutputWriteI("", Name, "")
         GenerateSignatureWithParameter(ObjType, Signature)
 
-        OutputWrite("\n\t")
+        OutputWrite("\n")
         OutputCallForeignHandler(ObjType, Name, Signature)
         OutputWrite("end handler")
         OutputWrite("\n\n")
@@ -301,7 +306,9 @@
         ||
             ResolveIdName(Id -> Name)
         |)
-        OutputWriteI("handler ", Name, "")
+        TypeToUnqualifiedName(ObjType -> ObjName)
+        OutputWriteI("public handler ", ObjName, "_Constructor_")
+        OutputWriteI("", Name, "")
         GenerateSignatureWithReturnType(ObjType, Signature)
 
         OutputWrite("\n")
@@ -314,24 +321,99 @@
 'action' OutputCallForeignHandler(TYPE, NAME, SIGNATURE)
 
 	'rule' OutputCallForeignHandler(ObjType, Name, signature(Params, ReturnType))
+		OutputConvertToForeignParams(Params)
         (|
             where(ReturnType -> nil)
-            OutputWrite("unsafe\n\t\t")
+            OutputWrite("\tunsafe\n\t\t")
             OutputForeignHandlerName(ObjType, Name)	
-            OutputWrite("()\n")
+            OutputWrite("(pObj")
+            (|
+                where(Params -> nil)
+            ||
+                OutputWrite(", ")
+                OutputForeignCallParams(Params)
+            |)
+            OutputWrite(")\n")
             OutputWrite("\tend unsafe\n")
         ||
-            OutputWrite("variable tJNIResult as ")
+            OutputWrite("\tvariable tJNIResult as ")
             GenerateJavaType(ReturnType)
             OutputWrite("\n\tunsafe\n")
             OutputWrite("\t\tput ")
             OutputForeignHandlerName(ObjType, Name)	
-            OutputWrite("() into tJNIResult\n")
+            OutputWrite("(pObj")
+            (|
+                where(Params -> nil)
+            ||
+                OutputWrite(", ")
+                OutputForeignCallParams(Params)
+            |)
+            OutputWrite(") into tJNIResult\n")
             OutputWrite("\tend unsafe\n")
 
 			OutputWrapperReturn(ReturnType)
         |)	
+
+'action' OutputConvertToForeignParams(PARAMETERLIST)
+
+	'rule' OutputConvertToForeignParams(nil):
+
+    'rule' OutputConvertToForeignParams(parameterlist(Head, Tail)):
+        OutputConvertToForeignParam(Head)
+        OutputConvertToForeignParams(Tail)	
         
+'action' OutputConvertToForeignParam(PARAMETER)
+
+    'rule' OutputConvertToForeignParam(parameter(_, Id, Type)):
+    	(|
+			IsNotPrimitiveType(Type)
+		||
+			ResolveIdName(Id -> SymbolName)
+			OutputWriteI("\tvariable tParam_", SymbolName, "")
+			OutputWrite(" as ")
+			GenerateJavaType(Type) 
+			OutputWrite("\n")
+			OutputWrite("\tput ")
+			GenerateType(Type)
+			OutputWrite("To")
+			GenerateJavaType(Type)
+			OutputWriteI("(pParam_", SymbolName, ") into ")
+			OutputWriteI("tParam_", SymbolName, "\n\n")
+		|)
+
+'condition' IsNotPrimitiveType(TYPE)
+
+	'rule' IsNotPrimitiveType(named(_,_,_)):
+
+	'rule' IsNotPrimitiveType(template(_,_,_)):
+	
+	'rule' IsNotPrimitiveType(placeholder(_,_)):		
+               
+'action' OutputForeignCallParams(PARAMETERLIST)
+
+	'rule' OutputForeignCallParams(nil):
+	
+	'rule' OutputForeignCallParams(parameterlist(Head, nil)):
+        OutputForeignCallParam(Head)
+        	
+    'rule' OutputForeignCallParams(parameterlist(Head, Tail)):
+        OutputForeignCallParam(Head)
+        OutputWrite(", ")
+        OutputForeignCallParams(Tail)	
+
+'action' OutputForeignCallParam(PARAMETER)
+
+    'rule' OutputForeignCallParam(parameter(_, Id, Type)):
+        ResolveIdName(Id -> SymbolName)
+        (|
+            -- if this is not a primitive type then it wasn't
+            -- converted from an LCB type
+			IsNotPrimitiveType(Type)
+            OutputWriteI("pParam_", SymbolName, "")
+		||
+            OutputWriteI("tParam_", SymbolName, "")
+        |)
+                
 'action' OutputWrapperReturn(TYPE)
 
 	'rule' OutputWrapperReturn(named(_, _, _))
@@ -349,7 +431,7 @@
 
 	'rule' OutputConvertJava(Type):
 		GenerateType(Type)
-		OutputWrite("FromJ")
+		OutputWrite("From")
 		GenerateJavaType(Type)
 
 'action' GenerateSignatureWithParameter(TYPE, SIGNATURE)
@@ -385,15 +467,36 @@
         GenerateParam(Head)
         OutputWrite(", ")
         GenerateParams(Tail)
+        
+'action' GenerateJavaParams(PARAMETERLIST)
+
+    'rule' GenerateJavaParams(nil):
+
+    'rule' GenerateJavaParams(parameterlist(Head, nil)):
+        GenerateJavaParam(Head)
+
+    'rule' GenerateJavaParams(parameterlist(Head, Tail)):
+        GenerateJavaParam(Head)
+        OutputWrite(", ")
+        GenerateJavaParams(Tail)
 
 'action' GenerateParam(PARAMETER)
 
     'rule' GenerateParam(parameter(_, Id, Type)):
         QuerySymbolId(Id -> SymbolInfo)
         ResolveIdName(Id -> SymbolName)
-        OutputWriteI("in ", SymbolName, "")
+        OutputWriteI("in pParam_", SymbolName, "")
         OutputWrite(" as ")
         GenerateType(Type)
+
+'action' GenerateJavaParam(PARAMETER)
+
+    'rule' GenerateJavaParam(parameter(_, Id, Type)):
+        QuerySymbolId(Id -> SymbolInfo)
+        ResolveIdName(Id -> SymbolName)
+        OutputWriteI("in pParam_", SymbolName, "")
+        OutputWrite(" as ")
+        GenerateJavaType(Type)
 
 'action' GenerateDefinitions(DEFINITION)
 
@@ -480,87 +583,59 @@
     'rule' GenerateReturns(Type):
         OutputWrite(" returns ")
         GenerateType(Type)
+        
+'action' GenerateJavaReturns(TYPE)
+
+    'rule' GenerateJavaReturns(Type):
+        OutputWrite(" returns ")
+        GenerateJavaType(Type)
 
 'action' GenerateJavaType(TYPE)
 
     'rule' GenerateJavaType(byte):
-    	OutputWrite("/* jbyte */ ")
-        OutputWrite("JavaObject")
+        OutputWrite("JByte")
 
     'rule' GenerateJavaType(short):
-        OutputWrite("/* jshort */ ")
-        OutputWrite("JavaObject")
+        OutputWrite("JShort")
 
     'rule' GenerateJavaType(int):
-        OutputWrite("/* jint */ ")
-        OutputWrite("JavaObject")
+        OutputWrite("JInt")
 
     'rule' GenerateJavaType(long):
-        OutputWrite("/* jlong */ ")
-        OutputWrite("JavaObject")
+        OutputWrite("JLong")
 
     'rule' GenerateJavaType(float):
-        OutputWrite("/* jfloat */ ")
-        OutputWrite("JavaObject")
+        OutputWrite("JFloat")
 
     'rule' GenerateJavaType(double):
-        OutputWrite("/* jdouble */ ")
-        OutputWrite("JavaObject")
+        OutputWrite("JDouble")
 
     'rule' GenerateJavaType(boolean):
-        OutputWrite("/* jboolean */ ")
-        OutputWrite("JavaObject")
+        OutputWrite("JBoolean")
 
     'rule' GenerateJavaType(char):
-        OutputWrite("/* jchar */ ")
-        OutputWrite("JavaObject")
+        OutputWrite("JChar")
 
     'rule' GenerateJavaType(string):
-        OutputWrite("/* jstring */ ")
-        OutputWrite("JavaObject")
+        OutputWrite("JString")
         
     'rule' GenerateJavaType(named(_, Id, Parameters)):
-    	OutputWrite("/* ")
-        QuerySymbolId(Id -> SymbolInfo)
-        ResolveIdName(Id -> SymbolName)
-        OutputWriteI("", SymbolName, "")
-        (|
-            where(Parameters -> nil)
-        ||
-            OutputWrite("<")
-            GenerateTypeList(Parameters)
-            OutputWrite(">")
-        |)
-    	OutputWrite(" */ JavaObject")
+    	OutputWrite("JObject")
 
     'rule' GenerateJavaType(template(_, Id, Parameters)):
-    	OutputWrite("/* ")
-        QuerySymbolId(Id -> SymbolInfo)
-        ResolveIdName(Id -> SymbolName)
-        OutputWriteI("", SymbolName, "")
-        (|
-            where(Parameters -> nil)
-        ||
-            OutputWrite("<")
-            GenerateTypeList(Parameters)
-            OutputWrite(">")
-        |)
-    	OutputWrite(" */ JavaObject")
+    	OutputWrite("JObject")
 		
     'rule' GenerateJavaType(placeholder(_, Id)):
-        QuerySymbolId(Id -> SymbolInfo)
         ResolveIdName(Id -> SymbolName)
         OutputWriteI("", SymbolName, "")
 
     -- output java array
     'rule' GenerateJavaType(jarray(_, Type, Dimension)):
-    	OutputWrite("/* ")
-        GenerateJArray(Type, Dimension)
-        OutputWrite(" */ List")
+    	OutputWrite("JArray")
 
     'rule' GenerateJavaType(nil):
     	OutputWrite("nothing")
-
+    	
 'action' GenerateType(TYPE)
 
     'rule' GenerateType(byte):
@@ -591,49 +666,21 @@
         OutputWrite("String")
 
     'rule' GenerateType(named(_, Id, Parameters)):
-    	OutputWrite("/* ")
-        QuerySymbolId(Id -> SymbolInfo)
-        ResolveIdName(Id -> SymbolName)
-        OutputWriteI("", SymbolName, "")
-        (|
-            where(Parameters -> nil)
-        ||
-            OutputWrite("<")
-            GenerateTypeList(Parameters)
-            OutputWrite(">")
-        |)
-    	OutputWrite(" */ JavaObject")
+    	OutputWrite("JObject")
 
     'rule' GenerateType(template(_, Id, Parameters)):
-    	OutputWrite("/* ")
-        QuerySymbolId(Id -> SymbolInfo)
-        ResolveIdName(Id -> SymbolName)
-        OutputWriteI("", SymbolName, "")
-        (|
-            where(Parameters -> nil)
-        ||
-            OutputWrite("<")
-            GenerateTypeList(Parameters)
-            OutputWrite(">")
-        |)
-    	OutputWrite(" */ JavaObject")
+    	OutputWrite("JObject")
 		
     'rule' GenerateType(placeholder(_, Id)):
-        QuerySymbolId(Id -> SymbolInfo)
         ResolveIdName(Id -> SymbolName)
         OutputWriteI("", SymbolName, "")
 
     -- output java array
     'rule' GenerateType(jarray(_, Type, Dimension)):
-    	OutputWrite("/* ")
-        GenerateJArray(Type, Dimension)
-        OutputWrite(" */ List")
+    	OutputWrite("List")
 
     'rule' GenerateType(nil):
     	OutputWrite("nothing")
-    	
-    'rule' GenerateType(Type):
-    	print(Type)
 
 'action' OutputJavaTypeCode(TYPE)
 

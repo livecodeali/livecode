@@ -21,8 +21,6 @@
 
 #include "foundation-auto.h"
 
-#include "module-java.h"
-
 #ifdef _WIN32
 #include <windows.h>
 #else
