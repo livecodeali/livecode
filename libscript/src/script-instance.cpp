@@ -1194,24 +1194,30 @@ static bool __split_binding(MCStringRef& x_string, codepoint_t p_char, MCStringR
     return true;
 }
 
-static bool __split_function_signature(MCStringRef p_string, MCStringRef& r_function, MCStringRef& r_signature)
+static bool __split_function_signature(MCStringRef p_string, MCStringRef& r_function, MCStringRef& r_arguments, MCStringRef& r_return)
 {
-    MCAutoStringRef t_head, t_tail;
-    uindex_t t_bracket_offset;
-    if (!MCStringFirstIndexOfChar(p_string, '(', 0, kMCStringOptionCompareExact, t_bracket_offset))
+    MCAutoStringRef t_head, t_args, t_return;
+    uindex_t t_open_bracket_offset, t_close_bracket_offset;
+    if (!MCStringFirstIndexOfChar(p_string, '(', 0, kMCStringOptionCompareExact, t_open_bracket_offset) ||
+        !MCStringFirstIndexOfChar(p_string, ')', 0, kMCStringOptionCompareExact, t_close_bracket_offset))
     {
         r_function = MCValueRetain(p_string);
-        r_signature = MCValueRetain(kMCEmptyString);
+        r_arguments = MCValueRetain(kMCEmptyString);
+        r_return = MCValueRetain(kMCEmptyString);
         return true;
     }
     
-    if (!MCStringCopySubstring(p_string, MCRangeMake(t_bracket_offset, UINDEX_MAX), &t_tail))
+    if (!MCStringCopySubstring(p_string, MCRangeMakeMinMax(t_open_bracket_offset, t_close_bracket_offset + 1), &t_args))
         return false;
     
-    if (!MCStringCopySubstring(p_string, MCRangeMake(0, t_bracket_offset), &t_head))
+    if (!MCStringCopySubstring(p_string, MCRangeMake(t_close_bracket_offset + 1, UINDEX_MAX), &t_return))
         return false;
     
-    r_signature = MCValueRetain(*t_tail);
+    if (!MCStringCopySubstring(p_string, MCRangeMake(0, t_open_bracket_offset), &t_head))
+        return false;
+    
+    r_arguments = MCValueRetain(*t_args);
+    r_return = MCValueRetain(*t_return);
     r_function = MCValueRetain(*t_head);
     return true;
 }
@@ -1325,8 +1331,8 @@ static bool MCScriptResolveForeignFunctionBinding(MCScriptInstanceRef p_instance
     
     MCValueRelease(t_rest);
     
-    MCAutoStringRef t_signature, t_function;
-    if (!__split_function_signature(*t_function_string, &t_function, &t_signature))
+    MCAutoStringRef t_arguments, t_return, t_function;
+    if (!__split_function_signature(*t_function_string, &t_function, &t_arguments, &t_return))
         return false;
     
     if (!MCStringIsEmpty(*t_language))
@@ -1335,8 +1341,10 @@ static bool MCScriptResolveForeignFunctionBinding(MCScriptInstanceRef p_instance
         MCLog("library %@", *t_library);
     if (!MCStringIsEmpty(*t_class))
         MCLog("class %@", *t_class);
-    if (!MCStringIsEmpty(*t_signature))
-        MCLog("signature %@", *t_signature);
+    if (!MCStringIsEmpty(*t_arguments))
+        MCLog("signature %@", *t_arguments);
+    if (!MCStringIsEmpty(*t_return))
+        MCLog("signature %@", *t_return);
     if (!MCStringIsEmpty(*t_function))
         MCLog("function %@", *t_function);
     if (!MCStringIsEmpty(*t_calling))
@@ -1414,6 +1422,12 @@ static bool MCScriptResolveForeignFunctionBinding(MCScriptInstanceRef p_instance
             return false;
         
         p_handler -> java . class_name = MCValueRetain(*t_class_name);
+        
+        MCAutoStringRef t_signature;
+        if (!MCStringFormat(&t_signature, "%@%@", *t_arguments, *t_return))
+            return false;
+        
+        p_handler -> java . return_type = MCJavaMapTypeCode(*t_return);
         
         void *t_method_id;
         t_method_id = MCJavaGetMethodId(*t_class_name, *t_function, *t_signature);
@@ -1762,8 +1776,9 @@ static bool MCScriptPerformForeignInvoke(MCScriptFrame*& x_frame, MCScriptInstan
             MCJavaCallJNIMethod(p_handler -> java . class_name,
                                 p_handler -> java . method_id,
                                 p_handler -> java . call_type,
-                                t_result_value,
-                                (const MCValueRef *)t_args,
+                                p_handler -> java . return_type,
+                                &t_result,
+                                t_args,
                                 p_arity);
         }
         else
@@ -1796,8 +1811,7 @@ static bool MCScriptPerformForeignInvoke(MCScriptFrame*& x_frame, MCScriptInstan
                     }
                     else
                     {
-                        if (!p_handler -> is_java)
-                            t_result_value = *(MCValueRef *)t_result;
+                        t_result_value = *(MCValueRef *)t_result;
                         
                         // If the return value is nil, then map to null.
                         if (t_result_value == nil)

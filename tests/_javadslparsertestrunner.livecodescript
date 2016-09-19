@@ -227,7 +227,7 @@ private command runJavaDSLParserTest pInfo, pScriptFile, pTest
    if tJavaDSLParserExitStatus is 0 then
    	  local tFirstOutput, tSecondOutput, tIsIdempotent
 	  put textDecode(url("binfile:" & tOutputFile), "utf8") into tFirstOutput
-      put format("%s --output %s %s", $JAVA_DSL_PARSER, tOutputFile, tTestFile) into tJavaDSLParserCmdLine
+      put format("%s --check %s %s", $JAVA_DSL_PARSER, tOutputFile, tTestFile) into tJavaDSLParserCmdLine
       local tJavaDSLParserSecondOutput, tJavaDSLParserSecondExitStatus
       put shell(tJavaDSLParserCmdLine) into tJavaDSLParserSecondOutput
    	  put the result into tJavaDSLParserSecondExitStatus

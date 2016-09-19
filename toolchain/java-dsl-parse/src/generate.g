@@ -265,8 +265,6 @@
             OutputWrite("end handler")
         ||
             OutputWriteI("public constant ", SymbolName, "")
-            OutputWrite(" as ")
-            GenerateType(Type)
             OutputWrite(" is ")
             GenerateValue(Value)
         |)
@@ -336,8 +334,26 @@
             OutputWrite(")\n")
             OutputWrite("\tend unsafe\n")
         ||
+            RequiresConversion(ReturnType)
             OutputWrite("\tvariable tJNIResult as ")
             GenerateJavaType(ReturnType)
+            OutputWrite("\n\tunsafe\n")
+            OutputWrite("\t\tput ")
+            OutputForeignHandlerName(ObjType, Name)	
+            OutputWrite("(pObj")
+            (|
+                where(Params -> nil)
+            ||
+                OutputWrite(", ")
+                OutputForeignCallParams(Params)
+            |)
+            OutputWrite(") into tJNIResult\n")
+            OutputWrite("\tend unsafe\n")
+
+			OutputWrapperReturn(ReturnType)
+        ||
+            OutputWrite("\tvariable tJNIResult as ")
+            GenerateType(ReturnType)
             OutputWrite("\n\tunsafe\n")
             OutputWrite("\t\tput ")
             OutputForeignHandlerName(ObjType, Name)	
@@ -366,8 +382,7 @@
 
     'rule' OutputConvertToForeignParam(parameter(_, Id, Type)):
     	(|
-			IsNotPrimitiveType(Type)
-		||
+			RequiresConversion(Type)
 			ResolveIdName(Id -> SymbolName)
 			OutputWriteI("\tvariable tParam_", SymbolName, "")
 			OutputWrite(" as ")
@@ -379,16 +394,14 @@
 			GenerateJavaType(Type)
 			OutputWriteI("(pParam_", SymbolName, ") into ")
 			OutputWriteI("tParam_", SymbolName, "\n\n")
+        ||
 		|)
 
-'condition' IsNotPrimitiveType(TYPE)
+'condition' RequiresConversion(TYPE)
 
-	'rule' IsNotPrimitiveType(named(_,_,_)):
+     -- strings require conversion
+    'rule' RequiresConversion(string):
 
-	'rule' IsNotPrimitiveType(template(_,_,_)):
-	
-	'rule' IsNotPrimitiveType(placeholder(_,_)):		
-               
 'action' OutputForeignCallParams(PARAMETERLIST)
 
 	'rule' OutputForeignCallParams(nil):
@@ -406,26 +419,22 @@
     'rule' OutputForeignCallParam(parameter(_, Id, Type)):
         ResolveIdName(Id -> SymbolName)
         (|
-            -- if this is not a primitive type then it wasn't
-            -- converted from an LCB type
-			IsNotPrimitiveType(Type)
-            OutputWriteI("pParam_", SymbolName, "")
-		||
+			RequiresConversion(Type)
             OutputWriteI("tParam_", SymbolName, "")
+		||
+            OutputWriteI("pParam_", SymbolName, "")
         |)
                 
 'action' OutputWrapperReturn(TYPE)
 
-	'rule' OutputWrapperReturn(named(_, _, _))
-		OutputWrite("\treturn tJNIResult\n")
+	'rule' OutputWrapperReturn(Type)
+        RequiresConversion(Type)
+        OutputWrite("\treturn ")
+        OutputConvertJava(Type)
+        OutputWrite("(tJNIResult)\n")
 
-	'rule' OutputWrapperReturn(template(_, _, _))
+    'rule' OutputWrapperReturn(Type)
 		OutputWrite("\treturn tJNIResult\n")
-
-	'rule' OutputWrapperReturn(ReturnType)
-		OutputWrite("\treturn ")
-       	OutputConvertJava(ReturnType)
-       	OutputWrite("(tJNIResult)\n")
 
 'action' OutputConvertJava(TYPE)
 
@@ -593,28 +602,28 @@
 'action' GenerateJavaType(TYPE)
 
     'rule' GenerateJavaType(byte):
-        OutputWrite("JByte")
+        OutputWrite("CInt")
 
     'rule' GenerateJavaType(short):
-        OutputWrite("JShort")
+        OutputWrite("CInt")
 
     'rule' GenerateJavaType(int):
-        OutputWrite("JInt")
+        OutputWrite("CInt")
 
     'rule' GenerateJavaType(long):
-        OutputWrite("JLong")
+        OutputWrite("CInt")
 
     'rule' GenerateJavaType(float):
-        OutputWrite("JFloat")
+        OutputWrite("CFloat")
 
     'rule' GenerateJavaType(double):
-        OutputWrite("JDouble")
+        OutputWrite("CDouble")
 
     'rule' GenerateJavaType(boolean):
-        OutputWrite("JBoolean")
+        OutputWrite("CBool")
 
     'rule' GenerateJavaType(char):
-        OutputWrite("JChar")
+        OutputWrite("CInt")
 
     'rule' GenerateJavaType(string):
         OutputWrite("JString")
@@ -628,6 +637,11 @@
     'rule' GenerateJavaType(placeholder(_, Id)):
         ResolveIdName(Id -> SymbolName)
         OutputWriteI("", SymbolName, "")
+
+    -- byte array special case as data
+    'rule' GenerateJavaType(jarray(_, byte, Dimension)):
+        eq(Dimension, 1)
+    	OutputWrite("Data")
 
     -- output java array
     'rule' GenerateJavaType(jarray(_, Type, Dimension)):
@@ -674,6 +688,11 @@
     'rule' GenerateType(placeholder(_, Id)):
         ResolveIdName(Id -> SymbolName)
         OutputWriteI("", SymbolName, "")
+
+    -- byte array special case as data
+    'rule' GenerateType(jarray(_, byte, Dimension)):
+        eq(Dimension, 1)
+    	OutputWrite("Data")
 
     -- output java array
     'rule' GenerateType(jarray(_, Type, Dimension)):

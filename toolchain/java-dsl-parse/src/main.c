@@ -32,12 +32,13 @@ static void
 usage(int status)
 {
     fprintf(stderr,
-"Usage: java-dsl-parse [OPTION ...] --output OUTFILE [--] SOURCEFILE\n"
+"Usage: java-dsl-parse [OPTION ...] --check OUTFILE --output OUTFILE [--] SOURCEFILE\n"
 "\n"
 "Parse a Java FFI DSL source file.\n"
 "\n"
 "Options:\n"
-"      --output OUTFILE       Filename for reconstructed output.\n"
+"      --check OUTFILE        Filename for reconstructed output.\n"
+"      --output OUTFILE       Filename for generated LCB output.\n"
 "      -Werror                Turn all warnings into errors.\n"
 "  -v, --verbose              Output extra debugging information.\n"
 "  -h, --help                 Print this message.\n"
@@ -62,12 +63,12 @@ static void full_main(int argc, char *argv[])
         const char *optarg = (argi + 1 < argc) && 0 != strncmp(argv[argi+1], "--", 2) ? argv[argi+1] : NULL;
         if (!end_of_args)
         {
-            if (0 == strcmp(opt, "--output") && optarg)
+            if (0 == strcmp(opt, "--check") && optarg)
             {
                 SetOutputFile(argv[++argi]);
                 continue;
             }
-            if (0 == strcmp(opt, "--outputlcb") && optarg)
+            if (0 == strcmp(opt, "--output") && optarg)
             {
                 SetOutputLCBFile(argv[++argi]);
                 continue;

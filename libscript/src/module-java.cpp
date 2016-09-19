@@ -33,30 +33,11 @@ extern "C" MC_DLLEXPORT_DEF void MCJavaStringFromJString(MCJavaObjectRef p_objec
     MCJavaConvertJStringToStringRef(p_object, r_string);
 }
 
-extern "C" MC_DLLEXPORT_DEF void MCJavaNumberFromJByte(MCJavaObjectRef p_object, MCNumberRef &r_number)
+extern "C" MC_DLLEXPORT_DEF void MCJavaStringToJString(MCStringRef p_string, MCJavaObjectRef &r_object)
 {
-    MCJavaConvertJByteToNumberRef(p_object, r_number);
+    MCJavaConvertStringRefToJString(p_string, r_object);
 }
 
-extern "C" MC_DLLEXPORT_DEF void MCJavaNumberFromJShort(MCJavaObjectRef p_object, MCNumberRef &r_number)
-{
-    MCJavaConvertJShortToNumberRef(p_object, r_number);
-}
-
-extern "C" MC_DLLEXPORT_DEF void MCJavaNumberFromJInt(MCJavaObjectRef p_object, MCNumberRef &r_number)
-{
-    MCJavaConvertJIntToNumberRef(p_object, r_number);
-}
-
-extern "C" MC_DLLEXPORT_DEF void MCJavaNumberFromJLong(MCJavaObjectRef p_object, MCNumberRef &r_number)
-{
-    MCJavaConvertJLongToNumberRef(p_object, r_number);
-}
-
-extern "C" MC_DLLEXPORT_DEF void MCJavaBooleanFromJBoolean(MCJavaObjectRef p_object, MCBooleanRef &r_number)
-{
-    MCJavaConvertJBooleanToBooleanRef(p_object, r_number);
-}
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 extern "C" bool com_livecode_java_Initialize(void)

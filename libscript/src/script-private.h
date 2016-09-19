@@ -319,7 +319,8 @@ struct MCScriptForeignHandlerDefinition: public MCScriptCommonHandlerDefinition
         {
             MCNameRef class_name;
             void *method_id;
-            MCJavaCallType call_type;
+            int call_type;
+            int return_type;
         } java;
     };
 };
