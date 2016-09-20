@@ -37,49 +37,14 @@
 -- At this point all identifiers either have a defined meaning, or are defined
 -- to be a pointer to the definingid. The next step is to check that bindings
 -- are appropriate to each id:
---   BD1) DEFINITION'constant(Value) - all id's in Value must be constant.
---   BD2) DEFINITION'class(Inherits, Implements) - for classes, Inherits must be a class, Implements must be interfaces. For interfaces, Inherits must be interfaces.
-
 --   BT1) TYPE'named(_, _, Parameters) - reference to a named type must have matching
 --   template parameters
 
 'sweep' CheckBindings(ANY)
+
+    'rule' CheckBindings(PACKAGE'package(_, _, _, _)):
     --
-
-    'rule' CheckBindings(DEFINITION'constant(Position, _, Type, Value)):
-        (|
-            where(Value -> nil)
-        ||
-            IsExpressionSimpleConstant(Value)
-        ||
-            Error_ConstantsMustBeSimple(Position)
-        |)
-        CheckBindings(Type)
-
-    'rule' CheckBindings(DEFINITION'class(Position, _, _, Definitions, Inherits, Implements)):
-        (|
-        /* BD2 */ CheckBindingIsClass(Inherits)
-        ||
-            Error_ClassesMayOnlyInheritFromClasses(Position)
-        |)
-
-        (|
-        /* BD2 */ CheckBindingIsInterface(Implements)
-        ||
-            Error_ClassesMayOnlyImplementInterfaces(Position)
-        |)
-        CheckBindings(Inherits)
-        CheckBindings(Implements)
-        CheckBindings(Definitions)
-
-    'rule' CheckBindings(DEFINITION'interface(Position, _, Definitions, Inherits)):
-        (|
-        /* BD2 */ CheckBindingIsInterface(Inherits)
-        ||
-            Error_InterfacesMayOnlyInheritFromInterfaces(Position)
-        |)
-        CheckBindings(Inherits)
-        CheckBindings(Definitions)
+    -- TODO : checking
 
 'condition' CheckParameters(TYPELIST, TYPE)
 
@@ -204,7 +169,6 @@
     'rule' ResolveIdQualifiedName(Id -> Name)
         Id'Name -> QName
         QName'Name -> Name
-        print("to resolve")
 
 'action' GetQualifiedName(ID, QUALIFIEDNAME -> NAME)
 

@@ -24,6 +24,7 @@
     MODIFIER
     SIGNATURE
     TYPE TYPELIST
+    BOUNDS
     EXPRESSION
     PARAMETER PARAMETERLIST
     ID QUALIFIEDNAME OPTIONALID
@@ -88,6 +89,7 @@
     named(Position: POS, Name: ID, Parameters: TYPELIST)
     template(Position: POS, Name: ID, Parameters: TYPELIST)
     placeholder(Position: POS, Name: ID)
+    wildcard(Position: POS, Bounds: BOUNDS)
     nil
 
 'type' TYPELIST
@@ -100,7 +102,8 @@
     
 'type' PARAMETER
     parameter(Position: POS, Name: ID, Type: TYPE)
-    
+    variadic(Position: POS)
+
 'type' EXPRESSION
     true(Position: POS)
     false(Position: POS)
@@ -139,6 +142,11 @@
 	class
     interface
     placeholder
+
+'type' BOUNDS
+    unbounded
+    upper(Type: TYPE)
+    lower(Type: TYPE)
 
 'table' PACKAGEINFO(Index: INT, Generator: INT, Alias: ID)
 'table' SYMBOLINFO(Index: INT, Generator: INT, Parent: ID, Modifiers: MODIFIER, Kind: SYMBOLKIND, Type: TYPE)

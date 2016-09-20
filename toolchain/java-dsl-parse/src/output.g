@@ -308,9 +308,21 @@
     'rule' OutputType(jarray(_, Type, Dimension)):
         OutputJArray(Type, Dimension)
 
-    'rule' OutputType(named(_, Id, Parameters)):
-        print(Id)
+    'rule' OutputType(wildcard(_, Bounds)):
+        OutputWrite("?")
+        OutputBounds(Bounds)
 
+'action' OutputBounds(BOUNDS)
+
+    'rule' OutputBounds(upper(Type)):
+        OutputWrite(" extends")
+        OutputType(Type)
+
+    'rule' OutputBounds(lower(Type)):
+        OutputWrite(" super")
+        OutputType(Type)
+
+    'rule' OutputBounds(unbounded):
 
 'action' OutputTypeList(TYPELIST)
 
@@ -442,6 +454,9 @@
         OutputWriteI("", SymbolName, "")
         OutputWrite(" as ")
         OutputType(Type)
+
+    'rule' OutputParam(variadic(_)):
+        OutputWrite("...")
 
 --------------------------------------------------------------------------------
 

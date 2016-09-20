@@ -475,6 +475,9 @@
     'rule' Parameter(-> parameter(Position, Name, Type)):
         UnqualifiedId(-> Name) @(-> Position) OptionalTypeClause(-> Type)
 
+    'rule' Parameter(-> variadic(Position)):
+        "..." @(-> Position)
+
 --------------------------------------------------------------------------------
 -- Type Syntax
 --------------------------------------------------------------------------------
@@ -495,17 +498,32 @@
 
 'nonterm' GenericTypeList(-> TYPELIST)
 
-    'rule' GenericTypeList(-> typelist(placeholder(Position, Name), Tail)):
-        @(-> Position) UnqualifiedId(-> Name) "," GenericTypeList(-> Tail)
-
-    'rule' GenericTypeList(-> typelist(placeholder(Position, Name), nil)):
-        @(-> Position) UnqualifiedId(-> Name)
-
     'rule' GenericTypeList(-> typelist(Head, Tail)):
-        GenericType(-> Head) "," GenericTypeList(-> Tail)
+         GenericTypeListElement(-> Head) "," GenericTypeList(-> Tail)
 
     'rule' GenericTypeList(-> typelist(Head, nil)):
-        GenericType(-> Head)
+        GenericTypeListElement(-> Head)
+
+'nonterm' GenericTypeListElement(-> TYPE)
+
+    'rule' GenericTypeListElement(-> placeholder(Position, Name)):
+        @(-> Position) UnqualifiedId(-> Name)
+
+    'rule' GenericTypeListElement(-> wildcard(Position, Bounds)):
+        @(-> Position) "?" OptionalBounds(-> Bounds)
+
+    'rule' GenericTypeListElement(-> Type):
+        GenericType(-> Type)
+
+'nonterm' OptionalBounds(-> BOUNDS)
+
+    'rule' OptionalBounds(-> upper(Type)):
+        "extends" NamedType(-> Type)
+
+    'rule' OptionalBounds(-> lower(Type)):
+        "super" NamedType(-> Type)
+
+    'rule' OptionalBounds(-> unbounded):
 
 'nonterm' Type(-> TYPE)
 

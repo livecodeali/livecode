@@ -243,6 +243,10 @@
 
 	'rule' OutputJavaParam(parameter(_, _, Type)):
 		OutputJavaTypeCode(Type)
+
+    'rule' OutputJavaParam(variadic(_)):
+        OutputWrite("JArray")
+
 ----
 
 'action' GenerateClassDefinitions(TYPE, DEFINITION)
@@ -498,6 +502,9 @@
         OutputWrite(" as ")
         GenerateType(Type)
 
+    'rule' GenerateParam(variadic(_)):
+        OutputWrite("in va_args as List")
+
 'action' GenerateJavaParam(PARAMETER)
 
     'rule' GenerateJavaParam(parameter(_, Id, Type)):
@@ -514,26 +521,9 @@
         GenerateDefinitions(Right)
 
     'rule' GenerateDefinitions(class(_, Modifiers, Type, Definitions, Inherits, Implements)):
-        /*
-        OutputWrite("class ")
-        GenerateType(Type)
-        GenerateInherits(Inherits)
-        GenerateImplements(Implements)
-        OutputWrite("\n")
-        GenerateClassDefinitions(Type, Definitions)
-        OutputWrite("end class\n\n")
-        */
         GenerateClassDefinitions(Type, Definitions)
 
     'rule' GenerateDefinitions(interface(_, Type, Definitions, Inherits)):
-        /*
-        OutputWrite("interface ")
-        GenerateType(Type)
-        GenerateInherits(Inherits)
-        OutputWrite("\n")
-        GenerateClassDefinitions(Type, Definitions)
-        OutputWrite("end interface\n\n")
-        */
         GenerateClassDefinitions(Type, Definitions)
 
     'rule' GenerateDefinitions(use(_,_)):
@@ -633,7 +623,10 @@
 
     'rule' GenerateJavaType(template(_, Id, Parameters)):
     	OutputWrite("JObject")
-		
+
+    'rule' GenerateJavaType(wildcard(_, _)):
+    	OutputWrite("JObject")
+
     'rule' GenerateJavaType(placeholder(_, Id)):
         ResolveIdName(Id -> SymbolName)
         OutputWriteI("", SymbolName, "")
@@ -684,7 +677,10 @@
 
     'rule' GenerateType(template(_, Id, Parameters)):
     	OutputWrite("JObject")
-		
+
+    'rule' GenerateType(wildcard(_, _)):
+    	OutputWrite("JObject")
+
     'rule' GenerateType(placeholder(_, Id)):
         ResolveIdName(Id -> SymbolName)
         OutputWriteI("", SymbolName, "")
@@ -801,6 +797,8 @@
         OutputWriteS("\"", Value, "\"")
 
 
+-- TODO: use appropriate modifiers
+/*
 'action' GenerateModifiers(MODIFIER)
 
     'rule' GenerateModifiers(classmodifiers(Access, StrictFP, Inherit, Modify, Instance)):
@@ -863,7 +861,7 @@
     'rule' GenerateModifiers(public):
 
     'rule' GenerateModifiers(inferred):
-
+*/
 --------------------------------------------------------------------------
 
 'action' TypeToQualifiedName(TYPE -> NAME)
