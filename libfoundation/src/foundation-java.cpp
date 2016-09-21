@@ -369,22 +369,46 @@ static bool __JavaJNINonVirtualMethodResult(jobject p_instance, jclass p_class, 
     return true;
 }
 
-static bool __JavaJNIGetParams(void **args, uindex_t p_count, int *p_types, jvalue *&r_params)
+static bool __JavaJNIGetReturnType(void **args, MCStringRef p_signature, jvalue *&r_params)
 {
-    MCAutoArray<jvalue> t_args;
-    if (!t_args . New(p_count))
+
+static bool __JavaJNIGetParams(void **args, MCStringRef p_signature, jvalue *&r_params)
+{
+    uindex_t t_close_parenthesis;
+    if (!MCStringFirstIndexOfChar(p_signature, ')', 0, kMCStringOptionCompareExact, t_close_parenthesis))
         return false;
     
+    MCAutoStringRef t_args;
+    if (!MCStringCopySubstring(p_signature, MCRangeMake(1, t_close_parenthesis - 1), &t_args))
+        return false;
+
+    MCAutoProperListRef t_arg_list;
+    if (!MCStringSplitByDelimiter(*t_args, MCSTR(","), kMCStringOptionCompareExact, &t_arg_list))
+        return false;
+    
+    uindex_t t_arg_count = MCProperListGetLength(*t_arg_list);
+    
+    MCAutoArray<jvalue> t_args;
+    if (!t_args . New(t_arg_count))
+        return false;
+
     for (uindex_t i = 0; i < p_count; i++)
     {
-        switch (p_types[i])
+        MCJavaType t_type;
+        uindex_t t_array_depth = 0;
+        
+        MCJavaMapTypeCode(MCProperListFetchElementAtIndex[i], t_type, t_array_depth);
+        
+        if (t_array_depth != 0)
+        {
+            MCAssert(false);
+            return false;
+        }
+        
+        switch (t_type)
         {
             case kMCJavaTypeObject:
                 t_args[i] . l = (jobject)MCJavaObjectGetObject(*(MCJavaObjectRef *)args[i]);
-                break;
-            case kMCJavaTypeArray:
-                // Not yet implemented
-                MCAssert(false);
                 break;
             case kMCJavaTypeBoolean:
                 t_args[i].z = *(jboolean *)args[i];
@@ -413,7 +437,7 @@ static bool __JavaJNIGetParams(void **args, uindex_t p_count, int *p_types, jval
         }
     }
     
-    t_args . Take(r_params, p_count);
+    t_args . Take(r_params, t_arg_count);
     return true;
 }
 #endif
@@ -546,77 +570,36 @@ static MCJavaType MCJavaMapTypeCodeSubstring(MCStringRef p_type_code, MCRange p_
     if (MCStringBeginsWithCString(p_type_code, (const char_t *)"[", kMCStringOptionCompareExact))
         return kMCJavaTypeArray;
     
-    for (uindex_t i = 0; i < sizeof(type_map) / sizeof(type_map[0]); i++)
-    {
-        if (MCStringSubstringIsEqualToCString(p_type_code, p_range, type_map[i] . name, kMCStringOptionCompareExact))
-        {
-            return type_map[i] . type;
-        }
-    }
     
     return kMCJavaTypeObject;
 }
 
 MC_DLLEXPORT_DEF
-int MCJavaMapTypeCode(MCStringRef p_type_code)
+int MCJavaMapTypeCode(MCStringRef p_arg, MCJavaType& r_code, uindex_t& r_array_depth)
 {
-    return (int)MCJavaMapTypeCodeSubstring(p_type_code, MCRangeMake(0, MCStringGetLength(p_type_code)));
-}
-
-static bool __NextArgument(MCStringRef p_arguments, MCRange& x_range)
-{
-    if (x_range . offset + x_range . length >= MCStringGetLength(p_arguments))
-        return false;
+    MCJavaType t_type;
+    t_type = kMCJavaTypeObject;
     
-    x_range . offset = x_range . offset + x_range . length;
+    uindex_t t_array_depth = 0;
+    while (MCStringGetCharAtIndex(p_arg, t_array_depth) == '[')
+        t_array_depth++;
     
-    MCRange t_new_range;
-    t_new_range . offset = x_range . offset;
-    t_new_range . length = 1;
+    MCRange t_arg_range = MCRangeMake(t_array_depth, UINDEX_MAX);
     
-    uindex_t t_length = 1;
-    
-    MCJavaType t_next_type;
-    while ((t_next_type = MCJavaMapTypeCodeSubstring(p_arguments, t_new_range)) == kMCJavaTypeArray)
+    for (uindex_t i = 0; i < sizeof(type_map) / sizeof(type_map[0]); i++)
     {
-        t_new_range . offset++;
-        t_length++;
-    }
-    
-    if (t_next_type == kMCJavaTypeObject)
-    {
-        if (!MCStringFirstIndexOfChar(p_arguments, ';', x_range . offset, kMCStringOptionCompareExact, t_length))
-            return false;
+        if (MCStringSubstringIsEqualToCString(p_arg, t_arg_range, type_map[i] . name, kMCStringOptionCompareExact))
+        {
+            t_type = type_map[i] . type;
+        }
     }
 
-    x_range . length = t_length;
-    return true;
+    r_code = t_type;
+    r_array_depth = t_array_depth;
 }
 
 MC_DLLEXPORT_DEF
-bool MCJavaGetArgumentTypes(MCStringRef p_arguments, int *&r_argument_types, uindex_t& r_count)
-{
-    // Remove brackets from arg string
-    MCAutoStringRef t_args;
-    if (!MCStringCopySubstring(p_arguments, MCRangeMake(1, MCStringGetLength(p_arguments) - 2), &t_args))
-        return false;
-    
-    MCAutoArray<int> t_types;
-    t_types . New(0);
-
-    MCRange t_range = MCRangeMake(0, 0);
-    while (__NextArgument(p_arguments, t_range))
-    {
-        if (!t_types . Push((int)MCJavaMapTypeCodeSubstring(p_arguments, t_range)))
-            return false;
-    }
-    
-    t_types . Take(r_argument_types, r_count);
-    return true;
-}
-
-MC_DLLEXPORT_DEF
-bool MCJavaCallJNIMethod(MCNameRef p_class_name, void *p_method_id, int p_call_type, int p_return_type, void *r_return, int *p_arg_types, void **p_args, uindex_t p_arg_count)
+bool MCJavaCallJNIMethod(MCNameRef p_class_name, void *p_method_id, int p_call_type, MCStringRef p_signature, void *r_return, void **p_args, uindex_t p_arg_count)
 {
 #ifdef TARGET_SUPPORTS_JAVA
     jmethodID t_method_id = (jmethodID)p_method_id;
@@ -638,9 +621,13 @@ bool MCJavaCallJNIMethod(MCNameRef p_class_name, void *p_method_id, int p_call_t
     bool t_is_instance = p_call_type != MCJavaCallTypeStatic;
     jvalue *t_params = nil;
     if (t_is_instance)
-        __JavaJNIGetParams(&p_args[1], p_arg_count - 1, p_arg_types, t_params);
+        __JavaJNIGetParams(&p_args[1], p_signature, t_params);
     else
-        __JavaJNIGetParams(p_args, p_arg_count, p_arg_types, t_params);
+        __JavaJNIGetParams(p_args, p_signature, t_params);
+    
+    MCJavaType t_return_type;
+    uindex_t t_array_depth = 0;
+    __JavaJNIGetReturnType(p_signature, t_return_type, t_array_depth);
     
     switch (p_call_type)
     {
@@ -731,10 +718,17 @@ MC_DLLEXPORT_DEF void *MCJavaGetMethodId(MCNameRef p_class_name, MCStringRef p_m
     if (!MCJavaClassNameToPathString(p_class_name, &t_class_path))
         return nil;
     
+    MCAutoStringRef t_signature;
+    if (!MCStringMutableCopy(p_signature, &t_signature))
+        return nil;
+    
+    if (!MCStringReplace(*t_signature, MCSTR(","), kMCEmptyString, kMCStringOptionCompareExact))
+        return nil;
+    
     MCAutoStringRefAsCString t_class_cstring, t_method_cstring, t_signature_cstring;
     t_class_cstring . Lock(*t_class_path);
     t_method_cstring . Lock(p_method_name);
-    t_signature_cstring . Lock(p_signature);
+    t_signature_cstring . Lock(*t_signature);
     
     jclass t_java_class = nil;
     t_java_class = s_env->FindClass(*t_class_cstring);
