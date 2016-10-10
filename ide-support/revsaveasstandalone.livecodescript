@@ -138,8 +138,6 @@ private function getBuildFolder pStack, pFolder, pSettings
 end getBuildFolder
 
 on revSaveAsStandalone pStack, pFolder, pPreview
-   global gREVStackStatus
-   
    if pStack = empty then
       put the short name of the topStack into pStack
    end if
@@ -151,7 +149,7 @@ on revSaveAsStandalone pStack, pFolder, pPreview
    end if
    
    if the fileName of stack pStack = empty then
-      put "edited" into gREVStackStatus[pStack]
+      revIDESetEdited pStack
    end if
    
    # OK-2008-03-13 : Bug 5874. Do a complete check to see if the stack needs to be saved here
@@ -160,13 +158,13 @@ on revSaveAsStandalone pStack, pFolder, pPreview
    put false into tEdited
    
    # Find out if the stack or any substack has been edited
-   if gREVStackStatus[the short name of stack pStack] is "edited" then
+   if revIDEStackIsEdited(the short name of stack pStack) then
       put true into tEdited
    else
       local tSubstacks
       put the substacks of stack pStack into tSubstacks
       repeat for each line tSubstack in tSubstacks
-         if gREVStackStatus[the short name of stack tSubstack] is "edited" then
+         if revIDEStackIsEdited(the short name of stack tSubstack) then
             put true into tEdited
          end if
       end repeat
@@ -239,7 +237,7 @@ on revSaveAsStandalone pStack, pFolder, pPreview
    
    # If any have been edited, force the save dialog by setting edited on the mainstack
    if tEdited then
-      revSetEdited the short name of stack pStack
+      revIDESetEdited pStack
       setSettings pStack, tSettings
    end if
    

@@ -18,32 +18,67 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 widget com.livecode.extensions.beaumont.pinkCircle
 
 use com.livecode.canvas
+use com.livecode.engine
+use com.livecode.widget
+
+use com.livecode.foreign
+use com.livecode.java
+
+foreign handler _JNI_BatteryManager_isCharging(in pObj as JObject) returns CBool binds to "java:android.os.BatteryManager>isCharging()Z"
+
+public constant ACTION_CHARGING is "android.os.action.CHARGING"
+public constant ACTION_DISCHARGING is "android.os.action.DISCHARGING"
+public handler BatteryManager_isCharging(in pObj as JObject) returns Boolean
+	variable tJNIResult as Boolean
+	unsafe
+		put _JNI_BatteryManager_isCharging(pObj) into tJNIResult
+	end unsafe
+	return tJNIResult
+end handler
 
 metadata title is "My Pink Circle"
 metadata author is "LiveCode"
 metadata version is "1.0.0"
 
-property circleMargin get mMargin set setMargin
-
-private variable mMargin as Real
+private variable mStatus as String
+private variable mStringRect as Rectangle
+private variable mIcon as Widget
 
 public handler onCreate() 
-	put 0 into mMargin
+	put a new widget "com.livecode.widget.svgpath" into mIcon
+	GetChargeState()
+	place mIcon
+	OnGeometryChanged()
 end handler
 
 public handler OnPaint()
-   // Create a path with a radius of half the width of the canvas
-   // Set the paint to a solid pink color
-   // Fill the path
-   variable tCirclePath as Path
-   put circle path centered at point [my width / 2, my height / 2] with radius ((my width - mMargin)/2) into tCirclePath
-   set the paint of this canvas to solid paint with color [1, 0, 1]
-   fill tCirclePath on this canvas
+	fill text mStatus at center of mStringRect on this canvas
 end handler
 
-public handler setMargin(in pMargin as Real)
-	put pMargin into mMargin
-	redraw all
+public handler OnGeometryChanged()
+	variable tTop as Real
+	put 4 * my height / 5 into tTop
+	set the rectangle of mIcon to rectangle [0,0,my width, tTop]
+	put rectangle [0, tTop, my width, my height] into mStringRect
 end handler
+
+public handler BatteryIsCharging()
+	if the operating system is "android" then
+		variable tObj as JObject
+		put GetObject("android.os.BatteryManager", []) into tObj
+		return BatteryManager_isCharging(tObj)
+	end if
 	
+	return true
+end handler
+
+public handler GetChargeState()
+	if BatteryIsCharging() then
+		set property "iconPath" of mIcon to "M471.108,96.392H36.27c-20,0-36.27,16.227-36.27,36.172v304.033c0,19.945,16.27,36.172,36.27,36.172h434.838    c20,0,36.273-16.227,36.273-36.172V132.564C507.382,112.619,491.108,96.392,471.108,96.392z M433.973,375.112    c0,2.922-2.708,3.938-6.047,2.268l-121.696-60.885c-3.339-1.672-5.994-0.656-5.931,2.264l0.79,35.902    c0.064,2.924-2.179,3.59-5.013,1.49L75.258,192.509c-2.833-2.099-2.359-2.512,1.056-0.924l152.73,71.01    c3.415,1.588,6.185,0.508,6.185-2.415v-45.282c0-2.922,2.723-3.957,6.086-2.307l186.571,91.438 c3.36,1.646,6.087,5.354,6.087,8.275V375.112z M532.89,174.893c0,0-1.609,0-3.592,0c-1.983,0-3.593,2.727-3.593,6.086v207.199c0,3.361,1.606,6.086,3.593,6.086h3.592 c20,0,36.271-16.227,36.271-36.172V211.065C569.16,191.12,552.89,174.893,532.89,174.893z"
+		put ACTION_CHARGING into mStatus
+	else
+		set property "iconPath" of mIcon to "M471.108,96.392H36.27c-20,0-36.27,16.227-36.27,36.172v304.033c0,19.945,16.27,36.172,36.27,36.172h434.838    c20,0,36.271-16.227,36.271-36.172V132.564C507.382,112.619,491.108,96.392,471.108,96.392z M126.911,422.065    c0,11.455-9.315,20.746-20.802,20.746H53.544c-11.49,0-20.802-9.291-20.802-20.746v-274.97c0-11.459,9.314-20.747,20.802-20.747    h52.564c11.491,0,20.802,9.287,20.802,20.747V422.065z M242.753,422.065c0,11.455-9.314,20.746-20.802,20.746h-52.568    c-11.49,0-20.802-9.291-20.802-20.746v-274.97c0-11.459,9.314-20.747,20.802-20.747h52.564c11.491,0,20.802,9.287,20.802,20.747 v274.97H242.753z M532.89,174.893c0,0-1.606,0-3.592,0c-1.986,0-3.593,2.727-3.593,6.086v207.199c0,3.361,1.606,6.086,3.593,6.086h3.592 c20,0,36.271-16.227,36.271-36.172V211.065C569.16,191.12,552.89,174.893,532.89,174.893z"
+		put ACTION_DISCHARGING into mStatus
+	end if
+end handler
 end widget
