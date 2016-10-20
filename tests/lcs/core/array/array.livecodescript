@@ -269,3 +269,13 @@ on TestEncodeDecode
    
    __encodeDecodeArray tEmptyArray
 end TestEncodeDecode
+
+-- MCArraysEvalArrayDecode
+on TestArrayDecode
+   TestSkip "ArrayDecode", "not yet implemented"
+end TestArrayDecode
+
+-- MCArraysEvalArrayEncode
+on TestArrayEncode
+   TestSkip "ArrayEncode", "not yet implemented"
+end TestArrayEncode

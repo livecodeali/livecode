@@ -239,3 +239,13 @@ on TestSplitAsSet
    split tResult with empty as set
    TestAssert "split set (native, empty)", tResult is tExpected
 end TestSplitAsSet
+
+-- MCArraysExecSplitByColumn
+on TestSplitByColumn
+   TestSkip "SplitByColumn", "not yet implemented"
+end TestSplitByColumn
+
+-- MCArraysExecSplit
+on TestSplit
+   TestSkip "Split", "not yet implemented"
+end TestSplit

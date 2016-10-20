@@ -28,3 +28,13 @@ on TestDeleteTargetInFrontScript
    
    TestAssert "Object is deleted", there is no button "test"
 end TestDeleteTargetInFrontScript
+
+-- MCEngineEvalTarget
+on TestTarget
+   TestSkip "Target", "not yet implemented"
+end TestTarget
+
+-- MCEngineEvalTargetContents
+on TestTargetContents
+   TestSkip "TargetContents", "not yet implemented"
+end TestTargetContents

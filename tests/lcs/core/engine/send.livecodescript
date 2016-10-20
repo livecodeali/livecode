@@ -32,3 +32,12 @@ on TestSendParams
 	send tSendScript to tStack
 	TestAssert "send script with multiple params", the result is "2"
 end TestSendParams
+-- MCEngineExecSend
+on TestSend
+   TestSkip "Send", "not yet implemented"
+end TestSend
+
+-- MCEngineExecSendInTime
+on TestSendInTime
+   TestSkip "SendInTime", "not yet implemented"
+end TestSendInTime

@@ -121,3 +121,13 @@ on  test_arrayCombineByRow
    
    TestAssert "Combine by column", tUncombinedData is tArray
 end  test_arrayCombineByRow
+
+-- MCArraysExecCombineByColumn
+on TestCombineByColumn
+   TestSkip "CombineByColumn", "not yet implemented"
+end TestCombineByColumn
+
+-- MCArraysExecCombine
+on TestCombine
+   TestSkip "Combine", "not yet implemented"
+end TestCombine

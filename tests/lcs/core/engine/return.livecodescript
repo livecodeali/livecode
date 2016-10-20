@@ -229,3 +229,8 @@ on TestReturnNested
                   the result is "ReturnValue" and \
                   it is "TheIt"
 end TestReturnNested
+
+-- MCEngineExecReturnValue
+on TestReturnValue
+   TestSkip "ReturnValue", "not yet implemented"
+end TestReturnValue

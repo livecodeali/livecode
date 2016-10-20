@@ -49,3 +49,8 @@ on TestGroupByScript
 
    delete stack "Test"
 end TestGroupByScript
+
+-- MCInterfaceExecGroupSelection
+on TestGroupSelection
+   TestSkip "GroupSelection", "not yet implemented"
+end TestGroupSelection
