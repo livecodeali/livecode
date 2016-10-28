@@ -2895,9 +2895,9 @@ void MCObject::SetTextFont(MCExecContext& ctxt, MCStringRef font)
 		//   to ensure substacks update properly.
 		// MW-2013-03-21: [[ Bug ]] Unless its the templateStack (parent == nil) in which
 		//   case we don't want to do any font recomputation.
-		if ((gettype() == CT_STACK && parent != nil) || opened)
+		if (gettype() == CT_STACK || opened)
 		{
-			if (recomputefonts(parent -> getfontref()))
+			if (parent != nil && recomputefonts(parent -> getfontref()))
 			{
 				recompute();
 				t_redraw = true;
@@ -2960,9 +2960,9 @@ void MCObject::SetTextSize(MCExecContext& ctxt, uinteger_t* size)
 	//   to ensure substacks update properly.
 	// MW-2013-03-21: [[ Bug ]] Unless its the templateStack (parent == nil) in which
 	//   case we don't want to do any font recomputation.
-	if ((gettype() == CT_STACK && parent != nil) || opened)
+	if (gettype() == CT_STACK || opened)
 	{
-		if (recomputefonts(parent -> getfontref()))
+		if (parent != nil && recomputefonts(parent -> getfontref()))
 		{
 			recompute();
 			t_redraw = true;
@@ -3015,9 +3015,9 @@ void MCObject::SetTextStyle(MCExecContext& ctxt, const MCInterfaceTextStyle& p_s
 	//   to ensure substacks update properly.
 	// MW-2013-03-21: [[ Bug ]] Unless its the templateStack (parent == nil) in which
 	//   case we don't want to do any font recomputation.
-	if ((gettype() == CT_STACK && parent != nil) || opened)
+	if (gettype() == CT_STACK || opened)
 	{
-		if (recomputefonts(parent -> getfontref()))
+		if (parent != nil && recomputefonts(parent -> getfontref()))
 		{
 			recompute();
 			t_redraw = true;
