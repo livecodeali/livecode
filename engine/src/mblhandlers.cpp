@@ -3788,7 +3788,9 @@ Exec_stat MCHandleSpecificCameraFeatures(void *p_context, MCParameter *p_paramet
     MCAutoValueRef t_value;
     MCAutoStringRef t_string;
 	p_parameters -> eval_argument(ctxt, &t_value);
-    /* UNCHECKED */ ctxt . ConvertToString(*t_value, &t_string);
+    if (!ctxt . ConvertToString(*t_value, &t_string))
+		return ES_ERROR;
+	
     if (MCStringIsEqualToCString(*t_string, "front", kMCCompareCaseless))
 		t_source = kMCCameraSourceTypeFront;
 	else if (MCStringIsEqualToCString(*t_string, "rear", kMCCompareCaseless))
@@ -3803,19 +3805,30 @@ Exec_stat MCHandleSpecificCameraFeatures(void *p_context, MCParameter *p_paramet
 	MCCameraFeaturesType t_features_set;
     t_features_set = (MCCameraFeaturesType)t_result;
     MCAutoListRef t_list;
-    /* UNCHECKED */ MCListCreateMutable(',', &t_list);
+    if (!MCListCreateMutable(',', &t_list))
+		return ES_ERROR;
     
 	if ((t_features_set & kMCCameraFeaturePhoto) != 0)
-        /* UNCHECKED */ MCListAppendCString(*t_list, "photo");
+	{
+        if (!MCListAppendCString(*t_list, "photo"))
+			return ES_ERROR;
+	}
 	if ((t_features_set & kMCCameraFeatureVideo) != 0)
-        /* UNCHECKED */ MCListAppendCString(*t_list, "video");
+	{
+		if (!MCListAppendCString(*t_list, "video"))
+			return ES_ERROR;
+	}
 	if ((t_features_set & kMCCameraFeatureFlash) != 0)
-        /* UNCHECKED */ MCListAppendCString(*t_list, "flash");
+	{
+		if (!MCListAppendCString(*t_list, "flash"))
+			return ES_ERROR;
+	}
 	
     MCAutoStringRef t_features;
-    /* UNCHECKED */ MCListCopyAsString(*t_list, &t_features);
-    ctxt . SetTheResultToValue(*t_features);
-    
+    if (!MCListCopyAsString(*t_list, &t_features))
+		return ES_ERROR;
+	
+	ctxt . SetTheResultToValue(*t_features);
 	return ES_NORMAL;
 }
 

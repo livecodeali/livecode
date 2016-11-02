@@ -210,37 +210,66 @@ static void MCInterfaceDecorationFormat(MCExecContext& ctxt, const MCInterfaceDe
         }
         else
         {
-			MCListRef t_output;
-			/* UNCHECKED */ MCListCreateMutable(',', t_output);
+			MCAutoListRef t_output;
+			if (!MCListCreateMutable(',', &t_output))
+				return;
 			
             if (p_input . decorations & WD_TITLE)
-				/* UNCHECKED */ MCListAppendCString(t_output, MCtitlestring);
-				
-            if (p_input . decorations & WD_MENU)
-				/* UNCHECKED */ MCListAppendCString(t_output, MCmenustring);
-            if (p_input . decorations & WD_MINIMIZE)
-				/* UNCHECKED */ MCListAppendCString(t_output, MCminimizestring);
-				
-            if (p_input . decorations & WD_MAXIMIZE)
-				/* UNCHECKED */ MCListAppendCString(t_output, MCmaximizestring);
-		
-            if (p_input . decorations & WD_CLOSE)
-				/* UNCHECKED */ MCListAppendCString(t_output, MCclosestring);
-				
-            if (p_input . decorations & WD_METAL)
-				/* UNCHECKED */ MCListAppendCString(t_output, MCmetalstring);
-				
-            if (p_input . decorations & WD_UTILITY)
-				/* UNCHECKED */ MCListAppendCString(t_output, MCutilitystring);
+			{
+				if (!MCListAppendCString(*t_output, MCtitlestring))
+					return;
+			}
 			
-            if (p_input . decorations & WD_NOSHADOW)
-				/* UNCHECKED */ MCListAppendCString(t_output, MCnoshadowstring);
+			if (p_input . decorations & WD_MENU)
+			{
+				if (!MCListAppendCString(*t_output, MCmenustring))
+					return;
+			}
+			
+			if (p_input . decorations & WD_MINIMIZE)
+			{
+				if (!MCListAppendCString(*t_output, MCminimizestring))
+					return;
+			}
+
+			if (p_input . decorations & WD_MAXIMIZE)
+			{
+				if (!MCListAppendCString(*t_output, MCmaximizestring))
+					return;
+			}
+
+			if (p_input . decorations & WD_CLOSE)
+			{
+				if (!MCListAppendCString(*t_output, MCclosestring))
+					return;
+			}
+
+			if (p_input . decorations & WD_METAL)
+			{
+				if (!MCListAppendCString(*t_output, MCmetalstring))
+					return;
+			}
+			
+			if (p_input . decorations & WD_UTILITY)
+			{
+				if (!MCListAppendCString(*t_output, MCutilitystring))
+					return;
+			}
+
+			if (p_input . decorations & WD_NOSHADOW)
+			{
+				if (!MCListAppendCString(*t_output, MCnoshadowstring))
+					return;
+			}
+			
+			if (p_input . decorations & WD_FORCETASKBAR)
+			{
+				if (!MCListAppendCString(*t_output, MCforcetaskbarstring))
+					return;
+			}
 				
-            if (p_input . decorations & WD_FORCETASKBAR)
-				/* UNCHECKED */ MCListAppendCString(t_output, MCforcetaskbarstring);
-				
-            /* UNCHECKED */ MCListCopyAsStringAndRelease(t_output, r_output);
-			return;
+            if (MCListCopyAsString(*t_output, r_output))
+				return;
         }
     }
     else

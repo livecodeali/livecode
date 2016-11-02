@@ -1469,16 +1469,19 @@ bool MCField::parsetabstops(Properties which, MCStringRef data, uint16_t*& r_tab
 
 // MW-2012-02-11: [[ TabWidths ]] This method formats the tabStops in either stops or
 //   widths style depending on the value of which.
-void MCField::formattabstops(Properties which, uint16_t *tabs, uint16_t tab_count, MCStringRef &r_result)
+bool MCField::formattabstops(Properties which, uint16_t *tabs, uint16_t tab_count, MCStringRef &r_result)
 {
-	if (r_result != nil)
-        MCValueRelease(r_result);
     MCAutoListRef t_list;
-    /* UNCHECKED */ MCListCreateMutable(',', &t_list);
+    if (!MCListCreateMutable(',', &t_list))
+		return false;
+	
 	if (which == P_TAB_STOPS)
 	{
 		for(uint32_t i = 0 ; i < tab_count ; i++)
-            MCListAppendInteger(*t_list, tabs[i]);
+		{
+            if (!MCListAppendInteger(*t_list, tabs[i]))
+				return false;
+		}
 	}
 	else
 	{
@@ -1486,11 +1489,13 @@ void MCField::formattabstops(Properties which, uint16_t *tabs, uint16_t tab_coun
 		t_previous_tab = 0;
 		for(uint32_t i = 0; i < tab_count; i++)
 		{
-            MCListAppendInteger(*t_list, tabs[i]- t_previous_tab);
+            if (!MCListAppendInteger(*t_list, tabs[i] - t_previous_tab))
+				return false;
 			t_previous_tab = tabs[i];
 		}
 	}
-    /* UNCHECKED */ MCListCopyAsString(*t_list, r_result);
+	
+    return MCListCopyAsString(*t_list, r_result);
 }
 
 bool MCField::parsetabalignments(MCStringRef p_data, intenum_t *&r_alignments, uindex_t &r_alignment_count)

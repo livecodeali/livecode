@@ -388,18 +388,18 @@ bool coretext_font_get_metrics(void *p_font, float& r_ascent, float& r_descent, 
 
 bool coretext_get_font_names(MCListRef &r_names)
 {
+	MCAutoListRef t_names;
+	if (!MCListCreateMutable('\n', &t_names))
+		return false;
+	
     CTFontCollectionRef t_fonts;
     t_fonts = CTFontCollectionCreateFromAvailableFonts(NULL);
     
     CFArrayRef t_descriptors;
     t_descriptors = CTFontCollectionCreateMatchingFontDescriptors(t_fonts);
     
-    MCAutoListRef t_names;
-    MCListCreateMutable('\n', &t_names);
-    
     char t_cstring_font_name[256];
-    bool t_success;
-    t_success = true;
+    bool t_success = true;
     
     for(CFIndex i = 0; t_success && i < CFArrayGetCount(t_descriptors); i++)
     {
@@ -428,12 +428,13 @@ bool coretext_get_font_names(MCListRef &r_names)
 }
 
 bool core_text_get_font_styles(MCStringRef p_name, uint32_t p_size, MCListRef &r_styles)
-{    
+{
+	MCAutoListRef t_styles;
+	if (!MCListCreateMutable('\n', &t_styles))
+		return false;
+	
     CTFontRef t_font_family;
     t_font_family = (CTFontRef)coretext_font_create_with_name_and_size(p_name, p_size);
-    
-    MCAutoListRef t_styles;
-    /* UNCHECKED */ MCListCreateMutable('\n', &t_styles);
     
     bool t_success;
     t_success = true;

@@ -1961,17 +1961,19 @@ void MCStringsExecFilterDelimited(MCExecContext& ctxt, MCStringRef p_source, boo
 {
 	uint32_t t_length = MCStringGetLength(p_source);
 	if (t_length == 0)
-        MCStringCopy(kMCEmptyString, r_result);
+	{
+		r_result = MCValueRetain(kMCEmptyString);
+		return;
+	}
 
 	MCAutoListRef t_output;
-    MCListCreateMutable(p_delimiter, &t_output);
+	bool t_success = MCListCreateMutable(p_delimiter, &t_output);
 
 	// OK-2010-01-11: Bug 7649 - Filter command was incorrectly removing empty lines.
 	// Now ignores delimiter for matching but includes it in the append.
 
     uindex_t t_last_offset = 0;
 	bool t_found = true;
-    bool t_success = true;
     
     MCRange t_chunk_range, t_found_range;
     MCStringOptions t_options = ctxt . GetStringComparisonType();
@@ -1998,16 +2000,19 @@ void MCStringsExecFilterDelimited(MCExecContext& ctxt, MCStringRef p_source, boo
 		t_last_offset = t_found_range . offset + t_found_range . length;
 	}
 	
-    if (!t_success)
-    {
-        // IM-2013-07-26: [[ Bug 10774 ]] if filterlines fails throw a "no memory" error
-        ctxt . LegacyThrow(EE_NO_MEMORY);
-        MCStringCopy(kMCEmptyString, r_result);
-    }
-    else if (!MCListIsEmpty(*t_output))
-        /* UNCHECKED */ MCListCopyAsString(*t_output, r_result);
-	else
-        r_result = MCValueRetain(kMCEmptyString);
+	if (t_success)
+	{
+		if (!MCListIsEmpty(*t_output))
+			t_success = MCListCopyAsString(*t_output, r_result);
+		else
+			r_result = MCValueRetain(kMCEmptyString);
+	}
+	
+    if (t_success)
+		return;
+	
+	// IM-2013-07-26: [[ Bug 10774 ]] if filterlines fails throw a "no memory" error
+	ctxt . LegacyThrow(EE_NO_MEMORY);
 }
 
 void MCStringsExecFilterWildcard(MCExecContext& ctxt, MCStringRef p_source, MCStringRef p_pattern, bool p_without, bool p_lines, MCStringRef &r_result)

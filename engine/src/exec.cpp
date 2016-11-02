@@ -2594,16 +2594,31 @@ void MCExecFetchProperty(MCExecContext& ctxt, const MCPropertyInfo *prop, void *
             ((void(*)(MCExecContext&, void *, MCProperListRef&))prop -> getter)(ctxt, mark, &t_proper_list);
             if (!ctxt . HasError())
             {
-                MCListRef t_list;
-                /* UNCHECKED */ MCListCreateMutable(prop -> type == kMCPropertyTypeProperLinesOfString ? '\n' : ',', t_list);
-                uintptr_t t_iterator;
-                t_iterator = 0;
+				char t_delimiter;
+				if (prop -> type ==kMCPropertyTypeProperLinesOfString)
+					t_delimiter = '\n';
+				else
+					t_delimiter = ',';
+				
+                MCAutoListRef t_list;
+                bool t_success = MCListCreateMutable(t_delimiter, &t_list);
+                uintptr_t t_iterator = 0;
                 MCValueRef t_element;
-                while(MCProperListIterate(*t_proper_list, t_iterator, t_element))
-                    /* UNCHECKED */ MCListAppend(t_list, t_element);
-                
-                r_value . type = kMCExecValueTypeStringRef;
-                /* UNCHECKED */ MCListCopyAsStringAndRelease(t_list, r_value . stringref_value);
+                while (t_success &&
+				       MCProperListIterate(*t_proper_list, t_iterator,
+				                           t_element))
+					t_success = MCListAppend(*t_list, t_element);
+				
+				if (t_success)
+					t_success = MCListCopyAsString(*t_list, r_value . stringref_value);
+				
+				if (t_success)
+				{
+					r_value . type = kMCExecValueTypeStringRef;
+					break;
+				}
+				
+				ctxt . Throw();
             }
         }
         break;
@@ -3719,14 +3734,26 @@ void MCExecParseEnum(MCExecContext& ctxt, MCExecEnumTypeInfo *p_info, MCExecValu
 void MCExecFormatSet(MCExecContext& ctxt, MCExecSetTypeInfo *p_info, intset_t t_value, MCExecValue& r_value)
 {
     MCAutoListRef t_list;
-    MCListCreateMutable(',', &t_list);
-    for(uindex_t i = 0; i < p_info -> count; i++)
+    bool t_success = MCListCreateMutable(',', &t_list);
+    for(uindex_t i = 0; t_success && i < p_info -> count; i++)
+	{
         if (((1 << p_info -> elements[i] . bit) & t_value) != 0)
-            MCListAppendCString(*t_list, p_info -> elements[i] . tag);
-    if (MCListCopyAsString(*t_list, r_value . stringref_value))
+		{
+            t_success = MCListAppendCString(*t_list,
+			                                p_info -> elements[i] . tag);
+		}
+	}
+	
+    if (t_success)
+		t_success = MCListCopyAsString(*t_list, r_value . stringref_value);
+	
+	if (t_success)
+	{
         r_value . type = kMCExecValueTypeStringRef;
-    else
-        ctxt . Throw();
+		return;
+	}
+	
+	ctxt . Throw();
 }
 
 void MCExecFormatEnum(MCExecContext& ctxt, MCExecEnumTypeInfo *p_info, intenum_t p_value, MCExecValue& r_value)

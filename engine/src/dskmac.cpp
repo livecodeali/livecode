@@ -4881,14 +4881,17 @@ MCSystemInterface *MCDesktopCreateMacSystem(void)
 // SN-2014-10-07: [[ Bug 13587 ]] Using a MCList allows us to preserve unicode chars
 static bool fetch_ae_as_fsref_list(MCListRef &r_list)
 {
+	// SN-2015-04-14: [[ Bug 15105 ]] We want to return at least an empty list
+	//  in any case where we return true
+	// SN-2014-10-07: [[ Bug 13587 ]] We store the paths in a list
+	MCAutoListRef t_list;
+	if (!MCListCreateMutable('\n', &t_list))
+		return false;
+	
 	AEDescList docList; //get a list of alias records for the documents
     long count;
-    // SN-2015-04-14: [[ Bug 15105 ]] We want to return at least an empty list
-    //  in any case where we return true
-    // SN-2014-10-07: [[ Bug 13587 ]] We store the paths in a list
-    MCAutoListRef t_list;
-    /* UNCHECKED */ MCListCreateMutable('\n', &t_list);
-    
+	
+	bool t_success = true;
 	if (AEGetParamDesc(aePtr, keyDirectObject,
 					   typeAEList, &docList) == noErr
 		&& AECountItems(&docList, &count) == noErr && count > 0)
@@ -4902,23 +4905,24 @@ static bool fetch_ae_as_fsref_list(MCListRef &r_list)
 		long item;
 		// get a FSSpec record, starts from count==1
         
-		for (item = 1; item <= count; item++)
+		for (item = 1; t_success && item <= count; item++)
 		{
-			if (AEGetNthPtr(&docList, item, typeFSRef, &rKeyword, &rType,
-							&t_doc_fsref, sizeof(FSRef), &rSize) != noErr)
-			{
-				AEDisposeDesc(&docList);
-				return false;
-			}
-            
-            // SN-2014-10-07: [[ Bug 13587 ]] Append directly the string, instead of converting to a CString
+			t_success = (AEGetNthPtr(&docList, item, typeFSRef,
+			                        &rKeyword, &rType, &t_doc_fsref,
+			                        sizeof(FSRef), &rSize) != noErr);
+            // SN-2014-10-07: [[ Bug 13587 ]] Append directly the string,
+			// instead of converting to a CString
             MCAutoStringRef t_fullpathname;
-            if (MCS_mac_fsref_to_path(t_doc_fsref, &t_fullpathname))
-                MCListAppend(*t_list, *t_fullpathname);
+            if (t_success &&
+			    MCS_mac_fsref_to_path(t_doc_fsref, &t_fullpathname))
+                t_success = MCListAppend(*t_list, *t_fullpathname);
 		}
 		AEDisposeDesc(&docList);
 	}
-    return MCListCopy(*t_list, r_list);
+	if (t_success)
+		t_success = MCListCopy(*t_list, r_list);
+	
+	return t_success;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

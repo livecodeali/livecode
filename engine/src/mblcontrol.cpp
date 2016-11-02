@@ -417,11 +417,8 @@ bool MCNativeControl::List(MCNativeControlListCallback p_callback, void *p_conte
 
 bool MCNativeControl::GetControlList(MCStringRef& r_list)
 {
-    bool t_success;
-    t_success = true;
-    
     MCAutoListRef t_list;
-    MCListCreateMutable('\n', &t_list);
+	bool t_success = true;MCListCreateMutable('\n', &t_list);
 	for(MCNativeControl *t_control = s_native_controls; t_success && t_control != nil; t_control = t_control -> m_next)
     {
         MCAutoStringRef t_name, t_control_string;

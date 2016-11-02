@@ -1000,7 +1000,7 @@ Exec_stat MCF_parsetextatts(Properties which, MCStringRef data,
 }
 
     
-Exec_stat MCF_unparsetextatts(Properties which, uint4 flags, MCStringRef name, uint2 height, uint2 size, uint2 style, MCValueRef &r_result)
+bool MCF_unparsetextatts(Properties which, uint4 flags, MCStringRef name, uint2 height, uint2 size, uint2 style, MCValueRef &r_result)
 {
 	switch (which)
 	{
@@ -1008,17 +1008,17 @@ Exec_stat MCF_unparsetextatts(Properties which, uint4 flags, MCStringRef name, u
 		switch (flags & F_ALIGNMENT)
 		{
 		case F_ALIGN_LEFT:
-            r_result = MCSTR(MCleftstring);
-            break;
+			return MCStringCreateWithCString(MCleftstring,
+			                                 (MCStringRef &)r_result);
 		case F_ALIGN_CENTER:
-			r_result = MCSTR(MCcenterstring);
-			break;
+			return MCStringCreateWithCString(MCcenterstring,
+												 (MCStringRef &)r_result);
 		case F_ALIGN_RIGHT:
-			r_result = MCSTR(MCrightstring);
-			break;
+			return MCStringCreateWithCString(MCrightstring,
+												 (MCStringRef &)r_result);
 		case F_ALIGN_JUSTIFY:
-			r_result = MCSTR(MCjustifystring);
-            break;
+			return MCStringCreateWithCString(MCjustifystring,
+												 (MCStringRef &)r_result);
 		}
 		break;
 	case P_TEXT_FONT:
@@ -1027,14 +1027,16 @@ Exec_stat MCF_unparsetextatts(Properties which, uint4 flags, MCStringRef name, u
 	case P_TEXT_HEIGHT:
         {
         MCAutoNumberRef t_height;
-        /* UNCHECKED */ MCNumberCreateWithUnsignedInteger(height, &t_height);
+        if (!MCNumberCreateWithUnsignedInteger(height, &t_height))
+			return false;
         r_result = MCValueRetain(*t_height);
 		break;
         }
 	case P_TEXT_SIZE:
         {
         MCAutoNumberRef t_size;
-        /* UNCHECKED */ MCNumberCreateWithUnsignedInteger(size, &t_size);
+        if (!MCNumberCreateWithUnsignedInteger(size, &t_size))
+			return false;
             r_result = MCValueRetain(*t_size);
 		break;
         }
@@ -1042,40 +1044,72 @@ Exec_stat MCF_unparsetextatts(Properties which, uint4 flags, MCStringRef name, u
 		{
 			if (style == FA_DEFAULT_STYLE)
 			{
-                r_result = MCSTR(MCplainstring);
-				return ES_NORMAL;
+				return MCStringCreateWithCString(MCplainstring,
+												 (MCStringRef &)r_result);
 			}
 
-			if (r_result != nil)
-                MCValueRelease(r_result);
             MCAutoListRef t_list;
-            /* UNCHECKED */ MCListCreateMutable(',', &t_list);
+			if (!MCListCreateMutable(',', &t_list))
+				return false;
+			
 			if (MCF_getweightint(style) != MCFW_MEDIUM)
-                MCListAppendCString(*t_list, MCF_getweightstring(style));
+			{
+                if (!MCListAppendCString(*t_list, MCF_getweightstring(style)))
+					return false;
+			}
+			
 			if (style & FA_ITALIC || style & FA_OBLIQUE)
-                MCListAppendCString(*t_list, MCF_getslantlongstring(style));
+			{
+                if (!MCListAppendCString(*t_list, MCF_getslantlongstring(style)))
+					return false;
+			}
+			
 			if (style & FA_BOX)
-                MCListAppendCString(*t_list, MCboxstring);
+			{
+				if (!MCListAppendCString(*t_list, MCboxstring))
+					return false;
+			}
+			
 			if (style & FA_3D_BOX)
-                MCListAppendCString(*t_list, MCthreedboxstring);
+			{
+				if (!MCListAppendCString(*t_list, MCthreedboxstring))
+					return false;
+			}
+			
 			if (style & FA_UNDERLINE)
-                MCListAppendCString(*t_list, MCunderlinestring);
+			{
+				if (!MCListAppendCString(*t_list, MCunderlinestring))
+					return false;
+			}
+
 			if (style & FA_STRIKEOUT)
-                MCListAppendCString(*t_list, MCstrikeoutstring);
+			{
+				if (!MCListAppendCString(*t_list, MCstrikeoutstring))
+					return false;
+			}
+			
 			if (style & FA_LINK)
-                MCListAppendCString(*t_list, MClinkstring);
+			{
+				if (!MCListAppendCString(*t_list, MClinkstring))
+					return false;
+			}
+
 			if (MCF_getexpandint(style) != FE_NORMAL)
-                MCListAppendCString(*t_list, MCF_getexpandstring(style));
-            
+			{
+                if (!MCListAppendCString(*t_list, MCF_getexpandstring(style)))
+					return false;
+			}
+			
             MCAutoStringRef t_string;
-            /* UNCHECKED */ MCListCopyAsString(*t_list, &t_string);
+            if (!MCListCopyAsString(*t_list, &t_string))
+				return false;
             r_result = MCValueRetain(*t_string);
 		}
 		break;
 	default:
 		break;
 	}
-	return ES_NORMAL;
+	return true;
 }
 
 // MW-2011-11-23: [[ Array TextStyle ]] Convert a textStyle name into the enum.

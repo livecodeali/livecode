@@ -66,7 +66,7 @@ static void export_styled_text_paragraph_style(MCArrayRef p_style_array, const M
 	if (p_style . has_text_align || p_effective)
 	{
         MCAutoValueRef t_value;
-		MCF_unparsetextatts(P_TEXT_ALIGN, p_style . text_align << F_ALIGNMENT_SHIFT, nil, 0, 0, 0, &t_value);
+		/* UNCHECKED */ MCF_unparsetextatts(P_TEXT_ALIGN, p_style . text_align << F_ALIGNMENT_SHIFT, nil, 0, 0, 0, &t_value);
         /* UNCHECKED */ MCArrayStoreValue(p_style_array, true, MCNAME("textAlign"), *t_value);
 	}
 	if (p_style . has_list_style)
@@ -123,7 +123,7 @@ static void export_styled_text_paragraph_style(MCArrayRef p_style_array, const M
 	if (p_style . has_tabs || p_effective)
 	{
         MCAutoStringRef t_string;
-		MCField::formattabstops(P_TAB_STOPS, p_style . tabs, p_style . tab_count, &t_string);
+		/* UNCHECKED */ MCField::formattabstops(P_TAB_STOPS, p_style . tabs, p_style . tab_count, &t_string);
         /* UNCHECKED */ MCArrayStoreValue(p_style_array, true, MCNAME("tabStops"), *t_string);
 	}
 	if (p_style . has_tab_alignments || p_effective)
@@ -213,7 +213,7 @@ static void export_styled_text_character_style(MCArrayRef p_style_array, const M
 	if (p_style . has_text_style || p_effective)
 	{
         MCAutoValueRef t_value;
-		MCF_unparsetextatts(P_TEXT_STYLE, 0, nil, 0, 0, p_style . text_style, &t_value);
+		/* UNCHECKED */ MCF_unparsetextatts(P_TEXT_STYLE, 0, nil, 0, 0, p_style . text_style, &t_value);
         /* UNCHECKED */ MCArrayStoreValue(p_style_array, true, MCNAME("textStyle"), *t_value);
 	}
 	if (p_style . has_text_size || p_effective)
