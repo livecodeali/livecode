@@ -318,7 +318,7 @@ static gboolean gtk_idle_callback (gpointer data)
 }
  
 
-void run_dialog(GtkWidget *dialog, MCStringRef &r_value)
+bool run_dialog(GtkWidget *dialog, MCStringRef &r_value)
 {
 	// TODO : This needs to be changed to a proper callback function : gdk_event_handler_set()
 	g_timeout_add(100, gtk_idle_callback, NULL);
@@ -329,7 +329,8 @@ void run_dialog(GtkWidget *dialog, MCStringRef &r_value)
 		if ( gtk_file_chooser_get_select_multiple ( GTK_FILE_CHOOSER ( dialog ) ) )
 		{
             MCAutoListRef t_filenames;
-             /* UNCHECKED */ MCListCreateMutable('\n', &t_filenames);
+			if (!MCListCreateMutable('\n', &t_filenames))
+				return false;
 
             GSList * t_filename_list ;
 			
@@ -337,25 +338,30 @@ void run_dialog(GtkWidget *dialog, MCStringRef &r_value)
 			while ( t_filename_list != NULL )
             {
                 MCAutoStringRef t_item;
-                /* UNCHECKED */ MCStringCreateWithSysString((char*)t_filename_list -> data, &t_item);
-                /* UNCHECKED */ MCListAppend(*t_filenames, *t_item);
+                if (!MCStringCreateWithSysString((char*)t_filename_list -> data, &t_item))
+					return false;
+                if (!MCListAppend(*t_filenames, *t_item))
+					return false;
 
 				t_filename_list = t_filename_list -> next ;
 			}
 
-            /* UNCHECKED */ MCListCopyAsString(*t_filenames, &t_filename);
+            if (!MCListCopyAsString(*t_filenames, &t_filename))
+				return false;
 		}
 		else
         {
-            gchar *t_cstr_filename;
+            MCAutoCustomPointer<gchar, g_free> t_cstr_filename;
             t_cstr_filename = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
-            /* UNCHECKED */ MCStringCreateWithSysString((char*)t_cstr_filename, &t_filename);
-            g_free(t_cstr_filename);
+            if (!MCStringCreateWithSysString((char*)t_cstr_filename, &t_filename))
+				return false;
 		}
 
         if (*t_filename != nil)
             r_value = MCValueRetain(*t_filename);
 	}
+	
+	return true;
 }
 
 
@@ -543,7 +549,6 @@ int MCA_file(MCStringRef p_title, MCStringRef p_prompt, MCStringRef p_filter, MC
 
 
 int MCA_file_with_types(MCStringRef p_title, MCStringRef p_prompt, MCStringRef *p_types, uint4 p_type_count, MCStringRef p_initial, unsigned int p_options, MCStringRef &r_value, MCStringRef &r_result)
-
 {
 	if (!MCModeMakeLocalWindows())
 	{
@@ -562,45 +567,45 @@ int MCA_file_with_types(MCStringRef p_title, MCStringRef p_prompt, MCStringRef *
 
             MCMemoryDeleteArray(t_rtypes);
         }
-		return 1;
+		return 0;
 	}
 
 	//////////
-
-	GtkWidget *dialog ;
-	
 	
     // Create the file dialog with the correct prompt
-    dialog = create_open_dialog ( p_title == NULL || MCStringIsEmpty(p_title) ? p_prompt : p_title, GTK_FILE_CHOOSER_ACTION_OPEN );
+	MCAutoCustomPointer<GtkWidget, close_dialog> t_dialog;
+    t_dialog = create_open_dialog ( p_title == NULL || MCStringIsEmpty(p_title) ? p_prompt : p_title, GTK_FILE_CHOOSER_ACTION_OPEN );
 	
 	// If we have any filters, add them.
-	if ( p_type_count > 0 ) 
-        add_dialog_filters ( dialog, p_types , p_type_count );
+	if (p_type_count > 0)
+        add_dialog_filters(t_dialog, p_types, p_type_count);
 
-	
-	if ( p_options & MCA_OPTION_PLURAL ) 
-		gtk_file_chooser_set_select_multiple ( GTK_FILE_CHOOSER ( dialog ) ,true );
+	if (p_options & MCA_OPTION_PLURAL)
+		gtk_file_chooser_set_select_multiple(GTK_FILE_CHOOSER(t_dialog),true);
 	
     // If we have an initial file/folder then set it.
-    set_initial_file ( dialog, p_initial, G_last_opened_path ) ;
+    set_initial_file(t_dialog, p_initial, G_last_opened_path);
 
 	// Run the dialog ... this will be replaced with our own loop which will call the REV event handler too.
+	if (!run_dialog(t_dialog, r_value))
+		return 1;
 
-    run_dialog(dialog, r_value);
-
-    if (r_value == nil)
-        /* UNCHECKED */ MCStringCreateWithCString(MCcancelstring, r_result);
-    else if ((p_options & MCA_OPTION_RETURN_FILTER) != 0)
-        /* UNCHECKED */ MCStringCreateWithSysString(get_current_filter_name(dialog), r_result);
-
+	if (r_value == nil)
+	{
+		if (!MCStringCreateWithCString(MCcancelstring, r_result))
+			return 1;
+	}
+	else if ((p_options & MCA_OPTION_RETURN_FILTER) != 0)
+	{
+		if (!MCStringCreateWithSysString(get_current_filter_name(t_dialog), r_result))
+			return 1;
+	}
 	
 	if (G_last_opened_path != nil)
 		g_free(G_last_opened_path);
-	G_last_opened_path = gtk_file_chooser_get_current_folder ( GTK_FILE_CHOOSER ( dialog ) ) ;
-	
-	// All done, close the dialog.
-	close_dialog ( dialog ) ;
-        return(1);
+	G_last_opened_path = gtk_file_chooser_get_current_folder(GTK_FILE_CHOOSER(t_dialog));
+
+	return 0;
 }
 
 
@@ -609,8 +614,7 @@ int MCA_file_with_types(MCStringRef p_title, MCStringRef p_prompt, MCStringRef *
 int MCA_ask_file(MCStringRef p_title, MCStringRef p_prompt, MCStringRef p_filter, MCStringRef p_initial, unsigned int p_options, MCStringRef &r_value, MCStringRef &r_result)
 {
 	//TODO : This still needs to pass over the p_filter.
-    MCA_ask_file_with_types ( p_title, p_prompt, NULL, 0, p_initial, p_options, r_value, r_result);
-	return(1);
+    return MCA_ask_file_with_types ( p_title, p_prompt, NULL, 0, p_initial, p_options, r_value, r_result);
 }
 
 
@@ -620,27 +624,23 @@ int MCA_ask_file_with_types(MCStringRef p_title, MCStringRef p_prompt, MCStringR
     {
         bool t_plural = (p_options & MCA_OPTION_PLURAL) != 0;
         MCAutoStringRef t_resolved_path;
-        /* UNCHECKED */ MCS_resolvepath(p_initial, &t_resolved_path);
-        MCStringRef *t_rtypes;
-        uindex_t t_count;
+        if (MCS_resolvepath(p_initial, &t_resolved_path))
+			return 1;
+		
+        MCAutoStringRefArray t_rtypes;
+        if (!types_to_remote_types(p_types, p_type_count, t_rtypes . PtrRef(), t_rtypes . CountRef()))
+			return 1;
+		
+		MCRemoteFileDialog(p_title, p_prompt, t_rtypes . Ptr(), t_rtypes . Count(), NULL, *t_resolved_path, true, t_plural, r_result);
 
-        if (types_to_remote_types(p_types, p_type_count, t_rtypes, t_count))
-		{
-            MCRemoteFileDialog(p_title, p_prompt, t_rtypes, t_count, NULL, *t_resolved_path, true, t_plural, r_result);
-            for (uint32_t i = 0; i < t_count; ++i)
-                MCValueRelease(t_rtypes[i]);
-
-            MCMemoryDeleteArray(t_rtypes);
-        }
-		return 1;
+		return 0;
 	}
 
-	GtkWidget *dialog ;
-	
-    dialog = create_open_dialog(p_title == NULL ? p_prompt : p_title, GTK_FILE_CHOOSER_ACTION_SAVE );
+	MCAutoCustomPointer<GtkWidget, close_dialog> t_dialog;
+    t_dialog = create_open_dialog(p_title == NULL ? p_prompt : p_title, GTK_FILE_CHOOSER_ACTION_SAVE );
 
-	if ( p_type_count > 0 ) 
-		add_dialog_filters ( dialog, p_types , p_type_count );
+	if (p_type_count > 0)
+		add_dialog_filters(t_dialog, p_types , p_type_count);
 
 	// If we are given an initial
     if (p_initial != nil)
@@ -648,10 +648,12 @@ int MCA_ask_file_with_types(MCStringRef p_title, MCStringRef p_prompt, MCStringR
 		if (MCS_exists(p_initial, True))
         {
             MCAutoStringRef t_resolved;
-            /* UNCHECKED */ MCS_resolvepath(p_initial, &t_resolved);
+            if (!MCS_resolvepath(p_initial, &t_resolved))
+				return 1;
             MCAutoStringRefAsSysString t_resolved_sys;
-            t_resolved_sys.Lock(*t_resolved);
-            gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(dialog), *t_resolved_sys);
+            if (!t_resolved_sys.Lock(*t_resolved))
+				return 1;
+            gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(t_dialog), *t_resolved_sys);
 		}
 		else
 		{
@@ -662,19 +664,30 @@ int MCA_ask_file_with_types(MCStringRef p_title, MCStringRef p_prompt, MCStringR
 
             if (!MCStringLastIndexOfChar(p_initial, '/', UINDEX_MAX, kMCStringOptionCompareExact, t_last_slash))
             {
-                /* UNCHECKED */ MCStringCopy(p_initial, &t_name);
+                if (!MCStringCopy(p_initial, &t_name))
+					return 1;
+				
                 t_folder_exists = false;
             }
             else
             {
                 MCAutoStringRef t_tmp_folder;
-                MCStringCopySubstring(p_initial, MCRangeMake(t_last_slash + 1, MCStringGetLength(p_initial) - (t_last_slash+1)), &t_name);
-                MCStringCopySubstring(p_initial, MCRangeMake(0, t_last_slash), &t_tmp_folder);
+                if (!MCStringCopySubstring(p_initial, MCRangeMake(t_last_slash + 1, MCStringGetLength(p_initial) - (t_last_slash+1)), &t_name))
+					return 1;
+				
+                if (!MCStringCopySubstring(p_initial, MCRangeMake(0, t_last_slash), &t_tmp_folder))
+					return 1;
 
                 if (MCS_exists(*t_tmp_folder, False))
-                    /* UNCHECKED */ MCS_resolvepath(*t_tmp_folder, &t_folder);
+				{
+                    if (!MCS_resolvepath(*t_tmp_folder, &t_folder))
+						return 1;
+				}
                 else
-                    /* UNCHECKED */ MCStringCopy(*t_tmp_folder, &t_folder);
+				{
+                    if (!MCStringCopy(*t_tmp_folder, &t_folder))
+						return 1;
+				}
 
                 t_folder_exists = true;
             }
@@ -683,33 +696,35 @@ int MCA_ask_file_with_types(MCStringRef p_title, MCStringRef p_prompt, MCStringR
 
             if (t_folder_exists)
             {
-                /* UNCHECKED */ t_folder_sys.Lock(*t_folder);
-                gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog), *t_folder_sys);
+                if (!t_folder_sys.Lock(*t_folder))
+					return 1;
+                gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(t_dialog), *t_folder_sys);
             }
             else
-                gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog), G_last_saved_path);
+                gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(t_dialog), G_last_saved_path);
 
-            /* UNCHECKED */ t_name_sys.Lock(*t_name);
-            gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), *t_name_sys);
+			if (!t_name_sys.Lock(*t_name))
+				return 1;
+			
+            gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(t_dialog), *t_name_sys);
 		}
 	}
 	else
 	{
-		gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog), G_last_saved_path);
+		gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(t_dialog), G_last_saved_path);
 	}
 	
-    run_dialog(dialog, r_value) ;
+	if (!run_dialog(dialog, r_value))
+		return 1;
 
-    MCStringCreateWithSysString(get_current_filter_name(dialog), r_result);
+    if (!MCStringCreateWithSysString(get_current_filter_name(t_dialog), r_result))
+		return 1;
 
 	if (G_last_saved_path != NULL)
 		g_free(G_last_saved_path);
-	G_last_saved_path = gtk_file_chooser_get_current_folder ( GTK_FILE_CHOOSER ( dialog ) ) ;
+	G_last_saved_path = gtk_file_chooser_get_current_folder(GTK_FILE_CHOOSER(t_dialog)) ;
 
-	close_dialog ( dialog ) ;
-        
-        return(1);
-	
+	return 0;
 }
 
 
@@ -719,9 +734,15 @@ int MCA_folder(MCStringRef p_title, MCStringRef p_prompt, MCStringRef p_initial,
 {
     MCAutoStringRef t_resolved;
     if (p_initial != nil)
-        /* UNCHECKED */ MCS_resolvepath(p_initial, &t_resolved);
+	{
+		if (!MCS_resolvepath(p_initial, &t_resolved))
+			return 1;
+	}
     else
-        MCS_getcurdir(&t_resolved);
+	{
+        if (!MCS_getcurdir(&t_resolved))
+			return 1;
+	}
 
     if (!MCModeMakeLocalWindows())
     {
@@ -731,22 +752,20 @@ int MCA_folder(MCStringRef p_title, MCStringRef p_prompt, MCStringRef p_initial,
 	
 	//////////
 
-	GtkWidget *dialog ;
+	MCAutoStringRefAsSysString t_resolved_sys;
+	if (!t_resolved_sys.Lock(*t_resolved))
+		return 1;
 	
+	MCAutoCustomPointer<GtkWidget, close_dialog> t_dialog;
+    t_dialog = create_open_dialog(p_title == nil || MCStringGetLength(p_title) == 0  ? p_prompt : p_title, GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER );
 	
-    dialog = create_open_dialog(p_title == nil || MCStringGetLength(p_title) == 0  ? p_prompt : p_title, GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER );
-
-    MCAutoStringRefAsSysString t_resolved_sys;
-    /* UNCHECKED */ t_resolved_sys.Lock(*t_resolved);
     if (p_initial != NULL)
-        gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog), *t_resolved_sys);
+        gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(t_dialog), *t_resolved_sys);
 
-	
-    run_dialog(dialog, r_value);
-    close_dialog(dialog);
-        
-        return (1);
-	
+	if (!run_dialog(t_dialog, r_value))
+		return 1;
+
+	return 0;
 }
 
 
