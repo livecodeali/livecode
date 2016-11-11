@@ -7,31 +7,15 @@ constant kArchs = "armeabi"
 ################################################################################
 
 command revSaveAsMobileStandalone pStack, pApkFile, pTarget, pSettings
-   local tTargetType
-   if pTarget contains "build" then
-      put "android release" into tTargetType
-   else
-      put "android test" into tTargetType
-   end if
-   
-   try
-      put the cMobileSupport["android.jdk"] of stack "revPreferences" into sJavaRoot
-      dispatch "savingMobileStandalone" to stack pStack with tTargetType, pApkFile
-   end try
+   put the cMobileSupport["android.jdk"] of stack "revPreferences" into sJavaRoot
    
    try
       revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettings
    catch tError
    end try
    
-   try
-      if tError is not empty then
-         put empty into pApkFile
-      end if
-      dispatch "mobileStandaloneSaved" to stack pStack with tTargetType, pApkFile
-   end try
-   
    if tError is not empty then
+      put empty into pApkFile
       throw tError
    end if
 end revSaveAsMobileStandalone
@@ -92,8 +76,15 @@ private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettin
       
    end if
    
-   -- Make sure all dependencies are included
-   revSBUpdateForDependencies pSettings
+   local tTargetType
+   if pTarget contains "build" then
+      put "android release" into tTargetType
+   else
+      put "android test" into tTargetType
+   end if
+   
+   local tStackName, tStackFileName, tStackFileList
+   revSBMobileStandalonePreBuild pStack, tTargetType, pApkFile, "android", pSettings, tStackName, tStackFileName, tStackFileList
    
    -- Manually remove built-in implementations from detected script library inclusions
    revSBRemoveInclusions pStack, "android", tConfirm, pSettings
@@ -212,12 +203,6 @@ private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettin
       end if
    end repeat
    delete the last char of tExternals
-   
-   -- Compute the stackfiles list
-   lock messages
-   local tStackFiles
-   revSBRelativeStackFilesList pStack, tStackFiles
-   unlock messages
    
    -- Make sure the app-bundle isn't already there
    if there is a file pApkFile then
@@ -642,27 +627,32 @@ private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettin
       ------- Compile the Standalone
       revStandaloneProgress "Building executable..."
       
-      local tDeploy
-      -- Update the deploy params with script library and extension inclusions
-      revSBUpdateDeployParams pStack, "android", pSettings, tDeploy
-      
       -- Engine to use
-      put mapFilePath(revMobileRuntimeFolder(pTarget) & slash & "Standalone") into tDeploy["engine"]
+      local tEngineSourceFile
+      put mapFilePath(revMobileRuntimeFolder(pTarget) & slash & "Standalone") into tEngineSourceFile
       // SN-2015-01-22: [[ Bug 13213 ]] Throw an error in case an error occured
-      if there is no file tDeploy["engine"] then
+      if there is no file tEngineSourceFile then
          throw "Could not find standalone engine"
       end if
       -- Stackfile to use
-      put the effective filename of stack pStack into tDeploy["stackfile"]
+      local tStackSourceFile
+      put the tempname into tStackSourceFile
+      revSBResaveStackAsStackFile pStack, tStackFileName, tStackSourceFile
       
       -- Externals to reference (on Android we include drivers in this list)
+      local tExternalsList
       repeat for each line tEntry in tExternals
-         put tEntry & return after tDeploy["externals"]
+         put tEntry & return after tExternalsList
       end repeat
-      delete the last char of tDeploy["externals"]
+      delete the last char of tExternalsList
       
       -- Output file to create
-      put tArmLibsBuildFolder & slash & "librevandroid.so" into tDeploy["output"]
+      local tOutputPath
+      put tArmLibsBuildFolder & slash & "librevandroid.so" into tOutputPath
+      
+      local tDeploy
+      -- Get the deploy params with script library and extension inclusions
+      revSBGetDeployParams pStack, "android", pSettings, tExternalsList, tStackSourceFile, tOutputPath, tEngineSourceFile, tDeploy
       
       -- Splash to use (if non-commercial)
       if line 3 of the revLicenseInfo is among the words of "Educational Personal" then
@@ -888,6 +878,8 @@ private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettin
    if tError is not empty then
       throw tError
    end if
+   
+   revSBMobileStandalonePostBuild tStackFileName, pStack, tTargetType, pApkFile, "android"
 end revSaveAsMobileStandaloneMain
 
 ################################################################################

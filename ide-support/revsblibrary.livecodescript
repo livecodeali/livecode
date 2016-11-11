@@ -914,11 +914,11 @@ private command __RecursiveStackFileList pStack, @xStackFiles
 end __RecursiveStackFileList
 
 function revDownloadEngine pEngine
-  if revEngineCheck(pEngine) then
-    return true
-  else 
-    return false
-  end if
+   if revEngineCheck(pEngine) then
+      return true
+   else 
+      return false
+   end if
 end revDownloadEngine
 
 function revEngineCheck pEngine
@@ -983,32 +983,32 @@ end revEngineCheck
 #   Prompts the user to choose an icon file as appropriate to the platform. Returns the full path of the file, or empty
 #   if no file was chosen.
 function utilityChooseIconFile pTargetPlatform
-  local tPrompt
-  put "Select icon file: " into tPrompt
-  
-  local tTypes
-  put "All files|*" & return into tTypes
-  
-  # Roughly preserves old behavior, just using answer file with type instead of filter.
-  local tIconFile
-  if pTargetPlatform is "Mac OS X" then
-    put "Icon Resource Files|icns|ICNS" after tTypes
-  else if pTargetPlatform is "Windows" then
-    put "Icon Files|ico|ICO" after tTypes
-  end if
-  
-  if the number of lines of tTypes is 2 then
-    answer file tPrompt with type (line 2 of tTypes) or type (line 1 of tTypes)
-  else
-    answer file tPrompt with type (line 1 of tTypes)
-  end if
-  put it into tIconFile
-  
-  if tIconFile is empty then
-    return empty
-  end if
-  
-  return tIconFile
+   local tPrompt
+   put "Select icon file: " into tPrompt
+   
+   local tTypes
+   put "All files|*" & return into tTypes
+   
+   # Roughly preserves old behavior, just using answer file with type instead of filter.
+   local tIconFile
+   if pTargetPlatform is "Mac OS X" then
+      put "Icon Resource Files|icns|ICNS" after tTypes
+   else if pTargetPlatform is "Windows" then
+      put "Icon Files|ico|ICO" after tTypes
+   end if
+   
+   if the number of lines of tTypes is 2 then
+      answer file tPrompt with type (line 2 of tTypes) or type (line 1 of tTypes)
+   else
+      answer file tPrompt with type (line 1 of tTypes)
+   end if
+   put it into tIconFile
+   
+   if tIconFile is empty then
+      return empty
+   end if
+   
+   return tIconFile
 end utilityChooseIconFile
 
 # Parameters
@@ -1019,22 +1019,22 @@ end utilityChooseIconFile
 #   be make relative, ie because it is not in pFolder then the function returns pFile. If pFile can be made relative
 #   then the relative path from pFolder to pFile is returned.
 function utilityMakePathRelative pFile, pFolder
-  local tFolder
-  put pFolder into tFolder
-  if the last char of tFolder is not slash then
-    put slash after tFolder
-  end if
-  
-  local tFile
-  put pFile into tFile
-  
-  local tCharCount
-  put the number of chars of tFolder into tCharCount
-  if char 1 to tCharCount of tFile = tFolder then
-    delete char 1 to tCharCount of tFile
-  end if
-  
-  return tFile
+   local tFolder
+   put pFolder into tFolder
+   if the last char of tFolder is not slash then
+      put slash after tFolder
+   end if
+   
+   local tFile
+   put pFile into tFile
+   
+   local tCharCount
+   put the number of chars of tFolder into tCharCount
+   if char 1 to tCharCount of tFile = tFolder then
+      delete char 1 to tCharCount of tFile
+   end if
+   
+   return tFile
 end utilityMakePathRelative
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1054,6 +1054,21 @@ command revSBResaveScriptOnlyStackAsProperStackFile pStackName, pStackFilePath, 
    end if
    unlock messages
 end revSBResaveScriptOnlyStackAsProperStackFile
+
+command revSBResaveStackAsStackFile pStackName, pStackFilePath, pOutputStackFilePath
+   lock messages
+   if there is a stack pStackName then
+      set the name of stack pStackName to "__keep_this_around__"
+   end if
+   clone invisible stack "__keep_this_around__"
+   set the name of it to pStackName
+   save stack pStackName as pOutputStackFilePath
+   delete stack pStackName
+   if there is a stack "__keep_this_around__" then
+      set the name of stack "__keep_this_around__" to pStackName
+   end if
+   unlock messages
+end revSBResaveStackAsStackFile
 
 # AL-2015-02-02: [[ Scriptify IDE ]] As we remove buttons from revLIbrary, we'll need to add to
 # this function to return the 'common' name of each of the libraries.
@@ -1237,7 +1252,7 @@ private function revSBMobileExternalsFromFolder pFolder
          put true into tListA[word 2 to -1 of tItem]
       end if
    end repeat
-
+   
    return tListA
 end revSBMobileExternalsFromFolder
 
@@ -1360,7 +1375,7 @@ private function revSBMobileDatabaseDriversFromFolder pFolder
          put true into tListA[word 2 to -1 of tItem]
       end if
    end repeat
-
+   
    return tListA
 end revSBMobileDatabaseDriversFromFolder
 
@@ -1410,16 +1425,16 @@ function revSBBuiltinInclusions pPlatform
    repeat for each line tLine in it
       put empty into tLibrariesA[tLine]
    end repeat
-
+   
    if pPlatform is not "emscripten" then
-   put empty into tLibrariesA["SSL & Encryption"]
+      put empty into tLibrariesA["SSL & Encryption"]
       put empty into tLibrariesA["Revolution Zip"]
    end if
    
    if "Browser" is among the keys of tLibrariesA then
       put empty into tLibrariesA["Browser (CEF)"]
    end if
-
+   
    return the keys of tLibrariesA
 end revSBBuiltinInclusions
 
@@ -1518,7 +1533,7 @@ function revSBAdditionalExternalsList pPlatform
          local tExternalFolder
          repeat for each line tExternalFolder in folders(tFolder)
             if tExternalFolder begins with "." then next repeat
-           
+            
             local tContents
             put __EnumerateFolder(tFolder & slash & tExternalFolder, tFolder & slash & tExternalFolder & slash, false) into tContents
             
@@ -2027,7 +2042,12 @@ private command prependToStringList pValue, @xList
    addToStringList false, pValue, xList
 end prependToStringList
 
-command revSBUpdateDeployParams pStack, pTarget, pStandaloneSettings, @xDeployParams
+command revSBUpdateDeployParams pStack, pTarget, pStandaloneSettings, pExternals, pStackSourceFile, pStandalonePath, pEngineSourceFile, @xDeployParams
+   -- Set up file references common to all platforms
+   put pStackSourceFile into xDeployParams["stackfile"]
+   put pStandalonePath into xDeployParams["output"]
+   put pEngineSourceFile into xDeployParams["engine"]
+   
    local tModules, tAuxiliaryStackfiles, tStartupScript, tGeneratedStartupScript
    
    -- auxiliary_stackfiles key might not be empty
@@ -2092,6 +2112,11 @@ command revSBUpdateDeployParams pStack, pTarget, pStandaloneSettings, @xDeployPa
    end repeat
    
    appendToStringList tGeneratedStartupScript, tStartupScript
+   
+   # AL-2015-02-04: [[ Standalone Resources ]] Add (universal) external names and resource mappings to the deploy parameters
+   if pStandaloneSettings["externals"] is not empty then
+      put pStandaloneSettings["externals"] into xDeployParams["externals"]
+   end if
    
    -- Make sure we include the initialisation library (at the top of the list) if needed
    if tAuxiliaryStackFiles is not empty then
@@ -2338,7 +2363,7 @@ on initialiseSearchForInclusions
    put "revSetDatabaseDriverPath,revAddXMLNode,revAppendXML,revCreateXMLTree,revCreateXMLTreeFromFile,revDeleteAllXMLTrees,revDeleteXMLNode,revDeleteXMLTree,revPutIntoXMLNode,revSetXMLAttribute" into sPatternsA["XML"]["Script"]
    put "scriptLibraries" into sPatternsA["XML"]["Key"]
    
-    # XMLRPC
+   # XMLRPC
    put "revXMLRPC_" into sPatternsA["XMLRPC"]["Root"]
    put "scriptLibraries" into sPatternsA["XMLRPC"]["Key"]
    
@@ -2861,6 +2886,21 @@ on revSBStandalonePreBuild pStack, pFolder, pPlatform, @xSettings, @rStackName, 
    put tStackFileList into rStackFileList
 end revSBStandalonePreBuild
 
+on revSBMobileStandalonePreBuild pStack, pTargetType, pAppBundle, pPlatform, @xSettings, @rStackName, @rStackFileName, @rStackFileList
+   __StandalonePreBuild xSettings
+   
+   local tStackFileName, tStackName, tStackFileList
+   __CloseOpenStackFiles pStack, tStackName, tStackFileName, tStackFileList
+   
+   try
+      dispatch "savingMobileStandalone" to stack tStackFileName with pTargetType, pAppBundle, pPlatform
+   end try
+   
+   put tStackName into rStackName
+   put tStackFileName into rStackFileName
+   put tStackFileList into rStackFileList
+end revSBMobileStandalonePreBuild
+
 private command  __ReloadOriginalStackFile pStackPath, pStack
    if there is a stack pStack then
       local tOldLock
@@ -2909,3 +2949,11 @@ on revSBStandalonePostBuild pStackFileName, pStack, pFolder, pPlatform
    
    __StandalonePostBuild pStackFileName, pStack
 end revSBStandalonePostBuild
+
+on revSBMobileStandalonePostBuild pStackFileName, pStack, pTargetType, pAppBundle, pPlatform
+   try
+      dispatch "mobileStandaloneSaved" to stack pStackFileName with pTargetType, pAppBundle, pPlatform
+   end try
+   
+   __StandalonePostBuild pStackFileName, pStack
+end revSBMobileStandalonePostBuild

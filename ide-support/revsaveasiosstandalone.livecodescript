@@ -9,17 +9,6 @@
 --   password
 
 command revSaveAsMobileStandalone pStack, pAppBundle, pTarget, pSettings
-   local tTargetType
-   if pTarget contains "device" then
-      put "ios device" into tTargetType
-   else
-      put "ios simulator" into tTargetType
-   end if
-   
-   try
-      dispatch "savingMobileStandalone" to stack pStack with tTargetType, pAppBundle
-   end try
-   
    try
       revSaveAsMobileStandaloneMain pStack, pAppBundle, pTarget, pSettings
    catch tError
@@ -30,14 +19,8 @@ command revSaveAsMobileStandalone pStack, pAppBundle, pTarget, pSettings
       end if
    end try
    
-   try
-      if tError is not empty then
-         put empty into pAppBundle
-      end if
-      dispatch "mobileStandaloneSaved" to stack pStack with tTargetType, pAppBundle
-   end try
-   
    if tError is not empty then
+      put empty into pAppBundle
       throw tError
    end if
    
@@ -100,8 +83,15 @@ private command revSaveAsMobileStandaloneMain pStack, pAppBundle, pTarget, pSett
       end if
    end if
    
-   -- Make sure all dependencies are included
-   revSBUpdateForDependencies pSettings
+   local tTargetType
+   if pTarget contains "device" then
+      put "ios device" into tTargetType
+   else
+      put "ios simulator" into tTargetType
+   end if
+   
+   local tStackName, tStackFileName, tStackFileList
+   revSBMobileStandalonePreBuild pStack, tTargetType, pAppBundle, "ios", pSettings, tStackName, tStackFileName, tStackFileList
    
    -- Manually remove built-in implementations from detected script library inclusions
    revSBRemoveInclusions pStack, "ios", tConfirm, pSettings
@@ -154,11 +144,13 @@ private command revSaveAsMobileStandaloneMain pStack, pAppBundle, pTarget, pSett
       
    end if
    
-   
    -- Compute the base folder
-   local tBaseFolder
+   local tBaseFolder, tStackSourceFile
    set the itemDelimiter to slash
-   put item 1 to -2 of the effective filename of stack pStack into tBaseFolder
+   put the temporary folder & slash & "Standalone" into tBaseFolder
+   create folder tBaseFolder
+   revSBCopyFolderToDestination item 1 to -2 of the effective filename of stack pStack, tBaseFolder
+   put tBaseFolder & item 1 of the effective filename of stack pStack into tStackSourceFile
    set the itemDelimiter to comma
    
    -- Fetch the various options we need to initially build the app-bundle
@@ -191,12 +183,6 @@ private command revSaveAsMobileStandaloneMain pStack, pAppBundle, pTarget, pSett
    end repeat
    delete the last char of tExternals
    delete the last char of tDrivers
-   
-   -- Compute the stackfiles list
-   lock messages
-   local tStackFiles
-   revSBRelativeStackFilesList pStack, tStackFiles
-   unlock messages
    
    -- Make sure the app-bundle isn't already there
    if there is a folder pAppBundle then
@@ -258,7 +244,7 @@ private command revSaveAsMobileStandaloneMain pStack, pAppBundle, pTarget, pSett
    
    local tPlist, tCustomEntitlements
    revCopyMobileFiles tFiles, tBaseFolder, pAppBundle, pTarget, tSDKs, tRedirects, tCopiedExternals, tCopiedFonts, tPlist, tCustomEntitlements
-   revCopyMobileStackFiles tStackFiles, tBaseFolder, pAppBundle
+   revCopyMobileStackFiles tStackFileList, tBaseFolder, pAppBundle
    
    -- Copy in the appropriate externals and drivers
    revCopyMobileExternals tExternals, pAppBundle, pTarget, tSDKs, tCopiedExternals
@@ -282,12 +268,8 @@ private command revSaveAsMobileStandaloneMain pStack, pAppBundle, pTarget, pSett
       end if
    end if
    
-   local tDeploy
-   -- Update the deploy params with script library and extension inclusions
-   revSBUpdateDeployParams pStack, "ios", pSettings, tDeploy
-   
    -- Link the engine if a device build
-   local tLinkEngineFile
+   local tEngineSourceFile
    if pTarget is "Device" then
       revStandaloneProgress "Linking engine..."      
       
@@ -454,32 +436,36 @@ private command revSaveAsMobileStandaloneMain pStack, pAppBundle, pTarget, pSett
       -- MM-2012-09-18: We now should have the required engines linked.  If we are building a universal binary,
       -- create from the two separate linkede engines.
       --=
-      put tSDKs["arm"]["engine file"] into tLinkEngineFile
+      put tSDKs["arm"]["engine file"] into tEngineSourceFile
       
-      if there is no file tLinkEngineFile then
+      if there is no file tEngineSourceFile then
          throw "creating engine failed"
       end if
-      
-      put tLinkEngineFile into tDeploy["engine"]      
    else
-      put mapFilePath(tSDKs["sim"]["runtime path"] & slash & "Standalone") into tDeploy["engine"]
+      put mapFilePath(tSDKs["sim"]["runtime path"] & slash & "Standalone") into tEngineSourceFile
    end if
    
    -- Generate the executable
    revStandaloneProgress "Building executable..."
    
-   -- Stackfile to use
-   put the effective filename of stack pStack into tDeploy["stackfile"]
-   
    -- Externals to reference
    -- MM-2012-09-18: Use the new copied externals array instead of the copy files.
    --
+   local tExternalsList
    repeat for each element tExternal in tCopiedExternals
       if tExternal["type"] is among the words of "external external-tmp" then
-         put tExternal["location"] & return after tDeploy["externals"]
+         put tExternal["location"] & return after tExternalsList
       end if
    end repeat
-   delete the last char of tDeploy["externals"]
+   delete the last char of tExternalsList
+   
+   -- Output file to create
+   local tOutputPath
+   put pAppBundle & slash & tName into tOutputPath
+   
+   local tDeploy
+   -- Get the deploy params with script library and extension inclusions
+   revSBUpdateDeployParams pStack, "ios", pSettings, tExternalsList, tStackSourceFile, tOutputPath, tEngineSourceFile, tDeploy
    
    -- Put the redirects if any
    -- MM-2014-10-06: [[ Bug 13583 ]] Due to issues with the redirects, we use symlinks with the iOS 8 sim.
@@ -507,9 +493,6 @@ private command revSaveAsMobileStandaloneMain pStack, pAppBundle, pTarget, pSett
       end repeat
    end if
    set the itemdel to tOldItemDel
-   
-   -- Output file to create
-   put pAppBundle & slash & tName into tDeploy["output"]
    
    -- Splash to use (if non-commercial)
    if line 3 of the revLicenseInfo is among the words of "Educational Personal" then
@@ -580,7 +563,7 @@ private command revSaveAsMobileStandaloneMain pStack, pAppBundle, pTarget, pSett
       end if
    catch tError
    finally
-      delete file tLinkEngineFile
+      delete file tEngineSourceFile
    end try
    
    if tError is not empty then
@@ -722,6 +705,8 @@ private command revSaveAsMobileStandaloneMain pStack, pAppBundle, pTarget, pSett
       --      end try
       
    end if
+   
+   revSBMobileStandalonePostBuild tStackFileName, pStack, tTargetType, pAppBundle, "ios"
 end revSaveAsMobileStandaloneMain
 
 command revSaveAsMobileDeployer pDeployAppBundle, pAppBundle, pAppName, pAppId, pAppExecutables

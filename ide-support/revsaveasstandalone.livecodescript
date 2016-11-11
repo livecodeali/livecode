@@ -488,14 +488,9 @@ end revStandaloneCopyInclusions
 private function revStandaloneInitialDeployParams pTarget, pStackSourceFile, pStandalonePath, pEngineSourceFile
    -- This array contains the parameters for the deploy command
    local tDeployInfo
-   
-   -- Set up file references common to all platforms
-   put pStackSourceFile into tDeployInfo["stackfile"]
-   put pStandalonePath into tDeployInfo["output"]
-   put pEngineSourceFile into tDeployInfo["engine"]
-   
    # AL-2015-01-29: [[ Scriptify IDE ]] Add the library inclusions to the deploy parameters
-   revSBUpdateDeployParams pStackSourceFile, pTarget, sStandaloneSettingsA, tDeployInfo
+   revSBUpdateDeployParams pStackSourceFile, pTarget, sStandaloneSettingsA, sStandaloneSettingsA["externals"], \
+         pStackSourceFile, pStandalonePath, pEngineSourceFile, tDeployInfo
    
    # AL-2015-01-29: [[ Scriptify IDE ]] Add user script libraries to deploy parameters
    -- PM-2015-12-07: [[ Bug 15706 ]] Put double quotes around the stack name to avoid confusing the 
@@ -503,11 +498,6 @@ private function revStandaloneInitialDeployParams pTarget, pStackSourceFile, pSt
    repeat for each line tLine in sUserScriptLibraries
       put return & "if there is a stack" && quote & tLine & quote && "then library" && quote & tLine & quote after tDeployInfo["startup_script"]
    end repeat
-   
-   # AL-2015-02-04: [[ Standalone Resources ]] Add (universal) external names and resource mappings to the deploy parameters
-   if sStandaloneSettingsA["externals"] is not empty then
-      put sStandaloneSettingsA["externals"] into tDeployInfo["externals"]
-   end if
    
    local tPlatformDetailsA, tPlatform
    put revStandalonePlatformDetails(pTarget) into tPlatformDetailsA
@@ -669,7 +659,7 @@ command revSaveAsWindowsStandalone pStack, pFolder
       if revOverrideRuntimePath() is not empty then
          put revOverrideRuntimePath() into tEngineSourceFile
       end if
-
+      
       -- Ensure executable is at the expected location
       if there is not a file tEngineSourceFile then
          throw "Standalone: Ensure that you have not renamed the main LiveCode executable file: " \
