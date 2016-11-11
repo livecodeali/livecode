@@ -2660,3 +2660,260 @@ function revSBEnginePath pPlatform
       end switch
    end if
 end revSBEnginePath
+
+local sResetA               -- stored info for resetting to the pre-build state
+
+#####################################################################
+# Check for open stacks, ask to save if need be then close them
+#####################################################################
+
+private command revCloseOpenStacks pStackFileList, pStack
+   local tStackFile,tSubList,tStack,tSubStack
+   revStandaloneProgress "Closing open stacks..."
+   
+   # OK-2008-03-13 : Bug 5874. Filter out the stack being built from the list as we have 
+   # already done the save checking on it.
+   local tCheckList
+   put pStackFileList["full"] into tCheckList
+   
+   local tLineNumber
+   set the wholeMatches to true
+   put lineOffset(the effective filename of stack pStack, tCheckList) into tLineNumber
+   if tLineNumber <> 0 then
+      delete line tLineNumber of tCheckList
+   end if
+   
+   repeat for each line tStackFile in tCheckList
+      if the short name of stack tStackFile is among the lines of the mainStacks then
+         put the subStacks of stack tStackFile into tSubList
+         set the itemDel to "/"
+         repeat for each line tStack in tSubList
+            if the mode of stack tStack is not 0 then
+               if not revSaveCheck(tStack) then
+                  return "cancelled"
+               end if
+            end if
+         end repeat
+         if the mode of stack tStackFile is not 0 then
+            if not revSaveCheck(the short name of stack tStackFile) then
+               return "cancelled"
+            end if
+         end if
+         set the itemDel to comma
+      end if
+   end repeat
+   lock messages
+   -- remove the stacks from memory and keep a note of them for later
+   repeat for each line tStack in pStackFileList["full"]
+      if the short name of stack tStack is among the lines of the mainStacks then
+         put the subStacks of stack tStack into tSubList
+         repeat for each line tSubStack in tSubList
+            if the short name of stack tSubStack is among the lines of openstacks() then
+               put the long name of stack tSubStack & cr after sResetA["Reopen"]
+               
+               # OK-2008-11-10 : Bug 7382 - Remember if stacks were in message path
+               put stackIsInGlobalMessagePath(the long name of stack tSubStack) & return after sResetA["Restore Message Path"]
+               
+            end if
+            #LG-2008-01-24
+            #Bug 5110:  Changed code so substacks are closed instead of
+            #deleted.
+            --delete stack tSubStack
+            close stack tSubStack
+         end repeat
+         if the short name of stack tStack is among the lines of openstacks() then
+            put the long name of stack tStack & cr after sResetA["Reopen"]
+            
+            # OK-2008-11-10 : Bug 7382 - Remember if stacks were in message path
+            put stackIsInGlobalMessagePath(the long name of stack tStack) & return after sResetA["Restore Message Path"]
+         end if
+         -- MM-2013-03-20: [[ Bug 10756 ]] Make sure we're allowed to delete the stack before deleteing.
+         set the cantDelete of stack tStack to false
+         delete stack tStack
+      end if
+   end repeat
+   return empty
+end revCloseOpenStacks
+
+# OK-2008-11-10 : Bug 7382 - Remember if stacks were in message path
+private function stackIsInGlobalMessagePath pStack
+   set the wholeMatches to true
+   if the short name of pStack is among the lines of the stacksInUse then
+      return "in use"
+   end if
+   
+   if pStack is among the lines of the backscripts then
+      return "backscript"
+   end if
+   
+   if pStack is among the lines of the frontscripts then
+      return "frontscript"
+   end if
+   
+   return empty
+end stackIsInGlobalMessagePath
+
+private command restoreStackToMessagePath pStack, pMessagePathState
+   switch pMessagePathState
+      case empty
+         exit restoreStackToMessagePath
+         break
+      case "in use"
+         # Messages should be locked in to prevent a libraryStack message being sent to the stack in use.
+         # The idea being that the standalone builder should intefere as little as possible with the built stacks.
+         lock messages
+         start using stack pStack
+         unlock messages
+         break
+      case "backscript"
+         # Note that the order of backscripts may not be preserved, not sure if this is a problem...
+         lock messages
+         insert the script of pStack into back
+         unlock messages
+         break
+      case "frontscript"
+         lock messages
+         insert the script of pStack into front
+         unlock messages
+         break
+      default
+         # Just ignore this for now
+   end switch
+end restoreStackToMessagePath
+
+private command __CloseOpenStackFiles pStack, @rStackName, @rStackFileName, @rStackFileList
+   local tStackFileName, tStackName
+   put the effective filename of stack pStack into tStackFileName
+   
+   set the itemdelimiter to slash
+   put item -1 of the effective filename of stack tStackFileName into tStackName
+   local tExtension
+   set the itemdelimiter to "."
+   put item -1 of tStackName into tExtension
+   set the itemdelimiter to comma
+   if tExtension is not among the items of revIDELiveCodeFileExtensions() then
+      put ".livecode" after tStackName
+   end if
+   
+   local tStackFileList
+   revSBRelativeStackFilesList pStack, tStackFileList
+   
+   -- close the open stacks (ask to save if need be)
+   revCloseOpenStacks tStackFileList, pStack
+   if the result is not empty then
+      return "cancelled"
+   end if
+   
+   set the defaultStack to the short name of stack tStackFileName
+   
+   put tStackName into rStackName
+   put tStackFileName into rStackFileName
+   put tStackFileList into rStackFileList
+end __CloseOpenStackFiles
+
+private command __CleanBuildStacks
+   repeat for each line tLine in sResetA["Reopen"]
+      if there is a stack tLine then
+         if the mode of stack tLine is not 0 then
+            repeat for each line tSub in the substacks of stack tLine
+               close stack tSub
+            end repeat
+            -- MM-2013-04-05: [[ Bug 10756 ]] Make sure we're allowed to delete the stack before deleteing.
+            set the cantDelete of stack tLine to false
+            delete stack tLine
+         end if
+      end if
+   end repeat
+end __CleanBuildStacks
+
+private command  __StandalonePreBuild @xSettings
+   revStandaloneProgress "Loading settings..."
+   
+   -- Make sure all dependencies are included
+   revSBUpdateForDependencies xSettings
+   
+   put the directory into sResetA["Directory"]
+   put the fileType into sResetA["FileType"]
+end __StandalonePreBuild
+
+on revSBStandalonePreBuild pStack, pFolder, pPlatform, @xSettings, @rStackName, @rStackFileName, @rStackFileList
+   __StandalonePreBuild xSettings
+   
+   local tCount
+   if there is a file (pFolder & "/" & xSettings["name"]) then
+      put " Standalone" after xSettings["name"]
+      put empty into tCount
+      repeat while (there is a file (pFolder & "/" & xSettings["name"] & tCount) or there is a folder (pFolder & "/" & xSettings["name"] & tCount))
+         add 1 to tCount
+      end repeat
+      put xSettings["name"] & tCount into xSettings["name"]
+   end if
+   
+   local tStackFileName, tStackName, tStackFileList
+   __CloseOpenStackFiles pStack, tStackName, tStackFileName, tStackFileList
+   if the result is "cancelled" then
+      return "cancelled"
+   end if
+   
+   try
+      dispatch "savingStandalone" to stack tStackFileName with pPlatform
+   end try
+   
+   put tStackName into rStackName
+   put tStackFileName into rStackFileName
+   put tStackFileList into rStackFileList
+   return empty
+end revSBStandalonePreBuild
+
+private command  __ReloadOriginalStackFile pStackPath, pStack
+   if there is a stack pStack then
+      local tOldLock
+      put the lockMessages into tOldLock
+      lock messages
+      set the cantDelete of stack pStack to false
+      delete stack pStack
+      set the lockMessages to tOldLock
+   end if
+   
+   local tError
+   try
+      get the short name of stack pStackPath
+   catch tError
+      return "Could not reload stack file" for error
+   end try
+   return it for value
+end __ReloadOriginalStackFile
+
+private command __StandalonePostBuild pStackFileName, pStack
+   __ReloadOriginalStackFile pStackFileName, pStack
+   __CleanBuildStacks
+   revSBResetState
+end __StandalonePostBuild
+
+command revSBResetState
+   set the directory to sResetA["Directory"]
+   set the fileType to sResetA["fileType"]
+   
+   # TH-2008-07-08 :: Bug 6444, locking messages around this handler to prevent calling of preopencard handlers
+   # in the stacks being built
+   lock messages
+   local tLineNumber
+   put 0 into tLineNumber
+   repeat for each line tLine in sResetA["Reopen"]
+      add 1 to tLineNumber
+      go tLine
+      
+      # OK-2008-11-10 : Bug 7382 - Restores the stack's position in the message path if there was one
+      restoreStackToMessagePath tLine, line tLineNumber of sResetA["Restore Message Path"]
+   end repeat
+   unlock messages
+   delete variable sResetA               -- stored info for resetting to the pre-build state
+end revSBResetState
+
+on revSBStandalonePostBuild pStackFileName, pStack, pFolder, pPlatform
+   try
+      dispatch "standaloneSaved" to stack pStackFileName with pFolder & slash, pPlatform
+   end try
+   
+   __StandalonePostBuild pStackFileName, pStack
+end revSBStandalonePostBuild
