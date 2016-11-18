@@ -188,7 +188,7 @@
         QueryKindOfSymbolId(Id -> type)
         
     'rule' CheckBindingIsTypeId(Id):
-        Id'Name -> Name
+		GetQualifiedName(Id -> Name)
         Id'Position -> Position
         Error_NotBoundToAType(Position, Name)
         -- Mark this id as being in error.
@@ -204,7 +204,7 @@
         QueryKindOfSymbolId(Id -> handler)
         
     'rule' CheckBindingIsHandlerId(Id):
-        Id'Name -> Name
+        GetQualifiedName(Id -> Name)
         Id'Position -> Position
         Error_NotBoundToAHandler(Position, Name)
         -- Mark this id as being in error.
@@ -229,7 +229,7 @@
         QueryKindOfSymbolId(Id -> context)
 
     'rule' CheckBindingIsVariableId(Id):
-        Id'Name -> Name
+        GetQualifiedName(Id -> Name)
         Id'Position -> Position
         Error_NotBoundToAVariable(Position, Name)
         -- Mark this id as being in error.
@@ -257,7 +257,7 @@
         QueryKindOfSymbolId(Id -> handler)
 
     'rule' CheckBindingIsVariableOrHandlerId(Id):
-        Id'Name -> Name
+        GetQualifiedName(Id -> Name)
         Id'Position -> Position
         Error_NotBoundToAVariableOrHandler(Position, Name)
         -- Mark this id as being in error.
@@ -288,7 +288,7 @@
         QueryKindOfSymbolId(Id -> handler)
 
     'rule' CheckBindingIsConstantOrVariableOrHandlerId(Id):
-        Id'Name -> Name
+        GetQualifiedName(Id -> Name)
         Id'Position -> Position
         Error_NotBoundToAConstantOrVariableOrHandler(Position, Name)
         -- Mark this id as being in error.
@@ -335,14 +335,14 @@
             where(Signature -> signature(nil, ReturnType))
             (|
                 where(ReturnType -> undefined(_))
-                Id'Name -> Name
+                GetQualifiedName(Id -> Name)
                 Id'Position -> Position
                 Error_HandlerNotSuitableForPropertyGetter(Position, Name)
             ||
                 -- all non-void return values are fine
             |)
         ||
-            Id'Name -> Name
+            GetQualifiedName(Id -> Name)
             Id'Position -> Position
             Error_HandlerNotSuitableForPropertyGetter(Position, Name)
         |)
@@ -359,7 +359,7 @@
         (|
             where(Signature -> signature(parameterlist(parameter(_, in, _, _), nil), _))
         ||
-            Id'Name -> Name
+            GetQualifiedName(Id -> Name)
             Id'Position -> Position
             Error_HandlerNotSuitableForPropertySetter(Position, Name)
         |)
@@ -384,14 +384,14 @@
         
     'rule' CheckBindingIsSyntaxRuleOfExpressionType(Id):
         QueryClassOfSyntaxId(Id -> _)
-        Id'Name -> Name
+        GetQualifiedName(Id -> Name)
         Id'Position -> Position
         Error_NotBoundToAPhrase(Position, Name)
         -- Mark this id as being in error.
         Id'Meaning <- error
         
     'rule' CheckBindingIsSyntaxRuleOfExpressionType(Id):
-        Id'Name -> Name
+        GetQualifiedName(Id -> Name)
         Id'Position -> Position
         Error_NotBoundToASyntaxRule(Position, Name)
         -- Mark this id as being in error.
@@ -406,7 +406,7 @@
         QueryTypeOfSyntaxMarkId(Id -> _)
         
     'rule' CheckBindingIsSyntaxMark(Id):
-        Id'Name -> Name
+        GetQualifiedName(Id -> Name)
         Id'Position -> Position
         Error_NotBoundToASyntaxMark(Position, Name)
         -- Mark this id as being in error.
@@ -427,7 +427,7 @@
     'rule' CheckBindingIsConstantSyntaxValue(_, string(_, _)):
 
     'rule' CheckBindingIsConstantSyntaxValue(Id, _):
-        Id'Name -> Name
+        GetQualifiedName(Id -> Name)
         Id'Position -> Position
         Error_NotBoundToAConstantSyntaxValue(Position, Name)
 
@@ -440,7 +440,7 @@
         QueryTypeOfSyntaxMarkId(Id -> _)
 
     'rule' CheckBindingIsSyntaxMarkUse(Id):
-        Id'Name -> Name
+        GetQualifiedName(Id -> Name)
         Id'Position -> Position
         Error_NotBoundToASyntaxMark(Position, Name)
         -- Mark this id as being in error.
@@ -604,7 +604,7 @@
         (|
             IsIndexInSet(Index)
             Variable'Position -> Position
-            Variable'Name -> Name
+            GetQualifiedName(Variable -> Name)
             Error_SyntaxMarkVariableAlreadyDefined(Position, Name)
         ||
             IncludeIndexInSet(Index)
@@ -635,7 +635,7 @@
             -- This is fine
         ||
             Variable'Position -> Position
-            Variable'Name -> Name
+            GetQualifiedName(Variable -> Name)
             Error_SyntaxMarkVariableAlreadyDefinedWithDifferentType(Position, Name)
         |)
         
@@ -1019,7 +1019,7 @@
             where(Type -> boolean(_))
         ||
             where(Type -> named(_, Id))
-            Id'Name -> Name
+            GetQualifiedName(Id -> Name)
             IsNameEqualToString(Name, "CBool")
         ||
             Error_IterateSyntaxMethodMustReturnBoolean(Position)
@@ -1532,11 +1532,11 @@
     'rule' CheckExpressionIsAssignable(slot(Position, Id)):
         (|
             QueryKindOfSymbolId(Id -> handler)
-            Id'Name -> Name
+            GetQualifiedName(Id -> Name)
             Error_CannotAssignToHandlerId(Position, Name)
         ||
             QueryKindOfSymbolId(Id -> constant)
-            Id'Name -> Name
+            GetQualifiedName(Id -> Name)
             Error_CannotAssignToConstantId(Position, Name)
         ||
         |)
@@ -1752,7 +1752,10 @@
     'rule' CheckIdIsSuitableForDefinition(Id):
         Id'Name -> Name
         Id'Position -> Position
+		Id'Namespace -> Namespace
         (|
+			where(Namespace -> id(_))
+		||
             IsNameSuitableForDefinition(Name)
         ||
             Warning_UnsuitableNameForDefinition(Position, Name)
@@ -2050,7 +2053,7 @@
                 (|
                     where(Safety -> unsafe)
                 ||
-                    Handler'Name -> Name
+                    GetQualifiedName(Handler -> Name)
                     Error_UnsafeHandlerCallNotAllowedInSafeContext(Position, Name)
                 |)
             |)
@@ -2122,6 +2125,7 @@
         Id'Meaning -> Meaning
         
 'condition' QuerySymbolId(ID -> SYMBOLINFO)
+'action' GetQualifiedName(ID -> NAME)
 
 --------------------------------------------------------------------------------
 

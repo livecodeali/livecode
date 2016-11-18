@@ -1,0 +1,54 @@
+/*
+Copyright (C) 2015 LiveCode Ltd.
+
+This file is part of LiveCode.
+
+LiveCode is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License v3 as published by the Free
+Software Foundation.
+
+LiveCode is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
+
+module com.livecode.compiler.namespace.tests
+
+use com.livecode.compiler.__namespace.tests
+
+public constant TestConstant is 5
+public handler __TestHandler() returns Number
+	return 5
+end handler
+public type TestType is Number
+
+public handler TestConstantQualification()
+	test "unqualified constant value" when TestConstant is 5
+	test "qualified constant value" when com.livecode.compiler.namespace.tests.TestConstant is 5
+	test "qualified import constant value" when com.livecode.compiler.__namespace.tests.TestConstant is "string"
+end handler
+
+public handler TestHandlerQualification()
+	test "unqualified handler call" when __TestHandler() is 5
+	test "unqualified handler call" when com.livecode.compiler.namespace.tests.__TestHandler() is 5
+	test "qualified import handler call" when com.livecode.compiler.__namespace.tests.__TestHandler() is "string"
+end handler
+
+public handler TestTypeQualification()
+	variable tTestThis as TestType
+	put 5 into tTestThis
+	test "unqualified type use" when tTestThis is 5
+	
+	variable tTestThisQualified as com.livecode.compiler.namespace.tests.TestType
+	put 5 into tTestThisQualified
+	test "unqualified type use" when tTestThisQualified is 5
+	
+	variable tTestThat as com.livecode.compiler.__namespace.tests.TestType
+	put "string" into tTestThat
+	test "qualified import type use" when tTestThat is "string"
+end handler
+
+end module

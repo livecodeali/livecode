@@ -37,6 +37,8 @@ int IsNameEqualToName(NameRef p_left, NameRef p_right);
     
 void GetStringOfNameLiteral(NameRef literal, const char** r_string);
 
+void ConcatenateNameParts(NameRef p_left, NameRef p_right, NameRef *r_output);
+
 void InitializeScopes(void);
 void FinalizeScopes(void);
 

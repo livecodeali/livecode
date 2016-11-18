@@ -179,6 +179,7 @@ int AddImportedModuleFile(const char *p_name)
         for(i = 0; i < ImportedModuleDirCount; i++)
         {
             /* OVERFLOW */ sprintf(t_path, "%s/%s.lci", ImportedModuleDir[i], p_name);
+			fprintf(stderr, "%s\n", ImportedModuleDir[i]);
             t_file = fopen(t_path, "r");
             if (t_file != NULL)
                 break;
@@ -189,7 +190,7 @@ int AddImportedModuleFile(const char *p_name)
         /* OVERFLOW */ sprintf(t_path, "%s.lci", p_name);
         t_file = fopen(t_path, "r");
     }
-    
+	
     if (t_file == NULL)
         return 0;
     

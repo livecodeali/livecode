@@ -1,0 +1,62 @@
+%% Copyright (C) 2016 LiveCode Ltd.
+%%
+%% This file is part of LiveCode.
+%%
+%% LiveCode is free software; you can redistribute it and/or modify it under
+%% the terms of the GNU General Public License v3 as published by the Free
+%% Software Foundation.
+%%
+%% LiveCode is distributed in the hope that it will be useful, but WITHOUT ANY
+%% WARRANTY; without even the implied warranty of MERCHANTABILITY or
+%% FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+%% for more details.
+%%
+%% You should have received a copy of the GNU General Public License
+%% along with LiveCode.  If not see <http://www.gnu.org/licenses/>.
+
+%TEST NamespaceInDeclarationsError
+module compiler_test
+constant Valid is [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ]
+constant Not.Valid %{AFTER_IDENTIFIER} is 0
+end module
+%EXPECT PASS
+%ERROR "Namespace operator invalid in declaration context" AT AFTER_IDENTIFIER
+%ENDTEST
+
+%TEST NamespaceInHandlerUse
+module compiler_test
+handler DoNothing(in pNum as Number) returns Number
+	return pNum
+end handler
+handler OnTest()
+variable tVar as Number
+put compiler_test.DoNothing(360) into tVar
+end handler
+end module
+%EXPECT PASS
+%SUCCESS
+%ENDTEST
+
+%TEST NamespaceInConstantUse
+module compiler_test
+constant TestConstant is "string"
+handler OnTest()
+variable tVar as String
+put compiler_test.TestConstant into tVar
+end handler
+end module
+%EXPECT PASS
+%SUCCESS
+%ENDTEST
+
+%TEST NamespaceInTypeUse
+module compiler_test
+type TestType is String
+handler OnTest()
+variable tVar as compiler_test.TestType
+put "string" into tVar
+end handler
+end module
+%EXPECT PASS
+%SUCCESS
+%ENDTEST

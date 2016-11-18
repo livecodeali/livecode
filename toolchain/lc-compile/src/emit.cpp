@@ -388,6 +388,7 @@ void EmitFinish(void)
             EmittedModule *t_module;
             if (__FindEmittedModule(s_ordered_modules[i], t_module))
             {
+				fprintf(stderr, "mod %s\n", t_module -> modified_name);
                 if (fprintf(s_output_code_file,
                             "extern void %s_Finalize(void);\n",
                             t_module -> modified_name) < 0)
@@ -401,7 +402,8 @@ void EmitFinish(void)
             EmittedModule *t_module;
             if (__FindEmittedModule(s_ordered_modules[i - 1], t_module))
             {
-                if (fprintf(s_output_code_file,
+				fprintf(stderr, "mod %s\n", t_module -> modified_name);
+				if (fprintf(s_output_code_file,
                             "    %s_Finalize();\n",
                             t_module -> modified_name) < 0)
                     goto error_cleanup;

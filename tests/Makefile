@@ -27,7 +27,7 @@ endif
 MODULE_DIR ?= $(bin_dir)/modules/lci
 
 LC_COMPILE ?= $(bin_dir)/lc-compile
-LC_COMPILE_FLAGS += --modulepath $(LCM_DIR) --modulepath $(MODULE_DIR)
+LC_COMPILE_FLAGS += -v --modulepath $(LCM_DIR) --modulepath $(MODULE_DIR)
 
 LC_RUN ?= $(bin_dir)/lc-run
 
