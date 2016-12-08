@@ -19,17 +19,8 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "foundation-private.h"
 
-#if defined(TARGET_PLATFORM_MACOS_X) || defined(TARGET_SUBPLATFORM_ANDROID) || defined(TARGET_PLATFORM_LINUX)
-#define TARGET_SUPPORTS_JAVA
-#endif
-
-#ifdef TARGET_SUPPORTS_JAVA
+#ifdef TARGET_HAS_JAVA
 #include <jni.h>
-#endif
-
-#if defined(TARGET_PLATFORM_LINUX) || defined(TARGET_PLATFORM_MACOS_X)
-#include <stdlib.h>
-#include <dlfcn.h>
 #endif
 
 #ifdef TARGET_SUBPLATFORM_ANDROID
@@ -38,12 +29,12 @@ extern JNIEnv *MCJavaAttachCurrentThread();
 extern void MCJavaDetachCurrentThread();
 #endif
 
-#ifdef TARGET_SUPPORTS_JAVA
+#ifdef TARGET_HAS_JAVA
 static JNIEnv *s_env;
 static JavaVM *s_jvm;
 #endif
 
-#if defined(TARGET_PLATFORM_LINUX) || defined(TARGET_PLATFORM_MACOS_X)
+#ifdef TARGET_HAS_JAVA
 
 static bool s_weak_link_jvm = false;
 
@@ -81,8 +72,6 @@ static bool initialise_weak_link_jvm()
 	s_weak_link_jvm = true;
     return true;
 }
-
-#endif
 
 static void init_jvm_args(JavaVMInitArgs *x_args)
 {
@@ -131,24 +120,30 @@ static void finalise_jvm()
 #endif
     }
 }
-
+#endif
 
 static bool s_java_initialised = false;
 
 MC_DLLEXPORT_DEF
 bool MCJavaInitialize()
 {
+#ifdef TARGET_HAS_JAVA
 	if (s_java_initialised)
 		return true;
 	
-    s_java_initialised = initialise_jvm();
-    return s_java_initialised;
+	s_java_initialised = initialise_jvm();
+	return s_java_initialised;
+#else
+	return false;
+#endif
 }
 
 MC_DLLEXPORT_DEF
 void MCJavaFinalize()
 {
+#ifdef TARGET_HAS_JAVA
     finalise_jvm();
+#endif
 }
 
 enum MCJavaCallType {
@@ -225,7 +220,7 @@ static bool __GetExpectedTypeCode(MCTypeInfoRef p_type, MCJavaType& r_code)
     return true;
 }
 
-#ifdef TARGET_SUPPORTS_JAVA
+#ifdef TARGET_HAS_JAVA
 void MCJavaDoAttachCurrentThread()
 {
 #if defined(TARGET_PLATFORM_MACOS_X) || defined(TARGET_PLATFORM_LINUX)
@@ -607,7 +602,7 @@ static hash_t __MCJavaObjectHash(MCValueRef p_value)
 
 static bool __MCJavaObjectDescribe(MCValueRef p_value, MCStringRef &r_desc)
 {
-#ifdef TARGET_SUPPORTS_JAVA
+#ifdef TARGET_HAS_JAVA
     if (!s_java_initialised)
         return false;
     
@@ -776,7 +771,7 @@ bool MCJavaCallJNIMethod(MCNameRef p_class_name, void *p_method_id, int p_call_t
     if (!s_java_initialised)
         return false;
     
-#ifdef TARGET_SUPPORTS_JAVA
+#ifdef TARGET_HAS_JAVA
     jmethodID t_method_id = (jmethodID)p_method_id;
 
     if (t_method_id == nil)
@@ -837,7 +832,7 @@ MC_DLLEXPORT_DEF bool MCJavaConvertJStringToStringRef(MCJavaObjectRef p_object, 
     if (!s_java_initialised)
         return false;
     
-#ifdef TARGET_SUPPORTS_JAVA
+#ifdef TARGET_HAS_JAVA
     jstring t_string;
     t_string = (jstring)MCJavaObjectGetObject(p_object);
     return __MCJavaStringFromJString(t_string, r_string);
@@ -851,7 +846,7 @@ MC_DLLEXPORT_DEF bool MCJavaConvertStringRefToJString(MCStringRef p_string, MCJa
     if (!s_java_initialised)
         return false;
     
-#ifdef TARGET_SUPPORTS_JAVA
+#ifdef TARGET_HAS_JAVA
     jstring t_string;
     if (!__MCJavaStringToJString(p_string, t_string))
         return false;
@@ -868,7 +863,7 @@ MC_DLLEXPORT_DEF bool MCJavaCallConstructor(MCNameRef p_class_name, MCListRef p_
         return false;
     
     void *t_jobject_ptr = nil;
-#ifdef TARGET_SUPPORTS_JAVA
+#ifdef TARGET_HAS_JAVA
     MCJavaDoAttachCurrentThread();
     
     MCAutoStringRef t_class_path;
@@ -904,7 +899,7 @@ MC_DLLEXPORT_DEF void *MCJavaGetMethodId(MCNameRef p_class_name, MCStringRef p_m
     if (!s_java_initialised)
         return t_method_id_ptr;
     
-#ifdef TARGET_SUPPORTS_JAVA
+#ifdef TARGET_HAS_JAVA
     MCAutoStringRef t_class_path;
     if (!MCJavaClassNameToPathString(p_class_name, &t_class_path))
         return nil;

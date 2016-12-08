@@ -166,13 +166,7 @@
 				],
 				[
 					'OS == "linux"', 
-					{
-						'include_dirs':
-						[
-							'<(javahome)/include',
-							'<(javahome)/include/linux',
-						],
-						
+					{						
 						'sources/':
 						[
 							['exclude', '.*-w32\\.cpp$'],
@@ -181,29 +175,63 @@
 					},
 				],
 				[
-					'OS == "mac"',
+					'OS == "linux" and "<(javahome)" != ""', 
 					{
 						'include_dirs':
 						[
 							'<(javahome)/include',
-							'<(javahome)/include/darwin',
+							'<(javahome)/include/linux',
 						],
 						
+						'sources':
+						[
+							'<(INTERMEDIATE_DIR)/src/libfoundationjvm.stubs.cpp',
+						],
+						
+						'defines':
+						[
+							'TARGET_HAS_JAVA',
+						],
+					}
+				],
+				[
+					'OS == "mac"',
+					{
 						'sources/':
 						[
 							['exclude', '.*-w32\\.cpp$'],
 							['exclude', '.*-lnx\\.cpp$'],	
 						],
-					},	
+					}
 				],
 				[
-					'OS == "linux" or OS == "mac"',
-					{
+					'OS == "mac" and "<(javahome)" != ""',
+					{						
+						'include_dirs':
+						[
+							'<(javahome)/include',
+							'<(javahome)/include/darwin',
+						],
+
 						'sources':
 						[
 							'<(INTERMEDIATE_DIR)/src/libfoundationjvm.stubs.cpp',
 						],
-					},
+						
+						'defines':
+						[
+							'TARGET_HAS_JAVA',
+						],
+					},	
+				],
+				[
+					'OS = "android"',
+					{
+						'defines':
+						[
+							'TARGET_HAS_JAVA',
+						],
+					}
 				],
 			],
 			
