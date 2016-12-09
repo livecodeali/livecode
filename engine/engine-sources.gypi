@@ -599,6 +599,10 @@
 			# Native layers
 			'src/native-layer.h',
 			'src/native-layer.cpp',
+			
+			# Plugin points
+			'src/pluginpoints.cpp',
+			'src/pluginpoints.h',
 		],
 		
 		# Sources that are only for desktop mode
@@ -966,6 +970,8 @@
 			'src/module-resources.cpp',
 			
 			'src/module-browser.cpp',
+			
+			'src/module-plugin.cpp',
 		],
 		
 		# Engine LCB files containing syntax
@@ -974,6 +980,7 @@
 			'src/canvas.lcb',
 			'src/engine.lcb',
 			'src/widget.lcb',
+			'src/plugin.lcb',
 		],
 		
 		# Other engine LCB files

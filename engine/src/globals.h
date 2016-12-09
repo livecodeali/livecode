@@ -39,6 +39,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "tooltip.h"
 
 #include "foundation-locale.h"
+#include "pluginpoints.h"
 
 typedef struct _Streamnode Streamnode;
 typedef struct _Linkatts Linkatts;
@@ -433,6 +434,9 @@ extern char *MCsysencoding;
 // Locales
 extern MCLocaleRef kMCBasicLocale;
 extern MCLocaleRef kMCSystemLocale;
+
+// Plugin points
+extern MCPutOutputPluginPoint *MCputoutputpluginpoint;
 
 ////////////////////////////////////////////////////////////////////////////////
 //

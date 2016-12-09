@@ -505,6 +505,8 @@ MCArrayRef MCcommandarguments;
 
 MCHook *MChooks = nil;
 
+MCPutOutputPluginPoint *MCputoutputpluginpoint = nil;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 extern MCUIDC *MCCreateScreenDC(void);
@@ -844,6 +846,8 @@ void X_clear_globals(void)
     MCactionsrequired = 0;
     
     MChooks = nil;
+	
+	MCputoutputpluginpoint = nil;
 
 #if defined(MCSSL)
     MCSocketsInitialize();

@@ -39,6 +39,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "font.h"
 #include "stacksecurity.h"
 #include "system.h"
+#include "pluginpoints.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -100,6 +101,8 @@ bool X_init(int argc, MCStringRef argv[], MCStringRef envp[])
 #ifndef _WINDOWS_DESKTOP
 	MCS_init();
 #endif
+	
+	MCPluginPointsInitialize();
 	
 	////
 	

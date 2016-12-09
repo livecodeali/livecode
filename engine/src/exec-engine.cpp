@@ -49,6 +49,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "uuid.h"
 
 #include "libscript/script.h"
+#include "pluginpoints.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -701,6 +702,13 @@ void MCEngineExecGet(MCExecContext& ctxt, /* take */ MCExecValue& p_value)
 
 void MCEngineExecPutOutput(MCExecContext& ctxt, MCStringRef p_value)
 {
+	if (MCputoutputpluginpoint != nil &&
+		MCputoutputpluginpoint -> IsBound())
+	{
+		MCputoutputpluginpoint -> PutOutput(ctxt, p_value);
+		return;
+	}
+	
 	if (!MCS_put(ctxt, kMCSPutOutput, p_value))
 		ctxt . LegacyThrow(EE_PUT_CANTSETINTO);
 }
