@@ -25,11 +25,11 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #ifndef _WINDOWS
 #define _WINDOWS
 #endif
-#elif defined(TARGET_PLATFORM_MACOS_X)
+#elif defined(TARGET_PLATFORM_MACOS)
 #define _DESKTOP
 #define _MAC_DESKTOP
-#ifndef _MACOSX
-#define _MACOSX
+#ifndef TARGET_PLATFORM_MACOS
+#define TARGET_PLATFORM_MACOS
 #endif
 #elif defined(TARGET_PLATFORM_LINUX)
 #define _DESKTOP

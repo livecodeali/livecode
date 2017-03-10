@@ -128,7 +128,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #elif defined(_LINUX_DESKTOP) || defined(_LINUX_SERVER) || defined(__EMSCRIPTEN__)
 #define _HAS_VSNPRINTF
 #undef _HAS_QSORT_R
-#elif defined(_MAC_DESKTOP) || defined(_MAC_SERVER) || defined(_DARWIN_SERVER) || defined(_IOS_MOBILE)
+#elif defined(TARGET_PLATFORM_MACOS) || defined(_DARWIN_SERVER) || defined(_IOS_MOBILE)
 #define _HAS_VSNPRINTF
 #define _HAS_QSORT_R
 #elif defined(_ANDROID_MOBILE)
@@ -204,7 +204,7 @@ typedef class MCPlatformPlayer *MCPlatformPlayerRef;
 
 typedef void *MCColorTransformRef;
 
-#if defined(_MAC_DESKTOP) || defined(_MAC_SERVER)
+#if defined(TARGET_PLATFORM_MACOS)
 typedef MCPlatformCursorRef MCCursorRef;
 #else
 typedef struct MCCursor *MCCursorRef;
@@ -710,7 +710,7 @@ typedef struct _GdkPixbuf MCBitmap;
 
 ////////////////////////////////////////
 
-#if defined(_MAC_DESKTOP) || defined(_MAC_SERVER)
+#if defined(TARGET_PLATFORM_MACOS)
 
 typedef MCPlatformWindowRef Window;
 typedef MCSysWindowHandle Drawable;

@@ -68,7 +68,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #define MS_MOD5                0x40
 #define MS_MODIFIER           (MS_MOD1 | MS_MOD2 | MS_MOD3 | MS_MOD4 | MS_MOD5)
 #define MS_CAPS_LOCK           0x80
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 #define MS_MAC_CONTROL         MS_MOD2
 #else
 #define MS_MAC_CONTROL         MS_CONTROL

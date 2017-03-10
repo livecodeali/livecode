@@ -258,7 +258,7 @@ sub generateModule
 	
 	my $moduleUpper = uc $module;
 	output ;
-    output "#if defined(_MACOSX) || defined(TARGET_SUBPLATFORM_IPHONE)";
+    output "#if defined(TARGET_PLATFORM_MACOS) || defined(TARGET_SUBPLATFORM_IPHONE)";
     output "#define MODULE_${moduleUpper}_NAME \"$darwinLibrary\"";
     output "#elif defined(_LINUX) || defined(__EMSCRIPTEN__)";
     output "#define MODULE_${moduleUpper}_NAME \"$unixLibrary\"";

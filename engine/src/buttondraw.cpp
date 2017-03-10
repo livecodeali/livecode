@@ -547,7 +547,7 @@ void MCButton::draw(MCDC *dc, const MCRectangle& p_dirty, bool p_isolated, bool 
 					}
 					setforeground(dc, DI_BOTTOM, False);
 				}
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
                 // FG-2014-10-29: [[ Bugfix 13842 ]] On Yosemite, glowing buttons
                 // should draw with white text.
                 if (IsMacLFAM() && MCmajorosversion >= 0x10A0 && MCaqua
@@ -1114,7 +1114,7 @@ void MCButton::drawpulldown(MCDC *dc, MCRectangle &srect)
 				MCWidgetInfo widgetinfo;
 				widgetinfo.type = WTHEME_TYPE_PULLDOWN;
 				getwidgetthemeinfo(widgetinfo);
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 				uint2 i;
 				if (!getcindex(DI_BACK, i) && !getpindex(DI_BACK, i))
 					MCcurtheme->drawwidget(dc, widgetinfo, srect);
@@ -1415,7 +1415,7 @@ void MCButton::drawtabs(MCDC *dc, MCRectangle &srect)
 				MCcurtheme->drawwidget(dc, tabwinfo, tabrect);
 			twidth -= taboverlap;
 
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
             // FG-2014-10-24: [[ Bugfix 11912 ]]
             // On OSX, reverse the text colour for selected tab buttons
             if (i+1 == menuhistory)
@@ -1780,7 +1780,7 @@ void MCButton::drawstandardbutton(MCDC *dc, MCRectangle &srect)
                 winfo.state |= WTHEME_STATE_HASDEFAULT;
             }
             
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 			// MW-2010-12-05: [[ Bug 9210 ]] Make sure we disable the default look when the app is
 			//   in the background.
 			if (!MCappisactive)

@@ -575,7 +575,7 @@ Boolean MCObject::kdown(MCStringRef p_string, KeySym key)
 				if (message_with_valueref_args(MCM_option_key_down, *t_key_string) == ES_NORMAL)
 				return True;
         }
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 		else if (MCmodifierstate & MS_MAC_CONTROL)
         {
 			if (message_with_valueref_args(MCM_control_key_down, *t_key_string) == ES_NORMAL)
@@ -1592,7 +1592,7 @@ Boolean MCObject::getforecolor(uint2 p_di, Boolean rev, Boolean hilite,
 			c = MCscreen->getblack();
 		break;
 	case DI_BACK:
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 		if (IsMacLFAM() && dc_type != CONTEXT_TYPE_PRINTER)
 		{
 			extern bool MCMacThemeGetBackgroundPattern(Window_mode p_mode, bool p_active, MCPatternRef &r_pattern);

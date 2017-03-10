@@ -80,7 +80,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #define HOLD_SIZE1 65535
 #define HOLD_SIZE2 16384
 
-#ifdef TARGET_PLATFORM_MACOS_X
+#ifdef TARGET_PLATFORM_MACOS
 //#include <Foundation/NSAutoreleasePool.h>
 #endif
 
@@ -139,7 +139,7 @@ Boolean MCemacskeys;
 Boolean MCraisemenus;
 Boolean MCraisepalettes;
 #else
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 Boolean MCraisemenus;
 #else
 Boolean MCraisemenus = True;
@@ -150,7 +150,7 @@ Boolean MCsystemmodals;
 Boolean MCactivatepalettes = True;
 
 // MW-2007-07-05: [[ Bug 2288 ]] Default for hidePalettes is not system-standard
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 Boolean MChidepalettes = True;
 #else
 Boolean MChidepalettes = False;
@@ -182,7 +182,7 @@ char *MCdisplayname = NULL;
 Boolean MCshmoff;
 Boolean MCshmon;
 uint4 MCvisualid;
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 real8 MCgamma = 1.7;
 #else
 real8 MCgamma = 2.2;
@@ -547,7 +547,7 @@ void X_clear_globals(void)
     MCdontuseQT = True;
     // SN-2014-10-2-: [[ Bug 13684 ]] Bugfix brought in 7.0 initialisation
     // MW-2007-07-05: [[ Bug 2288 ]] Default for hidePalettes is not system-standard
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 	MChidepalettes = True;
 #else
     MChidepalettes = False;
@@ -1072,7 +1072,7 @@ bool X_open(int argc, MCStringRef argv[], MCStringRef envp[])
     
     ////
     
-#if defined(_MACOSX) && defined(FEATURE_QUICKTIME)
+#if defined(TARGET_PLATFORM_MACOS) && defined(FEATURE_QUICKTIME)
     // MW-2014-07-21: Make AVFoundation the default on 10.8 and above.
     if (MCmajorosversion < 0x1080)
     {

@@ -765,7 +765,7 @@ __MCScriptResolveForeignFunctionBinding(MCScriptInstanceRef p_instance,
 									  "objc",
 									  kMCStringOptionCompareExact))
 	{
-#if !defined(_MACOSX) && !defined(TARGET_SUBPLATFORM_IPHONE)
+#if !defined(TARGET_PLATFORM_MACOS) && !defined(TARGET_SUBPLATFORM_IPHONE)
 		if (r_bound == nil)
 		{
 			return MCScriptThrowObjCBindingNotSupported();

@@ -29,7 +29,7 @@ enum Audio_format {
     AF_ULINEAR
 };
 
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 #define PLAY_RATE 1000
 #define LOOP_RATE 16
 #else

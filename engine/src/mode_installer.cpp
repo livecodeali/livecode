@@ -106,7 +106,7 @@ __declspec(allocate(".project")) volatile MCCapsuleInfo MCcapsule = {};
 __attribute__((section(".payload"))) volatile MCCapsuleInfo MCpayload = {};
 __attribute__((section(".project"))) volatile MCCapsuleInfo MCcapsule = {};
 
-#elif defined(_MACOSX)
+#elif defined(TARGET_PLATFORM_MACOS)
 
 #define PAYLOAD_SECTION_NAME "__PAYLOAD"
 #define PROJECT_SECTION_NAME "__PROJECT"
@@ -164,7 +164,7 @@ MCPropertyTable MCProperty::kModePropertyTable =
 
 static MCMiniZipRef s_payload_minizip = nil;
 
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 static void *s_payload_loaded_data = nil;
 static void *s_payload_mapped_data = nil;
 static uint32_t s_payload_mapped_size = 0;
@@ -235,7 +235,7 @@ public:
 		// MM-2011-03-23: If no payload file specified, then extract payload as before, from installer.
 		if (t_payload_data == nil)
 		{
-#ifdef _MACOSX		
+#ifdef TARGET_PLATFORM_MACOS		
             // Force a reference to the project section to prevent extra-clever
             // optimising linkers from discarding the section.
             (void)MCcapsule.size;
@@ -326,7 +326,7 @@ private:
 	static bool mmap_payload_from_file(const char *p_file_name, const void *&r_payload_data, uint32_t &r_payload_size)
 	{
         bool t_success;
-#if defined(_MACOSX)
+#if defined(TARGET_PLATFORM_MACOS)
 		// The OS X code is just refactored from the method funciton.
 		s_payload_mapped_data = nil;
 		s_payload_mapped_size = 0;
@@ -430,7 +430,7 @@ public:
 		MCMiniZipClose(s_payload_minizip);
 		s_payload_minizip = nil;
 
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 		if (s_payload_mapped_data != nil)
 			munmap(s_payload_mapped_data, s_payload_mapped_size);
 		if (s_payload_loaded_data != nil)
@@ -1783,7 +1783,7 @@ bool MCModeHandleMessage(LPARAM lparam)
 //  Implementation of Mac OS X-specific mode hooks for INSTALLER mode.
 //
 
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 
 bool MCModePreWaitNextEvent(Boolean anyevent)
 {
@@ -1844,7 +1844,7 @@ static void *MCExecutableFindSection(const char *p_name)
 	// We didn't find the section - oh dear.
 	return NULL;
 }
-#elif defined(_MACOSX)
+#elif defined(TARGET_PLATFORM_MACOS)
 #include <mach-o/dyld.h>
 
 static void *MCExecutableFindSection(const char *p_name)

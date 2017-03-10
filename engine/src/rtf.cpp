@@ -26,7 +26,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 //
 
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 #define IMPORT_RTF_PLATFORM_DPI 72
 #else
 #define IMPORT_RTF_PLATFORM_DPI 96

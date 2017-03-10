@@ -183,7 +183,7 @@ public:
 	Boolean sslaccept();
 	void sslclose();
 protected:
-#if defined(_MACOSX) || defined(TARGET_SUBPLATFORM_IPHONE)
+#if defined(TARGET_PLATFORM_MACOS) || defined(TARGET_SUBPLATFORM_IPHONE)
     CFSocketRef cfsockref;
 	CFRunLoopSourceRef rlref;
 #endif

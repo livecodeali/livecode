@@ -773,7 +773,7 @@ void MCIdeDeploy::exec_ctxt(MCExecContext& ctxt)
     t_has_error = !t_params.InitWithArray(ctxt, *t_array);
 	
 	// If platform is iOS and we are not Mac then error
-#ifndef _MACOSX
+#ifndef TARGET_PLATFORM_MACOS
 	if (!t_has_error && (m_platform == PLATFORM_IOS || m_platform == PLATFORM_IOS_EMBEDDED))
 	{
 		ctxt . SetTheResultToCString("ios deployment not supported on this platform");

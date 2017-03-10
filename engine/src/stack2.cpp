@@ -449,7 +449,7 @@ void MCStack::extraclose(bool p_force)
 
 Window MCStack::getwindow()
 {
-#if defined(_MACOSX) || defined(_LINUX)
+#if defined(TARGET_PLATFORM_MACOS) || defined(_LINUX)
 	if (!opened)
 #else
 	if (!opened || state & CS_ICONIC)
@@ -950,7 +950,7 @@ void MCStack::updatemenubar()
 //   into account the menubar and such.
 int32_t MCStack::getnextscroll()
 {
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 	MCControl *mbptr;
 	if (!(state & CS_EDIT_MENUS) && hasmenubar()
 	        && (mbptr = curcard->getchild(CT_EXPRESSION, MCNameGetString(getmenubar()), CT_GROUP, CT_UNDEFINED)) != NULL
@@ -2072,7 +2072,7 @@ Exec_stat MCStack::openrect(const MCRectangle &rel, Window_mode wm, MCStack *par
 		}
 	}
 	
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 	// MW-2008-02-28: [[ Bug 4614 ]] Ensure that sheeting inside a not yet visible window causes
 	//   it to be displayed as modal.
 	// MW-2008-03-03: [[ Bug 5985 ]] Crash when using 'sheet' command. It seems that 'go' is not

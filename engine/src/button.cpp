@@ -1134,7 +1134,7 @@ Boolean MCButton::mdown(uint2 which)
         //  not the stack's rectangle anymore.
         // SN-2014-10-17: [[ Bug 13675 ]] mx/my refer to the button's rectangle on Mac only
         int2 t_right_limit, t_left_limit;
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
         t_left_limit = rect.width - MCscrollbarwidth;
         t_right_limit = rect.width;
 #else
@@ -2433,7 +2433,7 @@ public:
 		newbutton->setname(t_name);
 		MCValueRelease(t_name);
 
-#ifndef TARGET_PLATFORM_MACOS_X
+#ifndef TARGET_PLATFORM_MACOS
 		MCStringRef t_label;
 		/* UNCHECKED */ MCStringMutableCopy(p_menuitem->label, t_label);
 		/* UNCHECKED */ MCStringFindAndReplaceChar(t_label, '\t', ' ', kMCStringOptionCompareExact);

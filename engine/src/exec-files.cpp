@@ -2093,7 +2093,7 @@ void MCFilesExecReadFromFileOrDriverFor(MCExecContext& ctxt, bool p_driver, bool
     MCFilesExecReadFor(ctxt, t_stream, -1, p_count, p_unit_type, p_max_wait, p_time_units, t_encoding, &t_output, t_stat);
     MCFilesReadComplete(ctxt, *t_output, t_stat, t_encoding != kMCFileEncodingBinary);
 
-#if !defined _WIN32 && !defined _MACOSX
+#if !defined _WIN32 && !defined TARGET_PLATFORM_MACOS
 	MCS_sync(t_stream);
 #endif
 }
@@ -2143,7 +2143,7 @@ void MCFilesExecReadFromFileOrDriverUntil(MCExecContext& ctxt, bool p_driver, bo
     MCFilesReadComplete(ctxt, t_output, t_stat, t_encoding != kMCFileEncodingBinary);
     MCValueRelease(t_output);
 
-#if !defined _WIN32 && !defined _MACOSX
+#if !defined _WIN32 && !defined TARGET_PLATFORM_MACOS
 	MCS_sync(t_stream);
 #endif
 }
@@ -2459,7 +2459,7 @@ void MCFilesExecWriteToFileOrDriver(MCExecContext& ctxt, MCNameRef p_file, MCStr
 	t_stream->flags |= IO_WRITTEN;
 #endif
 
-#if !defined _WIN32 && !defined _MACOSX
+#if !defined _WIN32 && !defined TARGET_PLATFORM_MACOS
 	MCS_flush(t_stream);
 #endif
 	
@@ -2535,7 +2535,7 @@ void MCFilesExecWriteToProcess(MCExecContext& ctxt, MCNameRef p_process, MCStrin
 		return;
 	}
 
-#if !defined _WIN32 && !defined _MACOSX
+#if !defined _WIN32 && !defined TARGET_PLATFORM_MACOS
 	if (!haseof)
 		MCS_flush(t_stream);
 #endif

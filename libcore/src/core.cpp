@@ -36,7 +36,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include <cstdio>
 #include <cctype>
 
-#if defined(_MACOSX) || defined(TARGET_SUBPLATFORM_IPHONE)
+#if defined(TARGET_PLATFORM_MACOS) || defined(TARGET_SUBPLATFORM_IPHONE)
 #include <CoreFoundation/CoreFoundation.h>
 #endif
 
@@ -150,7 +150,7 @@ void __MCLogWithTrace(const char *p_file, uint32_t p_line, const char *p_format,
 	}
 }
 
-#elif defined(_MACOSX) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_IPHONE)
+#elif defined(TARGET_PLATFORM_MACOS) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_IPHONE)
 
 #include <unistd.h>
 
@@ -477,7 +477,7 @@ bool MCCStringFormat(char*& r_string, const char *p_format, ...)
 	va_start(t_args, p_format);
 	t_count = _vscprintf(p_format, t_args);
 	va_end(t_args);
-#elif defined(_MACOSX) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_IPHONE) || defined(TARGET_SUBPLATFORM_ANDROID) || defined(__EMSCRIPTEN__)
+#elif defined(TARGET_PLATFORM_MACOS) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_IPHONE) || defined(TARGET_SUBPLATFORM_ANDROID) || defined(__EMSCRIPTEN__)
 	va_start(t_args, p_format);
 	t_count = vsnprintf(nil, 0, p_format, t_args);
 	va_end(t_args);
@@ -503,7 +503,7 @@ bool MCCStringFormatV(char*& r_string, const char *p_format, va_list p_args)
 	int t_count;
 #if defined(_WINDOWS) || defined(_WINDOWS_SERVER)
 	t_count = _vscprintf(p_format, p_args);
-#elif defined(_MACOSX) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_IPHONE) || defined(TARGET_SUBPLATFORM_ANDROID) || defined(__EMSCRIPTEN__)
+#elif defined(TARGET_PLATFORM_MACOS) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_IPHONE) || defined(TARGET_SUBPLATFORM_ANDROID) || defined(__EMSCRIPTEN__)
 	t_count = vsnprintf(nil, 0, p_format, p_args);
 #else
 #error "Implement MCCStringFormat"
@@ -528,7 +528,7 @@ bool MCCStringAppendFormat(char*& x_string, const char *p_format, ...)
 	va_start(t_args, p_format);
 	t_count = _vscprintf(p_format, t_args);
 	va_end(t_args);
-#elif defined(_MACOSX) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_IPHONE) || defined(TARGET_SUBPLATFORM_ANDROID) || defined(__EMSCRIPTEN__)
+#elif defined(TARGET_PLATFORM_MACOS) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_IPHONE) || defined(TARGET_SUBPLATFORM_ANDROID) || defined(__EMSCRIPTEN__)
 	va_start(t_args, p_format);
 	t_count = vsnprintf(nil, 0, p_format, t_args);
 	va_end(t_args);
@@ -667,7 +667,7 @@ bool MCCStringFromUnicodeSubstring(const unichar_t *p_chars, uint32_t p_char_cou
 	return true;
 }
 
-#if defined(_MACOSX) || defined(TARGET_SUBPLATFORM_IPHONE)
+#if defined(TARGET_PLATFORM_MACOS) || defined(TARGET_SUBPLATFORM_IPHONE)
 bool MCCStringToNative(const char *p_string, char*& r_native_string)
 {
 	CFStringRef t_cfstring;
@@ -972,7 +972,7 @@ bool MCCStringContains(const char *p_haystack, const char *p_needle)
 	return strstr(p_haystack, p_needle) != nil;
 }
 
-#if defined(_MACOSX) || defined(TARGET_SUBPLATFORM_IPHONE)
+#if defined(TARGET_PLATFORM_MACOS) || defined(TARGET_SUBPLATFORM_IPHONE)
 bool MCCStringToCFString(const char *p_cstring, CFStringRef& r_cfstring)
 {
 	CFStringRef t_cfstring;

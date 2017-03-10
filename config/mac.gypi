@@ -56,14 +56,14 @@
 				{
 					'defines':
 					[
-						'TARGET_PLATFORM_MACOS_X',
-						'_MACOSX',
+						'TARGET_PLATFORM_MACOS',
+						'_MAC_DESKTOP',
 					],
 				},
 				{
 					'defines':
 					[
-						'_MACOSX',
+						'TARGET_PLATFORM_MACOS',
 
 						'_SERVER',
 						'_MAC_SERVER',

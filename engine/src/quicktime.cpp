@@ -120,7 +120,7 @@ bool MCQTInitialize(void)
 	{
 		s_qt_initted = true;
 	}
-#elif defined _MACOSX
+#elif defined TARGET_PLATFORM_MACOS
     if (initialise_weak_link_QuickTime() == 0 ||
         initialise_weak_link_QTKit() == 0 ||
         initialise_weak_link_QuickDraw() == 0)
@@ -185,7 +185,7 @@ static long sgSndDriver = 0;
 static MCStringRef recordtempfile = NULL;
 static MCStringRef recordexportfile = NULL;
 
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 #define AUDIO_MEDIA_TYPE SGAudioMediaType
 #else
 #define AUDIO_MEDIA_TYPE SoundMediaType
@@ -810,7 +810,7 @@ static void QTEffectsQuery(void **effectatomptr)
 	if (qteffects != NULL)
 		return;
 	
-#if defined(_MACOSX) && defined(__LITTLE_ENDIAN__)
+#if defined(TARGET_PLATFORM_MACOS) && defined(__LITTLE_ENDIAN__)
 	// MW-2007-12-17: [[ Bug 3851 ]] For some reason the dissolve effect doesn't appear in the
 	//   effects dialog on Mac Intel. So we just add it oursleves!
 	

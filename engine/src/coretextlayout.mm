@@ -21,7 +21,7 @@
 
 #include <Foundation/Foundation.h>
 
-#if defined(_MACOSX) && MAC_OS_X_VERSION_MAX_ALLOWED <= MAC_OS_X_VERSION_10_6
+#if defined(TARGET_PLATFORM_MACOS) && MAC_OS_X_VERSION_MAX_ALLOWED <= MAC_OS_X_VERSION_10_6
 #include <ApplicationServices/ApplicationServices.h>
 #else
 #include <CoreText/CoreText.h>

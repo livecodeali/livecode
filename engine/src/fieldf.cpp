@@ -43,7 +43,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "context.h"
 
-#ifndef _MACOSX
+#ifndef TARGET_PLATFORM_MACOS
 //normal, control, alt, alt-control
 Keytranslations MCField::emacs_keys[] =
 {
@@ -98,7 +98,7 @@ Keytranslations MCField::emacs_keys[] =
 	{XK_WheelUp, {FT_SCROLLUP, FT_UNDEFINED, FT_UNDEFINED, FT_UNDEFINED}},
 	{XK_WheelLeft, {FT_SCROLLLEFT, FT_UNDEFINED, FT_UNDEFINED, FT_UNDEFINED}},
 	{XK_WheelRight, {FT_SCROLLRIGHT, FT_UNDEFINED, FT_UNDEFINED, FT_UNDEFINED}},
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 	{XK_F1, {FT_UNDO, FT_UNDO, FT_UNDO, FT_UNDO}},
 	{XK_F2, {FT_CUT, FT_CUT, FT_CUT, FT_CUT}},
 	{XK_F3, {FT_COPY, FT_COPY, FT_COPY, FT_COPY}},
@@ -143,7 +143,7 @@ Keytranslations MCField::std_keys[] =
 	{XK_WheelUp, {FT_SCROLLUP, FT_UNDEFINED, FT_UNDEFINED, FT_UNDEFINED}},
 	{XK_WheelLeft, {FT_SCROLLLEFT, FT_UNDEFINED, FT_UNDEFINED, FT_UNDEFINED}},
 	{XK_WheelRight, {FT_SCROLLRIGHT, FT_UNDEFINED, FT_UNDEFINED, FT_UNDEFINED}},
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 	{XK_F1, {FT_UNDO, FT_UNDO, FT_UNDO, FT_UNDO}},
 	{XK_F2, {FT_CUT, FT_CUT, FT_CUT, FT_CUT}},
 	{XK_F3, {FT_COPY, FT_COPY, FT_COPY, FT_COPY}},
@@ -167,7 +167,7 @@ Field_translations MCField::trans_lookup(Keytranslations table[], KeySym key,
 
 #endif
 
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 struct MCKeyBinding
 {
 	unsigned key : 16;
@@ -865,7 +865,7 @@ void MCField::dragtext()
 	// MW-2007-12-11: [[ Bug 5542 ]] Wrong keyboard modifier for copying/moving text on OS X
 	if (MCdispatcher -> isdragsource())
 	{
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 		if ((MCmodifierstate & MS_MOD1) != 0)
 #else
 		if ((MCmodifierstate & MS_CONTROL) != 0)
@@ -876,7 +876,7 @@ void MCField::dragtext()
 	}
 	else
 	{
-#ifndef _MACOSX
+#ifndef TARGET_PLATFORM_MACOS
 		if ((MCmodifierstate & MS_MOD1) != 0)
 			MCdragaction = (MCallowabledragactions & DRAG_ACTION_MOVE) == 0 ? DRAG_ACTION_COPY : DRAG_ACTION_MOVE;
 		else

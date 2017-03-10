@@ -24,7 +24,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include <sys/mman.h>
 #include <unistd.h>
 
-#if defined(_MAC_SERVER) || defined(_MAC_DESKTOP)
+#if defined(TARGET_PLATFORM_MACOS)
 #define ftello64(a) ftello(a)
 #define fseeko64(a, b, c) fseeko(a, b, c)
 

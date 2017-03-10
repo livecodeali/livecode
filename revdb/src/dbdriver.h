@@ -310,7 +310,7 @@ struct DBcallbacks
 // them here with appropriate visibility so we don't have to do this in all
 // driver files.
 
-#if defined(_MACOSX) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_ANDROID)
+#if defined(TARGET_PLATFORM_MACOS) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_ANDROID)
 extern "C" DBConnection *newdbconnectionref() __attribute__((visibility("default")));
 extern "C" void releasedbconnectionref(DBConnection *dbref) __attribute__((visibility("default")));
 extern "C" void setidcounterref(unsigned int *tidcounter) __attribute__((visibility("default")));

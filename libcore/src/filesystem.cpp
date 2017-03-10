@@ -154,7 +154,7 @@ bool MCFileSystemPathExists(const char *p_path, bool p_folder, bool& r_exists)
 	return t_success;
 }
 
-#elif defined(_MACOSX) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_ANDROID) || defined(TARGET_SUBPLATFORM_IPHONE)
+#elif defined(TARGET_PLATFORM_MACOS) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_ANDROID) || defined(TARGET_SUBPLATFORM_IPHONE)
 
 #ifndef _LINUX
 #include <sys/syslimits.h>

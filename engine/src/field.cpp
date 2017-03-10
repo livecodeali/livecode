@@ -723,7 +723,7 @@ Boolean MCField::kdown(MCStringRef p_string, KeySym key)
 
 	//windows likes to echo keydowns
 
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 	/*uint2 mods = (MCmodifierstate & MS_CONTROL) >> 1 & 0x3;
 	Field_translations function;
 	if (MCmodifierstate & MS_MAC_CONTROL)

@@ -32,7 +32,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #define INTSTRSIZE 16
 
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 
 char *_strrev(char *str)
 {

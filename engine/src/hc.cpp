@@ -437,7 +437,7 @@ static char *convert_string(const char *string)
 		if (*sptr == 0x0D)
 			*dptr = '\n';
 		else
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 			*dptr = *sptr;
 #else
 			*dptr = MCisotranslations[*sptr];
@@ -500,7 +500,7 @@ static char *convert_script(const char *string)
 			*dptr = '>';
 			break;
 		default:
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 			*dptr = *sptr;
 #else
 			*dptr = MCisotranslations[*sptr];
@@ -2219,7 +2219,7 @@ IO_stat MCHcstak::read(IO_handle stream)
 	}
 	if (filetype == HC_RAW || rsize == 0)
 	{
-#ifdef _MACOSX
+#ifdef _MAC_DESKTOP
 		return macreadresources();
 #else
 			return IO_NORMAL;

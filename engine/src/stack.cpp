@@ -1521,7 +1521,7 @@ Exec_stat MCStack::handle(Handler_type htype, MCNameRef message, MCParameter *pa
 	if (!opened)
 	{
 		if (window == NULL && !MCNameIsEqualTo(message, MCM_start_up, kMCCompareCaseless)
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 		        && !(state & CS_DELETE_STACK))
 #else
 				&& !MCStringIsEmpty(externalfiles) && !(state & CS_DELETE_STACK))

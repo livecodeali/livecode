@@ -20,7 +20,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include <stdlib.h>
 #include "core.h"
 
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 #include <CoreFoundation/CoreFoundation.h>
 #include <Cocoa/Cocoa.h>
 #endif
@@ -45,7 +45,7 @@ struct SettingsRecord
 	uint32_t audio_size;
 };
 
-#if defined _MACOSX
+#if defined TARGET_PLATFORM_MACOS
 
 RgnHandle getWindowContentRegion(WindowRef window,RgnHandle contentRegion)
 {
@@ -350,7 +350,7 @@ CQTVideoGrabber::CQTVideoGrabber()
 	Init();
 }
 
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 void CQTVideoGrabber::Synchronize(bool p_visible)
 {
     NSWindow *t_parent_window;
@@ -399,7 +399,7 @@ void CQTVideoGrabber::Init()
 		AddError("Can't create video channel");
 		return;
 	}
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 	result = SGNewChannel (videograbber, SGAudioMediaType, &soundchannel);
 #else
 	result = SGNewChannel (videograbber, SoundMediaType, &soundchannel);
@@ -763,7 +763,7 @@ void CQTVideoGrabber::AudioDefaultDialog(void)
 	err = SGPause (videograbber, True);
     
     // AL-2014-08-14: [[ Bug 12966 ]] Replace deprecated quicktime functions for MacOSX
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
     ComponentInstance ci;
     OpenADefaultComponent(StandardCompressionType, StandardCompressionSubTypeAudio, &ci);
     

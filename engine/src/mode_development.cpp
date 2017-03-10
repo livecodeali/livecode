@@ -189,7 +189,7 @@ static void restart_livecode(void)
     MCAutoStringRefAsUTF8String t_command_path;
     t_command_path . Lock(s_command_path);
 	_spawnl(_P_NOWAIT, *t_command_path, *t_command_path, NULL);
-#elif defined(TARGET_PLATFORM_MACOS_X) || defined(TARGET_PLATFORM_LINUX)
+#elif defined(TARGET_PLATFORM_MACOS) || defined(TARGET_PLATFORM_LINUX)
 	if (fork() == 0)
 	{
         MCAutoStringRefAsUTF8String t_mccmd;
@@ -335,7 +335,7 @@ IO_stat MCDispatch::startup(void)
                              MCDataGetLength(*t_decompressed));
 
         // Temporary fix to make sure environment stack doesn't get lost behind everything.
-    #if defined(_MACOSX)
+    #if defined(TARGET_PLATFORM_MACOS)
             ProcessSerialNumber t_psn = { 0, kCurrentProcess };
             SetFrontProcess(&t_psn);
     #elif defined(_WINDOWS)
@@ -936,7 +936,7 @@ bool MCModeGetPixelScalingEnabled()
 //  Implementation of Mac OS X-specific mode hooks for DEVELOPMENT mode.
 //
 
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 
 bool MCModePreWaitNextEvent(Boolean anyevent)
 {

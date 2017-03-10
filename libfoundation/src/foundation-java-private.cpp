@@ -250,7 +250,7 @@ extern void MCJavaDetachCurrentThread();
 static JNIEnv *s_env;
 static JavaVM *s_jvm;
 
-#if defined(TARGET_PLATFORM_LINUX) || defined(TARGET_PLATFORM_MACOS_X)
+#if defined(TARGET_PLATFORM_LINUX) || defined(TARGET_PLATFORM_MACOS)
 
 static bool s_weak_link_jvm = false;
 
@@ -291,7 +291,7 @@ static bool initialise_weak_link_jvm()
 
 static void init_jvm_args(JavaVMInitArgs *x_args)
 {
-#if defined(TARGET_PLATFORM_LINUX) || defined(TARGET_PLATFORM_MACOS_X)
+#if defined(TARGET_PLATFORM_LINUX) || defined(TARGET_PLATFORM_MACOS)
     JNI_GetDefaultJavaVMInitArgs(x_args);
 #endif
 }
@@ -299,7 +299,7 @@ static void init_jvm_args(JavaVMInitArgs *x_args)
 static bool create_jvm(JavaVMInitArgs *p_args)
 {
     int ret = 0;
-#if defined(TARGET_PLATFORM_LINUX) || defined(TARGET_PLATFORM_MACOS_X)
+#if defined(TARGET_PLATFORM_LINUX) || defined(TARGET_PLATFORM_MACOS)
     ret = JNI_CreateJavaVM(&s_jvm, (void **)&s_env, p_args);
 #endif
     
@@ -308,7 +308,7 @@ static bool create_jvm(JavaVMInitArgs *p_args)
 
 bool initialise_jvm()
 {
-#if defined(TARGET_PLATFORM_MACOS_X) || defined(TARGET_PLATFORM_LINUX)
+#if defined(TARGET_PLATFORM_MACOS) || defined(TARGET_PLATFORM_LINUX)
     if (!initialise_weak_link_jvm())
         return false;
     JavaVMInitArgs vm_args;
@@ -329,7 +329,7 @@ bool initialise_jvm()
 
 void finalise_jvm()
 {
-#if defined(TARGET_PLATFORM_MACOS_X) || defined(TARGET_PLATFORM_LINUX)
+#if defined(TARGET_PLATFORM_MACOS) || defined(TARGET_PLATFORM_LINUX)
     if (s_jvm != nullptr)
     {
         s_jvm -> DestroyJavaVM();
@@ -339,7 +339,7 @@ void finalise_jvm()
 
 void MCJavaDoAttachCurrentThread()
 {
-#if defined(TARGET_PLATFORM_MACOS_X) || defined(TARGET_PLATFORM_LINUX)
+#if defined(TARGET_PLATFORM_MACOS) || defined(TARGET_PLATFORM_LINUX)
     s_jvm -> AttachCurrentThread((void **)&s_env, nullptr);
 #else
     s_env = MCJavaAttachCurrentThread();

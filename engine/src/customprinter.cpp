@@ -1137,7 +1137,7 @@ void MCCustomMetaContext::dotextmark(MCMark *p_mark)
 	t_state . transform . translate_x = m_translate_x + m_scale_x * p_mark -> text . position . x;
 	t_state . transform . translate_y = m_translate_y + m_scale_y * p_mark -> text . position . y;
 
-#if defined(_MACOSX) || defined(_WINDOWS)
+#if defined(TARGET_PLATFORM_MACOS) || defined(_WINDOWS)
 	t_state . font_size = f -> size;
 #elif defined(_LINUX)
 	extern MCFontlist *MCFontlistGetCurrent(void);

@@ -52,7 +52,7 @@ MCStacklist::MCStacklist(bool p_manage_topstack)
 	nmenus = 0;
 	accelerators = NULL;
 	naccelerators = 0;
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 	active = False;
 #else
 	active = True;
@@ -388,7 +388,7 @@ Boolean MCStacklist::doaccelerator(KeySym p_key)
 			do
 			{
 				if (accelerators[i].stack == tptr->getstack()
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 					&& tptr->getstack()->getstate(CS_KFOCUSED)
 #endif
 					)

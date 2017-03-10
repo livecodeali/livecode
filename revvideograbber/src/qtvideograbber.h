@@ -89,7 +89,7 @@ public:
 		void GetFrameSize(int *fwidth,int *fheight);
 		void SetFrameSize(int fwidth,int fheight);
 
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 		void Synchronize(bool p_visible);
 #endif
 

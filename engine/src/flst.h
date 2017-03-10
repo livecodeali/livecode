@@ -20,7 +20,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 // MM-2013-09-13: [[ RefactorGraphics ]] Updated to include platform specific font lists for server font support.
 #if defined(_WINDOWS_DESKTOP) || defined(_WINDOWS_SERVER)
 #include "w32flst.h"
-#elif defined(_MAC_DESKTOP) || defined(_MAC_SERVER)
+#elif defined(TARGET_PLATFORM_MACOS)
 #include "osxflst.h"
 #elif defined(_LINUX_DESKTOP) || defined(_LINUX_SERVER)
 #include "lnxflst.h"

@@ -6,7 +6,7 @@
 #define PATH_MAX MAX_PATH
 #endif
 
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 #define stricmp strcasecmp
 
 typedef unsigned int uint4;

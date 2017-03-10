@@ -352,7 +352,7 @@ extern MCExternalStartupProc kMCExternalStartup;
 extern MCExternalShutdownProc kMCExternalShutdown;
 extern MCExternalHandler kMCExternalHandlers[];
 
-#if defined(_LINUX) || defined(_MACOSX)
+#if defined(_LINUX) || defined(TARGET_PLATFORM_MACOS)
 MCExternalInfo MC_EXTERNAL_EXPORT *MCExternalDescribe(void)  __attribute__((visibility("default")));
 bool MC_EXTERNAL_EXPORT MCExternalInitialize(MCExternalInterface *p_interface)  __attribute__((visibility("default")));
 void MC_EXTERNAL_EXPORT MCExternalFinalize(void)  __attribute__((visibility("default")));

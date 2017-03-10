@@ -393,7 +393,7 @@ static inline MCGFont MCFontStructToMCGFont(MCFontStruct *p_font)
 	return t_font;
 }
 
-#elif defined(_MAC_DESKTOP) || defined(_MAC_SERVER) || defined(TARGET_SUBPLATFORM_IPHONE)
+#elif defined(TARGET_PLATFORM_MACOS) || defined(TARGET_SUBPLATFORM_IPHONE)
 
 static inline MCGFont MCFontStructToMCGFont(MCFontStruct *p_font)
 {

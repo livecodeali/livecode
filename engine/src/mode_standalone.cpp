@@ -93,7 +93,7 @@ struct MCCapsuleInfo
 __declspec(allocate(".project")) volatile MCCapsuleInfo MCcapsule = {0, {0, 0, 0}};
 #elif defined(_LINUX)
 __attribute__((section(".project"))) volatile MCCapsuleInfo MCcapsule = {0, {0, 0, 0}};
-#elif defined(_MACOSX)
+#elif defined(TARGET_PLATFORM_MACOS)
 __attribute__((section("__PROJECT,__project"))) volatile MCCapsuleInfo MCcapsule = {0, {0, 0, 0}};
 #elif defined(TARGET_SUBPLATFORM_IPHONE)
 __attribute__((section("__PROJECT,__project"))) volatile MCCapsuleInfo MCcapsule = {0, {0, 0, 0}};
@@ -1342,7 +1342,7 @@ bool MCModeGetPixelScalingEnabled()
 //  Implementation of Mac OS X-specific mode hooks for STANDALONE mode.
 //
 
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 
 bool MCModePreWaitNextEvent(Boolean anyevent)
 {

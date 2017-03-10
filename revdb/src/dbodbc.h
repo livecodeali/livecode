@@ -17,7 +17,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #ifndef _dbodbc
 #define _dbodbc
 
-#if defined(_MACOSX)
+#if defined(TARGET_PLATFORM_MACOS)
 #include <sql.h>
 #include <sqlext.h>
 #elif defined(_LINUX)

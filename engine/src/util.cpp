@@ -44,7 +44,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "dispatch.h"
 #include "scriptpt.h"
 
-#if defined(_MACOSX)
+#if defined(TARGET_PLATFORM_MACOS)
 #include <mach-o/dyld.h>
 #endif
 
@@ -1942,7 +1942,7 @@ Exec_stat MCU_dofrontscripts(Handler_type htype, MCNameRef mess, MCParameter *pa
 //
 //	for (uindex_t i = 0; i < t_length; i++)
 //	{
-//#ifdef _MACOSX
+//#ifdef TARGET_PLATFORM_MACOS
 //		if (t_src[i] == '/')
 //			t_dst[i] = ':';
 //		else if (t_src[i] == ':')
@@ -1968,7 +1968,7 @@ Exec_stat MCU_dofrontscripts(Handler_type htype, MCNameRef mess, MCParameter *pa
 //		return;
 //	do
 //	{
-//#ifdef _MACOSX
+//#ifdef TARGET_PLATFORM_MACOS
 //		if (*dptr == '/')
 //			*dptr = ':';
 //		else if (*dptr == ':')
@@ -2111,7 +2111,7 @@ void MCU_fix_path(MCStringRef in, MCStringRef& r_out)
 			if (*fptr == '/' && *(fptr + 1) == '.' && *(fptr + 2) == '/')
 				t_length -= strmove(fptr, fptr + 2, true); //erase the '/./'
 			else
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 				if (*fptr == '/' && *(fptr + 1) == '/')
 #else
                 if (fptr != t_unicode_str && *fptr == '/' && *(fptr + 1) == '/')

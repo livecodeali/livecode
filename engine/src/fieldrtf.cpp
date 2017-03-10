@@ -32,7 +32,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 ////////////////////////////////////////////////////////////////////////////////
 
 // Platform-specific ifdefs (mac is different from linux/windows in some ways).
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 #define EXPORT_RTF_PLATFORM_TAG "\\mac"
 #define EXPORT_RTF_PLATFORM_CHARSET "77"
 #define EXPORT_RTF_PLATFORM_DPI 72

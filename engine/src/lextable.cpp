@@ -22,7 +22,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "scriptpt.h"
 
-#if defined(_MACOSX) || defined(TARGET_SUBPLATFORM_IPHONE)
+#if defined(TARGET_PLATFORM_MACOS) || defined(TARGET_SUBPLATFORM_IPHONE)
 #define ST_INB ST_ID
 #define ST_MNB ST_SPC
 #else

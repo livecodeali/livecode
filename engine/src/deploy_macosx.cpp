@@ -29,7 +29,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "deploy.h"
 
-#if defined(_LINUX) || defined(_MACOSX)
+#if defined(_LINUX) || defined(TARGET_PLATFORM_MACOS)
 #include <sys/stat.h>
 #endif
 
@@ -2085,7 +2085,7 @@ Exec_stat MCDeployToMacOSX(const MCDeployParameters& p_params)
 	t_path = p_params.output;
 	
 	// If on Mac OS X or Linux, make the file executable
-#if defined(_MACOSX) || defined(_LINUX)
+#if defined(TARGET_PLATFORM_MACOS) || defined(_LINUX)
 	if (t_success)
     {
         MCAutoStringRefAsUTF8String t_utf8_path;
@@ -2158,7 +2158,7 @@ Exec_stat MCDeployToIOS(const MCDeployParameters& p_params, bool p_embedded)
 	t_path = p_params.output;
 	
 	// If on Mac OS X or Linux, make the file executable
-#if defined(_MACOSX) || defined(_LINUX)
+#if defined(TARGET_PLATFORM_MACOS) || defined(_LINUX)
 	if (t_success)
     {
 		MCAutoStringRefAsUTF8String t_utf8_path;

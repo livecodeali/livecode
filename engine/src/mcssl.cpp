@@ -47,7 +47,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #  include <WinCrypt.h>
 #endif
 
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 #include "osxprefix.h"
 #endif
 
@@ -55,7 +55,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 extern char *path2utf(char *path);
 #endif
 
@@ -780,7 +780,7 @@ bool load_ssl_ctx_certs_from_file(SSL_CTX *p_ssl_ctx, const char *p_path)
 	return SSL_CTX_load_verify_locations(p_ssl_ctx, p_path, NULL) != 0;
 }
 
-#if defined(TARGET_PLATFORM_MACOS_X) || defined(_WIN32)
+#if defined(TARGET_PLATFORM_MACOS) || defined(_WIN32)
 
 void free_x509_stack(STACK_OF(X509) *p_stack)
 {
@@ -909,7 +909,7 @@ bool ssl_set_default_certificates(SSL_CTX *p_ssl_ctx)
 
 #endif
 
-#ifdef TARGET_PLATFORM_MACOS_X
+#ifdef TARGET_PLATFORM_MACOS
 bool export_system_root_cert_stack(STACK_OF(X509) *&r_x509_stack)
 {
 	bool t_success = true;

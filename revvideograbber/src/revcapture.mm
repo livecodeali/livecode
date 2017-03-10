@@ -133,7 +133,7 @@ static bool CStringFormat(char*& r_string, const char *p_format, ...)
 	va_start(t_args, p_format);
 	t_count = _vscprintf(p_format, t_args);
 	va_end(t_args);
-#elif defined(_MACOSX) || defined(_LINUX)
+#elif defined(TARGET_PLATFORM_MACOS) || defined(_LINUX)
 	va_start(t_args, p_format);
 	t_count = vsnprintf(nil, 0, p_format, t_args);
 	va_end(t_args);
@@ -160,7 +160,7 @@ static bool CStringFormatV(char*& r_string, const char *p_format, va_list p_args
 	int t_count;
 #ifdef _WINDOWS
 	t_count = _vscprintf(p_format, p_args);
-#elif defined(_MACOSX) || defined(_LINUX)
+#elif defined(TARGET_PLATFORM_MACOS) || defined(_LINUX)
 	t_count = vsnprintf(nil, 0, p_format, p_args);
 #else
 #error "Implement CStringFormatV"

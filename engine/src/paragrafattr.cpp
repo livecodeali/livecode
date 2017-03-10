@@ -1448,7 +1448,7 @@ uint32_t MCParagraph::getliststylebullet(uint32_t p_list_style, bool p_as_unicod
 	if (p_as_unicode)
 		return (p_list_style == kMCParagraphListStyleDisc ? 0x2022 : (p_list_style == kMCParagraphListStyleCircle ? 0x25E6 : 0x25AA));
 	
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 	return 0xA5;
 #else
 	return 0x95;

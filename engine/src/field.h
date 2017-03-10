@@ -513,7 +513,7 @@ public:
 	Exec_stat setrtf(uint4 parid, MCStringRef data);
 	void setstyledtext(uint32_t part_id, MCArrayRef p_text);
 	Exec_stat setpartialtext(uint4 parid, MCStringRef p_text);
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 	Exec_stat getparagraphmacunicodestyles(MCParagraph *p_start, MCParagraph *p_finish, MCDataRef& r_data);
 	MCParagraph *macstyletexttoparagraphs(const MCString &textdata, const MCString &styledata, Boolean isunicode);
 	MCParagraph *macunicodestyletexttoparagraphs(MCDataRef p_text, MCDataRef p_styles);

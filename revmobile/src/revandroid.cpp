@@ -16,7 +16,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include <external.h>
 
-#if defined(_MACOSX) || defined(_LINUX)
+#if defined(TARGET_PLATFORM_MACOS) || defined(_LINUX)
 #include <netdb.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
@@ -39,7 +39,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#if defined(_MACOSX) || defined(_LINUX)
+#if defined(TARGET_PLATFORM_MACOS) || defined(_LINUX)
 
 #include <pthread.h>
 

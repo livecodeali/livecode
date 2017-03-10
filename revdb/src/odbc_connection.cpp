@@ -18,7 +18,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include <revolution/support.h>
 
-#if defined(_LINUX) || defined(_MACOSX)
+#if defined(_LINUX) || defined(TARGET_PLATFORM_MACOS)
 #define stricmp strcasecmp
 #endif
 

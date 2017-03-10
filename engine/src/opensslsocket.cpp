@@ -114,7 +114,7 @@ volatile sig_atomic_t s_socket_poll_thread_enabled;
 static int s_socket_poll_signal_pipe[2];
 #endif
 
-#if !defined(X11) && (!defined(_MACOSX)) && (!defined(TARGET_SUBPLATFORM_IPHONE)) && !defined(_LINUX_SERVER) && !defined(_MAC_SERVER)
+#if !defined(X11) && (!defined(TARGET_PLATFORM_MACOS)) && (!defined(TARGET_SUBPLATFORM_IPHONE)) && !defined(_LINUX_SERVER)
 #define socklen_t int
 #endif
 
@@ -126,7 +126,7 @@ static MCStringRef sslerror = NULL;
 static long post_connection_check(SSL *ssl, char *host);
 static int verify_callback(int ok, X509_STORE_CTX *store);
 
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 extern bool path2utf(MCStringRef p_path, MCStringRef& r_utf);
 #endif
 
@@ -1214,7 +1214,7 @@ void MCS_secure_socket(MCSocket *s, Boolean sslverify, MCNameRef end_hostname)
 
 bool MCS_hostaddress(MCStringRef &r_host_address)
 {
-#if defined(_MACOSX)
+#if defined(_MAC_DESKTOP)
     bool t_success;
     t_success = true;
     

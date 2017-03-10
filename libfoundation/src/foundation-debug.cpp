@@ -123,7 +123,7 @@ void __MCUnreachable(void)
 	abort();
 }
 
-#elif defined(_MACOSX) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_IPHONE)
+#elif defined(TARGET_PLATFORM_MACOS) || defined(_LINUX) || defined(TARGET_SUBPLATFORM_IPHONE)
 
 #include <unistd.h>
 

@@ -58,7 +58,7 @@ void MCThreadEventWait(MCThreadEventRef self)
 	WaitForSingleObject((HANDLE)self, INFINITE);
 }
 
-#elif defined(_MACOSX) || defined(_LINUX)
+#elif defined(TARGET_PLATFORM_MACOS) || defined(_LINUX)
 
 #include <pthread.h>
 

@@ -970,7 +970,7 @@ static bool MCS_getentries_callback(void *p_context, const MCSystemFolderEntry *
 							p_entry -> access_time,
 							p_entry -> permissions))
 			return false;
-#elif defined(_MACOSX)
+#elif defined(TARGET_PLATFORM_MACOS)
 		if (!MCStringFormat(&t_details,
 							"%@,%lld,%lld,%u,%u,%u,%u,%d,%d,%03o,%.8s",
 							*t_url_encoded,

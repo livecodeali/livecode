@@ -1556,7 +1556,7 @@ void MCStack::GetVScroll(MCExecContext& ctxt, integer_t& r_scroll)
 
 void MCStack::GetCharset(MCExecContext& ctxt, intenum_t& r_charset)
 {
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 		r_charset = (state & CS_TRANSLATED) != 0 ? 0 : 1;
 #else
 		r_charset = (state & CS_TRANSLATED) != 0 ? 1 : 0;

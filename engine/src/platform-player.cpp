@@ -183,7 +183,7 @@ void MCPlatformFindPlayerHotSpotWithId(MCPlatformPlayerRef player, uint32_t id, 
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifdef TARGET_PLATFORM_MACOS_X
+#ifdef TARGET_PLATFORM_MACOS
 
 class MCAVFoundationPlayer;
 class MCQTKitPlayer;

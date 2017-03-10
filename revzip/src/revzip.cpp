@@ -30,7 +30,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include <revolution/external.h>
 #include <revolution/support.h>
 
-#if defined(_MACOSX)
+#if defined(TARGET_PLATFORM_MACOS)
 #define stricmp strcasecmp
 #include <CoreServices/CoreServices.h>
 #endif

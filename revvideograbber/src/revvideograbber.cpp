@@ -276,7 +276,7 @@ VideoGrabberKeywordRec VideoGrabberDialogKeywords[] = {
 
 #include <ctype.h>
 
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 int _stricmp(const char *s1, const char *s2)
 {
     char c1, c2;
@@ -1026,7 +1026,7 @@ void REVVideoGrabber(VideoGrabberKeyword whichkeyword,
 			*retstring = result;
 }
 
-#ifdef _MACOSX
+#ifdef TARGET_PLATFORM_MACOS
 void revCaptureBeginSession(char *p_argc[], int p_argn, char **r_result, Bool *r_pass, Bool *r_error);
 void revCaptureEndSession(char *p_argc[], int p_argn, char **r_result, Bool *r_pass, Bool *r_error);
 void revCaptureListAudioInputs(char *p_argc[], int p_argn, char **r_result, Bool *r_pass, Bool *r_error);
@@ -1101,7 +1101,7 @@ EXTERNAL_BEGIN_DECLARATIONS("revVideoGrabber")
 	EXTERNAL_DECLARE_COMMAND("revSetVideoGrabFrameSize", revSetVideoGrabFrameSize)
 	EXTERNAL_DECLARE_COMMAND("revGetVideoGrabFrameSize", revGetVideoGrabFrameSize)
 
-#if defined(_MACOSX)
+#if defined(TARGET_PLATFORM_MACOS)
 	EXTERNAL_DECLARE_COMMAND("revCaptureBeginSession", revCaptureBeginSession)
 	EXTERNAL_DECLARE_COMMAND("revCaptureEndSession", revCaptureEndSession)
 
