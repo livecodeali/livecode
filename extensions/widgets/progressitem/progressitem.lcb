@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2015 Runtime Revolution Ltd.
+Copyright (C) 2017 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -15,16 +15,16 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
-
-widget com.livecode.widget.progressItem
+widget com.livecode.widget.progressitem
 
 use com.livecode.canvas
 use com.livecode.widget
-use com.livecode.library.iconSVG
+use com.livecode.library.iconsvg
 
 metadata title is "Progress List Item"
 metadata author is "LiveCode"
 metadata version is "1.0.0"
+metadata userVisible is "false"
 
 property showProgress   get mShowProgress    set setShowProgress
 property hintText   get mHint    set setHint
@@ -87,7 +87,7 @@ public handler OnCreate()
    set annotation "Name" of mButton to "Button"
    place mButton
 
-   put a new widget "com.livecode.widget.progressBar" into mProgressBar
+   put a new widget "com.livecode.widget.progressbarforlist" into mProgressBar
    set annotation "Name" of mProgressBar to "Progress"
    place mProgressBar
 

@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2015 Runtime Revolution Ltd.
+Copyright (C) 2017 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -15,40 +15,28 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
-/*
-This widget is a push button that dispatches mouse events to its script object.
-This widget has three properties that can be set: theme; buttonStyle and label.
-*/
-
--- declaring the extension as a widget, followed by the identifier
 widget com.livecode.widget.badge
 
--- dependancy declarations
 use com.livecode.canvas
 use com.livecode.widget
+use com.livecode.library.widgetutils
 
--- metadata
 metadata author is "LiveCode"
 metadata version is "1.0.0"
 metadata title is "Badge"
+metadata userVisible is "false"
 
--- property declarations
 property badgeColor 			get mColor 		set setColor
 property badgeTextColor 	get mTextColor 		set setTextColor
 property badgeLabel 			get mLabel 		set setLabel
 property badgeTextSize		get mTextSize		set setTextSize
---
 
--- private instance variables
 private variable mColor as String
 private variable mTextColor as String
 private variable mLabel as String
 private variable mTextSize as Number
 
 private variable mState as String
---
-
--- constants
 
 public handler OnSave(out rProperties as Array)
 	put the empty array into rProperties
@@ -81,7 +69,7 @@ public handler OnPaint() returns nothing
 	fill rectangle path of my bounds on this canvas
 
 	set the font of this canvas to getFont("label")
-   set the paint of this canvas to solid paint with stringToColor(mTextColor)
+	set the paint of this canvas to solid paint with stringToColor(mTextColor)
    fill text mLabel at center of my bounds on this canvas
 
     if mState is "depressed" then
@@ -99,7 +87,7 @@ private handler getFont(in pType as String) returns Font
 
 	if pType is "label" then
 		set the size of tFont to mTextSize
-   end if
+	end if
 
 	return tFont
 end handler
@@ -108,17 +96,17 @@ public handler OnMouseDown() returns nothing
 	put "depressed" into mState
 	redraw all
 end handler
---
+
 public handler OnMouseUp() returns nothing
 	put "" into mState
 	redraw all
 end handler
---
+
 public handler OnMouseEnter() returns nothing
 	put "over" into mState
 	redraw all
 end handler
---
+
 public handler OnMouseLeave() returns nothing
 	if mState is not "pressed" then
 		put "none" into mState
@@ -131,56 +119,23 @@ public handler OnClick()
 end handler
 
 private handler setLabel(in pLabel as String) returns nothing
-	log "setting label to" && pLabel
 	put pLabel into mLabel
 	redraw all
 end handler
 
 private handler setColor(in pColor as String) returns nothing
-	 put pColor into mColor
+	put pColor into mColor
 	redraw all
 end handler
 
 private handler setTextColor(in pColor as String) returns nothing
-   put pColor into mTextColor
+	put pColor into mTextColor
 	redraw all
 end handler
 
 private handler setTextSize(in pSize as Number) returns nothing
-	log "setting textSize"
-	log pSize
-   put pSize into mTextSize
+	put pSize into mTextSize
 	redraw all
-end handler
-
--- this handler converts a string of numbers to an RGBA color
-private handler stringToColor(in pString as String) returns Color
-  variable tRed as Real
-  variable tGreen as Real
-  variable tBlue as Real
-  variable tAlpha as Real
-
-  variable tComponentList as List
-  split pString by "," into tComponentList
-
-  variable tComponentCount
-  put the number of elements in tComponentList into tComponentCount
-  if tComponentCount is not 3 and tComponentCount is not 4 then
-      // Invalid number of components detected
-      throw "Invalid color"
-  end if
-
-  put (element 1 of tComponentList) parsed as number into tRed
-  put (element 2 of tComponentList) parsed as number into tGreen
-  put (element 3 of tComponentList) parsed as number into tBlue
-
-  if tComponentCount is 4 then
-      put (element 4 of tComponentList) parsed as number into tAlpha
-  else
-      put 255 into tAlpha
-  end if
-
-  return color [ tRed/255, tGreen/255, tBlue/255, tAlpha/255 ]
 end handler
 
 end widget

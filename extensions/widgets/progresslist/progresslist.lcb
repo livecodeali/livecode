@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2014-2015 Runtime Revolution Ltd.
+Copyright (C) 2017 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -15,11 +15,7 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
-/*
-Used by the tutorial management system to display progress of different courses.
-Simple wrapper of the listWidget widget
-*/
-widget com.livecode.widget.progressList
+widget com.livecode.widget.progresslist
 
 use com.livecode.canvas
 use com.livecode.widget
@@ -28,6 +24,7 @@ metadata title is "Progress List"
 metadata author is "LiveCode"
 metadata version is "1.0.0"
 metadata preferredSize is "320,320"
+metadata userVisible is "false"
 
 -- Per-line property setting
 property lineProperties    get getLineProperties      set setLineProperties
@@ -66,7 +63,7 @@ metadata borders.default is "left,top,right,bottom"
 private variable mList as Widget
 
 public handler OnCreate()
-  put a new widget "com.livecode.widget.listWidget" into mList
+  put a new widget "com.livecode.widget.listwidget" into mList
   set property "lineWidget" of mList to "com.livecode.widget.progressItem"
   place mList
   set the rectangle of mList to my bounds

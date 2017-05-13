@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2014-2015 Runtime Revolution Ltd.
+Copyright (C) 2017 LiveCode Ltd.
 
 This file is part of LiveCode.
 
@@ -15,20 +15,22 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
-widget com.livecode.widget.listWidget
+widget com.livecode.widget.listwidget
 
 use com.livecode.canvas
 use com.livecode.widget
-use com.livecode.library.iconSVG
+use com.livecode.library.iconsvg
+use com.livecode.library.widgetutils
 
 metadata title is "List Widget"
 metadata author is "LiveCode"
 metadata version is "1.0.0"
 metadata preferredSize is "320,300"
+metadata userVisible is "false"
 
 property lineWidget     get mWidgetKind      set setWidgetKind
 metadata lineWidget.editor is "com.livecode.pi.enum"
-metadata lineWidget.options is "execute:get the loadedExtensions; sort it"
+metadata lineWidget.options is "execute:get the keys of (revIDEWidgets()); sort it"
 
 property borders   get getBorders    set   setBorders
 metadata borders.editor is "com.livecode.pi.border"
@@ -124,7 +126,7 @@ public handler OnCreate()
 
     put [true,true,true,true] into mBorders
 
-    put "com.livecode.widget.progressItem" into mWidgetKind
+    put "com.livecode.widget.progressitem" into mWidgetKind
 
     initialiseScrollbar()
     put true into mRecalculate
@@ -725,7 +727,7 @@ handler setProperties(in pProperties as Array)
    redraw all
 end handler
 
-handler getProperties() as Array
+handler getProperties() returns Array
    variable tProperties as Array
    put the empty array into tProperties
    put mLineProperties into tProperties["lineProperties"]

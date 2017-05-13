@@ -922,9 +922,9 @@ private handler calculateEditModeIconRects() returns nothing
 		put tIconRect into mNavData[tX]["hilited_icon_rect"]
 
 		setEditableRect("icon", tX, mNavData[tX]["icon_rect"], \
-				"Icon", "com.livecode.widget.iconPicker", iconSelected)
+				"Icon", "com.livecode.widget.iconpicker", iconSelected)
 		setEditableRect("selectedIcon", tX, mNavData[tX]["hilited_icon_rect"], \
-				"Highlighted Icon", "com.livecode.widget.iconPicker", iconSelected)
+				"Highlighted Icon", "com.livecode.widget.iconpicker", iconSelected)
 
 		calculateEditModeActionPathsForRow(tX)
 	end repeat
