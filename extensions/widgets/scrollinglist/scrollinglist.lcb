@@ -165,6 +165,9 @@ public handler OnPaint() returns nothing
       stroke mDividePaths[tX] on this canvas
    end repeat
 
+    // Paint the scrollbar
+	paintScrollbar(this canvas)
+	
    -- Draw borders
    set the paint of this canvas to getPaint("border")
    set the stroke width of this canvas to 0
@@ -229,11 +232,7 @@ end handler
 --------------------------------------------------------------------------------
 
 public handler OnMouseDown() returns nothing
-	if the target is not nothing then
-      if annotation "Name" of the target is "Scrollbar" then
-	        scrollbarMouseDown()
-       end if
-     end if
+    checkScrollbarMouseDown()
 end handler
 
 public handler OnMouseMove() returns nothing
@@ -269,10 +268,13 @@ public handler OnMouseLeave() returns nothing
 end handler
 
 public handler OnMouseUp() returns nothing
+	variable tWasDragging as Boolean
+	put scrollDragging() into tWasDragging
+
 	scrollbarMouseUp()
 
    variable tClicked as optional Number
-   if the target is not nothing then
+   if the target is not nothing and not tWasDragging then
       put annotation "DisplayIndex" of the target into tClicked
       if tClicked is not nothing then
          variable tIndex as Number
@@ -513,7 +515,7 @@ private handler updateViewCount() returns nothing
       repeat with tWidgetNum from mViewCount + 1 up to tViewCount
          put a new widget mWidgetKind into tWidget
          set annotation "DisplayIndex" of tWidget to tWidgetNum
-         place tWidget below mScrollbar
+         place tWidget
          push tWidget onto mWidgetList
       end repeat
       updateProperties(mViewCount + 1, tViewCount)
@@ -737,183 +739,140 @@ handler getProperties() as Array
 end handler
 
   --------------------------------------------------------------------------------
-  --
-  --		Scrollbar
-  --
-  --------------------------------------------------------------------------------
+--
+--		Scrollbar
+--		In the future, a scrollbar will be a widget in its own right 
+--		and included as a component of scrollable widgets.
+--
+--------------------------------------------------------------------------------
 
-  private variable mScrollbar as Widget
-  private variable mScrollbarRect as Rectangle
+private variable mScrollbarHeight as Real
+private variable mScrollbarPath as Path
+private variable mScrollbarY as Real
 
-  private variable mScrollbarHeight as Real
-  private variable mScrollbarY as Real
+// Drag related 
+private variable mDragging as Boolean
+private variable mDragStartLoc as Point
+private variable mDragScrollbarOffset as Real
 
-  // Drag related
-  private variable mDragging as Boolean
-  private variable mDragStartLoc as Point
-  private variable mDragScrollbarOffset as Real
+constant kScrollbarWidth is 5
 
-  constant kScrollbarWidth is 5
-
+// Will be the scrollbar's OnCreate handler
 public handler initialiseScrollbar()
-   put false into mDragging
-   put a new widget "com.livecode.widget.scrollbar" into mScrollbar
-   set annotation "Name" of mScrollbar to "Scrollbar"
-   place mScrollbar
+	put 0 into mScrollbarHeight
+	put false into mDragging
 end handler
 
-  public handler scrollbarMouseDown()
-  	if mScrollbarHeight > 0 then
-  		put the mouse position into mDragStartLoc
-        put true into mDragging
-        put the y of mDragStartLoc - the top of mScrollbarRect into mDragScrollbarOffset
-  	end if
-  end handler
+// Will be the scrollbar's OnPaint handler
+public handler paintScrollbar(in pCanvas as Canvas)
+	// Draw scrollbar if there is any need
+	if mScrollbarHeight > 0 then
+		set the paint of pCanvas to my border paint
+		fill mScrollbarPath on pCanvas	
+	end if
+end handler
 
-  public handler scrollbarMouseUp()
-  	put false into mDragging
-  end handler
+// Will be the scrollbar's OnMouseDown handler
+public handler checkScrollbarMouseDown()
+	if mScrollbarHeight > 0 then
+		put the mouse position into mDragStartLoc
+		
+		variable tScrollbarRect as Rectangle
+		put the bounding box of mScrollbarPath into tScrollbarRect
 
-  private handler scrollbarYFromView(in pViewHeight as Real, in pDataHeight as Real, in pTopPosition as Real) returns Real
-  	variable tScrollPositionRatio as Real
-  	put pTopPosition / (pDataHeight - pViewHeight) into tScrollPositionRatio
-  	return (pViewHeight - mScrollbarHeight) * tScrollPositionRatio
-  end handler
+		if mDragStartLoc is within tScrollbarRect then
+			put true into mDragging
+			put the y of mDragStartLoc - the top of tScrollbarRect into mDragScrollbarOffset
+		end if
+	end if
+end handler
 
-  private handler updateScrollbar(in pViewWidth as Real, in pViewHeight as Real, in pDataHeight as Real, in pTopPosition as Real)
+public handler scrollbarMouseUp()
+	put false into mDragging
+end handler
 
-  	variable tScrollbarHeight as Real
-  	variable tScrollbarRatio as Real
+private handler scrollbarYFromView(in pViewHeight as Real, in pDataHeight as Real, in pTopPosition as Real) returns Real
+	variable tScrollPositionRatio as Real
+	put pTopPosition / (pDataHeight - pViewHeight) into tScrollPositionRatio
+	return (pViewHeight - mScrollbarHeight) * tScrollPositionRatio
+end handler
 
-  	put pViewHeight / pDataHeight into tScrollbarRatio
+private handler updateScrollbar(in pViewWidth as Real, in pViewHeight as Real, in pDataHeight as Real, in pTopPosition as Real)
 
-  	if tScrollbarRatio >= 1 or tScrollbarRatio <= 0 then
-  		put 0 into mScrollbarHeight
-      set property "isVisible" of mScrollbar to false
-  	else
-  		put pViewHeight * tScrollbarRatio into tScrollbarHeight
+	variable tScrollbarHeight as Real
+	variable tScrollbarRatio as Real
+	
+	put pViewHeight / pDataHeight into tScrollbarRatio
+	
+	if tScrollbarRatio >= 1 or tScrollbarRatio <= 0 then 
+		put 0 into mScrollbarHeight
+	else
+		put pViewHeight * tScrollbarRatio into tScrollbarHeight
+	
+		if tScrollbarHeight < 25 then
+			put 25 into mScrollbarHeight
+		else
+			put tScrollbarHeight into mScrollbarHeight
+		end if	
+		
+		variable tScrollbarY as Real
+		put scrollbarYFromView(pViewHeight, pDataHeight, pTopPosition) into tScrollbarY
 
-  		if tScrollbarHeight < 25 then
-  			put 25 into mScrollbarHeight
-  		else
-  			put tScrollbarHeight into mScrollbarHeight
-  		end if
+		variable tRect as Rectangle
+		put rectangle [pViewWidth - 10, 0, pViewWidth - 10 + kScrollbarWidth, mScrollbarHeight] into tRect
+		put rounded rectangle path of tRect with radius 3 into mScrollbarPath
+	
+		put 0 into mScrollbarY
+		setScrollbarY(tScrollbarY)
+	end if	
+end handler
 
-  		variable tScrollbarY as Real
-  		put scrollbarYFromView(pViewHeight, pDataHeight, pTopPosition) into tScrollbarY
+private handler setScrollbarY(in pScrollbarY as Real)
+	variable tScrollbarMove as Real
+	put pScrollbarY - mScrollbarY into tScrollbarMove
+	translate mScrollbarPath by [0, tScrollbarMove]
+	put pScrollbarY into mScrollbarY
+end handler
 
-  		put rectangle [pViewWidth - 10, 0, pViewWidth - 10 + kScrollbarWidth, mScrollbarHeight] into mScrollbarRect
+private handler scrollbarDrag(in pViewHeight as Real)
+	// Get the mouse y position
+	variable tMouseY as Real
+	put the y of the mouse position into tMouseY
+		
+	if tMouseY < mDragScrollbarOffset then
+		put mDragScrollbarOffset into tMouseY
+	else if tMouseY > mViewHeight + mDragScrollbarOffset - mScrollbarHeight then
+		put mViewHeight + mDragScrollbarOffset - mScrollbarHeight into tMouseY
+	end if
+		
+	// Set the y of the new middle of the scrollbar
+	variable tScrollbarY as Real
+	put tMouseY - mDragScrollbarOffset into tScrollbarY
+	setScrollbarY(tScrollbarY)
+end handler
 
-  		put 0 into mScrollbarY
-  		setScrollbarY(tScrollbarY)
-      set property "isVisible" of mScrollbar to true
-  	end if
-  end handler
+public handler scrollbarWidth() returns Real
+	if mScrollbarHeight is 0 then
+		return 0
+	end if
+	return kScrollbarWidth + 10
+end handler
 
-  private handler setScrollbarY(in pScrollbarY as Real)
-  	variable tScrollbarMove as Real
-  	put pScrollbarY - mScrollbarY into tScrollbarMove
-  	put pScrollbarY into mScrollbarY
-   put rectangle [the left of mScrollbarRect, the top of mScrollbarRect + tScrollbarMove,the right of mScrollbarRect, the bottom of mScrollbarRect + tScrollbarMove] into mScrollbarRect
-   set the rectangle of mScrollbar to mScrollbarRect
-   redraw all
-  end handler
+private handler scrollbarY() returns Real
+	return mScrollbarY
+end handler
 
-  private handler scrollbarDrag(in pViewHeight as Real)
-  	// Get the mouse y position
-  	variable tMouseY as Real
-  	put the y of the mouse position into tMouseY
+private handler scrollDragging() returns Boolean
+	return mDragging
+end handler
 
-  	if tMouseY < mDragScrollbarOffset then
-  		put mDragScrollbarOffset into tMouseY
-  	else if tMouseY > mViewHeight + mDragScrollbarOffset - mScrollbarHeight then
-  		put mViewHeight + mDragScrollbarOffset - mScrollbarHeight into tMouseY
-  	end if
-
-  	// Set the y of the new middle of the scrollbar
-  	variable tScrollbarY as Real
-  	put tMouseY - mDragScrollbarOffset into tScrollbarY
-  	setScrollbarY(tScrollbarY)
-  end handler
-
-  public handler scrollbarWidth() returns Real
-  	if mScrollbarHeight is 0 then
-  		return 0
-  	end if
-  	return kScrollbarWidth + 10
-  end handler
-
-  private handler scrollbarY() returns Real
-  	return mScrollbarY
-  end handler
-
-  private handler scrollDragging() returns Boolean
-  	return mDragging
-  end handler
-
-  private handler scrollRatio(in pViewHeight as Real)
-  	// Get the scrollbar space
-  	variable tScrollbarSpace as Real
-  	variable tScrollbarSpaceTop as Real
-  	put pViewHeight - mScrollbarHeight into tScrollbarSpace
-
-  	return mScrollbarY / tScrollbarSpace
-  end handler
-
--- COLOR UTILS
-
-  -- this handler converts a string of numbers to an RGBA color
-  private handler stringToColor(in pString as String) returns Color
-  	variable tRed as Real
-  	variable tGreen as Real
-  	variable tBlue as Real
-  	variable tAlpha as Real
-
-  	variable tComponentList as List
-  	split pString by "," into tComponentList
-
-  	variable tComponentCount
-  	put the number of elements in tComponentList into tComponentCount
-  	if tComponentCount is not 3 and tComponentCount is not 4 then
-  		// Invalid number of components detected
-  		throw "Invalid color"
-  	end if
-
-  	put (element 1 of tComponentList) parsed as number into tRed
-  	put (element 2 of tComponentList) parsed as number into tGreen
-  	put (element 3 of tComponentList) parsed as number into tBlue
-
-  	if tComponentCount is 4 then
-  		put (element 4 of tComponentList) parsed as number into tAlpha
-  	else
-  		put 255 into tAlpha
-  	end if
-
-  	return color [ tRed/255, tGreen/255, tBlue/255, tAlpha/255 ]
-  end handler
-  ----------
-
-  -- this handler converts an RGBA color to a string
-  private handler colorToString(in pColor as Color) returns String
-  	return stripZeros((the rounded of ((the red of pColor) * 255)) formatted as string) & "," & stripZeros((the rounded of ((the green of pColor) * 255)) formatted as string) & "," & stripZeros((the rounded of ((the blue of pColor) * 255)) formatted as string) & "," & stripZeros((the rounded of ((the alpha of pColor) * 255)) formatted as string)
-  end handler
-  ----------
-
-  -- this handler strips the zeros when a integer is formatted as a string
-  private handler stripZeros(in tString as String) returns String
-  	if tString contains "." then
-  		variable tCount as Integer
-  		repeat while ((the last char of tString) is in ".0")
-  			if the last char of tString is "." then
-  				delete the last char of tString
-  				exit repeat
-  			else
-  				delete the last char of tString
-  			end if
-  		end repeat
-  	end if
-  	return tString
-  end handler
-  ----------
+private handler scrollRatio(in pViewHeight as Real)
+	// Get the scrollbar space
+	variable tScrollbarSpace as Real
+	variable tScrollbarSpaceTop as Real
+	put pViewHeight - mScrollbarHeight into tScrollbarSpace
+	
+	return mScrollbarY / tScrollbarSpace
+end handler
 
 end widget
