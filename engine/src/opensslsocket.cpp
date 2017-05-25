@@ -97,7 +97,7 @@ extern char *osx_cfstring_to_cstring(CFStringRef p_string, bool p_release, bool 
 #include "mcssl.h"
 
 #if defined(TARGET_SUBPLATFORM_ANDROID)
-#include "mblandroidjava.h"
+#include "foundation-java-private.h"
 #endif
 
 #if defined(_MAC_DESKTOP) || defined(_LINUX_DESKTOP) || defined(TARGET_SUBPLATFORM_IPHONE) || defined(TARGET_SUBPLATFORM_ANDROID)

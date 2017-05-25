@@ -22,7 +22,10 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 bool __MCJavaInitialize()
 {
-    return MCJavaPrivateErrorsInitialize();
+    if (!MCJavaPrivateErrorsInitialize())
+        return false;
+        
+    return true;
 }
 
 void __MCJavaFinalize()
@@ -37,7 +40,7 @@ bool MCJavaVMInitialize()
     if (s_java_initialised)
         return true;
     
-    s_java_initialised = initialise_jvm();
+    s_java_initialised = initialise_jvm() && initialise_jni();
     
     if (!s_java_initialised)
         return MCJavaPrivateErrorThrow(kMCJavaCouldNotInitialiseJREErrorTypeInfo);
@@ -48,6 +51,7 @@ bool MCJavaVMInitialize()
 MC_DLLEXPORT_DEF
 void MCJavaVMFinalize()
 {
+    finalise_jni();
     finalise_jvm();
 }
 
@@ -215,4 +219,20 @@ MC_DLLEXPORT bool MCJavaGetJObjectClassName(MCJavaObjectRef p_object, MCStringRe
         return MCJavaPrivateErrorThrow(kMCJavaJRENotSupportedErrorTypeInfo);
     
     return MCJavaPrivateGetJObjectClassName(p_object, r_name);
+}
+
+MC_DLLEXPORT bool MCJavaConvertProperListToJObjectArray(MCProperListRef p_list, MCJavaObjectRef& r_jobject_array)
+{
+    if (!s_java_initialised)
+        return MCJavaPrivateErrorThrow(kMCJavaJRENotSupportedErrorTypeInfo);
+    
+    return MCJavaPrivateConvertProperListToJObjectArray(p_list, r_jobject_array);
+}
+
+MC_DLLEXPORT bool MCJavaConvertJObjectArrayToProperList(MCJavaObjectRef p_jobject_array, MCProperListRef& r_list)
+{
+    if (!s_java_initialised)
+        return MCJavaPrivateErrorThrow(kMCJavaJRENotSupportedErrorTypeInfo);
+    
+    return MCJavaPrivateConvertJObjectArrayToProperList(p_jobject_array, r_list);
 }

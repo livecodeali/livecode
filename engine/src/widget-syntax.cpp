@@ -791,9 +791,13 @@ extern "C" MC_DLLEXPORT_DEF void MCWidgetGetMyNativeLayer(void *&r_native_layer)
 
 extern "C" MC_DLLEXPORT_DEF void MCWidgetSetMyNativeLayer(void *p_native_layer)
 {
+    MCLog("native layer %p", p_native_layer);
+    
 	if (!MCWidgetEnsureCurrentWidget())
 		return;
 	
+    MCLog("setting");
+    
 	MCWidgetSetNativeLayerOfWidget(p_native_layer, MCcurrentwidget);
 }
 

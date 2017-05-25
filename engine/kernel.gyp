@@ -83,12 +83,16 @@
 							'src/mblcamera.cpp',
 						],
 										
-						# Force the entry point to be included in the output
+						
 						'link_settings':
 						{
 							'ldflags':
 							[
-								'-Wl,--undefined,Java_com_runrev_android_Engine_doCreate'
+								# Force the entry point to be included in the output
+								'-Wl,--undefined,Java_com_runrev_android_Engine_doCreate',
+								
+								# Force inclusion of LCB Invocation Handler native callback
+								'-Wl,--undefined,Java_com_runrev_android_LCBInvocationHandler_doNativeListenerCallback',
 							],
 						},
 					},

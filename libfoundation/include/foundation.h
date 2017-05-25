@@ -1958,7 +1958,11 @@ MC_DLLEXPORT bool MCJavaConvertStringRefToJString(MCStringRef p_string, MCJavaOb
 MC_DLLEXPORT bool MCJavaConvertJByteArrayToDataRef(MCJavaObjectRef p_object, MCDataRef &r_data);
 // Convert a Data Ref to a Java object wrapping a jByteArray
 MC_DLLEXPORT bool MCJavaConvertDataRefToJByteArray(MCDataRef p_data, MCJavaObjectRef &r_object);
-
+// Convert a Proper List Ref to a Java object wrapping a jobjectArray
+MC_DLLEXPORT bool MCJavaConvertProperListToJObjectArray(MCProperListRef p_list, MCJavaObjectRef& r_jobject_array);
+// Convert a Java object wrapping a jobjectArray to a Proper List Ref
+MC_DLLEXPORT bool MCJavaConvertJObjectArrayToProperList(MCJavaObjectRef p_jobject_array, MCProperListRef& r_list);
+                                                        
 ////////////////////////////////////////////////////////////////////////////////
 //
 //  BOOLEAN DEFINITIONS

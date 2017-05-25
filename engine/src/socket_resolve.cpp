@@ -51,7 +51,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #endif
 
 #ifdef TARGET_SUBPLATFORM_ANDROID
-#include "mblandroidjava.h"
+#include "foundation-java-private.h"
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////

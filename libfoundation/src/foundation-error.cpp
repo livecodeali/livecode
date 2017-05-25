@@ -388,6 +388,8 @@ bool MCErrorThrow(MCErrorRef p_error)
 {
 	__MCAssertIsError(p_error);
 
+    MCLog("%@", p_error);
+    
     if (s_last_error != nil)
         MCValueRelease(s_last_error);
     

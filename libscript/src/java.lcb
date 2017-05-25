@@ -52,7 +52,8 @@ foreign handler MCJavaDataFromJByteArray(in pByteArray as JObject, out rData as 
 foreign handler MCJavaDataToJByteArray(in pData as Data, out rByteArray as JObject) returns nothing binds to "<builtin>"
 
 foreign handler MCJavaGetClassName(in pObject as JObject, out rName as String) returns nothing binds to "<builtin>"
-
+foreign handler MCJavaUnwrapJObject(in pObject as JObject, out rPointer as Pointer) returns nothing binds to "<builtin>"
+foreign handler MCJavaWrapJObject(in pPointer as Pointer, out rObj as JObject) returns nothing binds to "<builtin>"
 
 /**
 Summary:    Get Java class name of a Java object
@@ -174,6 +175,22 @@ public handler DataFromJByteArray(in pBytes as JByteArray) returns Data
 		MCJavaDataFromJByteArray(pBytes, tData)
     end unsafe
 	return tData
+end handler
+
+public handler PointerFromJObject(in pObj as JObject) returns Pointer
+	variable tPointer as Pointer
+    unsafe
+		MCJavaUnwrapJObject(pObj, tPointer)
+    end unsafe
+	return tPointer
+end handler
+
+public handler PointerToJObject(in pPointer as Pointer) returns JObject
+	variable tObj as JObject
+    unsafe
+		MCJavaWrapJObject(pPointer, tObj)
+    end unsafe
+	return tObj
 end handler
 
 end module

@@ -47,7 +47,8 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "graphics.h"
 #include "resolution.h"
 
-#include <jni.h>
+#include "foundation-java-private.h"
+
 #include "mcmanagedpthread.h"
 #include <android/log.h>
 #include <android/bitmap.h>
@@ -133,6 +134,7 @@ static jobject s_android_activity = nil;
 static jobject s_android_container = nil;
 static jobject s_android_view = nil;
 static jobject s_android_view_class = nil;
+static jobject s_android_class_loader = nil;
 
 // If this is false, then it means the engine broke somehow.
 static bool s_engine_running = false;
@@ -1925,6 +1927,11 @@ void *MCAndroidGetContainer(void)
 	return (void *)s_android_container;
 }
 
+void *MCAndroidGetClassLoader(void)
+{
+    return (void *)s_android_class_loader;
+}
+
 // MW-2013-06-14: [[ ExternalsApiV5 ]] Return the JavaEnv of the Android system
 //   thread.
 void *MCAndroidGetSystemJavaEnv(void)
@@ -2012,6 +2019,35 @@ JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doCreate(JNIEnv *env, jobj
 	s_android_activity = env -> NewGlobalRef(activity);
 	MCLog("Got global android activity: %p\n", s_android_activity);
 	
+    // Cache the class loader
+    jclass t_object_class = env->FindClass("java/lang/Object");
+    
+    MCLog("Got obj class: %p\n", t_object_class);
+    
+    jmethodID t_get_class = env->GetMethodID(t_object_class, "getClass",
+                                             "()Ljava/lang/Class;");
+    
+    jobject t_activity_class =
+        env->CallObjectMethod(s_android_activity, t_get_class);
+    
+    MCLog("Got activity class: %p\n", t_activity_class);
+    
+    jclass t_class_class = env->FindClass("java/lang/Class");
+    
+    MCLog("Got class class: %p\n", t_class_class);
+    
+    jmethodID t_get_class_loader =
+        env->GetMethodID(t_class_class, "getClassLoader",
+                                  "()Ljava/lang/ClassLoader;");
+    
+    jobject t_class_loader =
+        env->CallObjectMethod(t_activity_class, t_get_class_loader);
+    
+    MCLog("Got class loader: %p\n", t_class_loader);
+    
+    // The class loader - make sure we hold a global ref.
+    s_android_class_loader = env->NewGlobalRef(t_class_loader);
+    
 	// The android container - make sure we hold a global ref.
 	s_android_container = env -> NewGlobalRef(container);
 	MCLog("Got global android activity: %p\n", s_android_container);
@@ -2991,7 +3027,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
 {
 	s_java_vm = vm;
 	vm -> GetEnv((void **)&s_android_ui_env, JNI_VERSION_1_2);
-
+    
 	return JNI_VERSION_1_2;
 }
 
