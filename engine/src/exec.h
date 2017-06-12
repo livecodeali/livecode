@@ -1239,58 +1239,62 @@ void MCExecStoreProperty(MCExecContext& ctxt, const MCPropertyInfo *prop, void *
 
 ////////////////////////////////////////////////////////////////////////////////
 
+static uint2 kMCNumberFormatFieldWidth = 8;
+static uint2 kMCNumberFormatTrailing = 6;
+static uint2 kMCCutOff = 35;
+
 class MCExecContext
 {
 public:
-    MCExecContext()
+    MCExecContext() :
+        m_stat(ES_NORMAL),
+        m_object(nullptr),
+        m_parentscript(nullptr),
+        m_hlist(nullptr),
+        m_curhandler(nullptr),
+        m_itemdel(kMCCommaString),
+        m_columndel(kMCTabString),
+        m_linedel(kMCLineEndString),
+        m_rowdel(kMCLineEndString),
+        m_nffw(kMCNumberFormatFieldWidth),
+        m_nftrailing(kMCNumberFormatTrailing),
+        m_nfforce(0),
+        m_cutoff(kMCCutOff),
+        m_line(0),
+        m_pos(0),
+        m_string_options(kMCStringOptionCompareCaseless),
+        m_convertoctals(false),
+        m_wholematches(false),
+        m_usesystemdate(false),
+        m_useunicode(false)
     {
-        memset(this, 0, sizeof(MCExecContext));
-        m_itemdel = MCValueRetain(kMCCommaString);
-        m_columndel = MCValueRetain(kMCTabString);
-        m_rowdel = MCValueRetain(kMCLineEndString);
-        m_linedel = MCValueRetain(kMCLineEndString);
-        m_nffw = 8;
-        m_nftrailing = 6;
-        m_cutoff = 35;
-        m_stat = ES_NORMAL;
-        m_string_options = kMCStringOptionCompareCaseless;
     }
 
 	
-    MCExecContext(const MCExecContext& p_ctxt)
-        : m_stat(ES_NORMAL)
-	{
-        *this = p_ctxt;
-        MCValueRetain(p_ctxt . m_itemdel);
-        MCValueRetain(p_ctxt . m_linedel);
-        MCValueRetain(p_ctxt . m_rowdel);
-        MCValueRetain(p_ctxt . m_columndel);
-	}
-
-    MCExecContext(MCObject *object, MCHandlerlist *hlist, MCHandler *handler)
+    MCExecContext(const MCExecContext& p_ctxt) = default;
+    
+    MCExecContext(MCObject *object, MCHandlerlist *hlist, MCHandler *handler):
+        m_stat(ES_NORMAL),
+        m_object(object),
+        m_parentscript(nullptr),
+        m_hlist(hlist),
+        m_curhandler(handler),
+        m_itemdel(kMCCommaString),
+        m_columndel(kMCTabString),
+        m_linedel(kMCLineEndString),
+        m_rowdel(kMCLineEndString),
+        m_nffw(kMCNumberFormatFieldWidth),
+        m_nftrailing(kMCNumberFormatTrailing),
+        m_nfforce(0),
+        m_cutoff(kMCCutOff),
+        m_line(0),
+        m_pos(0),
+        m_string_options(kMCStringOptionCompareCaseless),
+        m_convertoctals(false),
+        m_wholematches(false),
+        m_usesystemdate(false),
+        m_useunicode(false)
     {
-        memset(this, 0, sizeof(MCExecContext));
-        m_object . object = object;
-        m_object . part_id = 0;
-        m_hlist = hlist;
-        m_curhandler = handler;
-        m_itemdel = MCValueRetain(kMCCommaString);
-        m_columndel = MCValueRetain(kMCTabString);
-        m_rowdel = MCValueRetain(kMCLineEndString);
-        m_linedel = MCValueRetain(kMCLineEndString);
-        m_nffw = 8;
-        m_nftrailing = 6;
-        m_cutoff = 35;
-        m_stat = ES_NORMAL;
-        m_string_options = kMCStringOptionCompareCaseless;
-    }
-
-    ~MCExecContext()
-    {
-        MCValueRelease(m_itemdel);
-        MCValueRelease(m_linedel);
-        MCValueRelease(m_rowdel);
-        MCValueRelease(m_columndel);
     }
     
 	//////////
@@ -1378,22 +1382,22 @@ public:
 
 	MCStringRef GetLineDelimiter(void) const
 	{
-        return m_linedel;
+        return *m_linedel;
 	}
 
 	MCStringRef GetItemDelimiter(void) const
 	{
-        return m_itemdel;
+        return *m_itemdel;
 	}
 
 	MCStringRef GetColumnDelimiter(void) const
 	{
-        return m_columndel;
+        return *m_columndel;
 	}
 
 	MCStringRef GetRowDelimiter(void) const
 	{
-        return m_rowdel;
+        return *m_rowdel;
 	}
 
 	uint2 GetCutOff(void) const
@@ -1468,22 +1472,22 @@ public:
 
 	void SetLineDelimiter(MCStringRef p_value)
 	{
-        MCValueAssign(m_linedel, p_value);
+        m_linedel.Reset(p_value);
 	}
 
 	void SetItemDelimiter(MCStringRef p_value)
 	{
-        MCValueAssign(m_itemdel, p_value);
+        m_itemdel.Reset(p_value);
 	}
 
 	void SetColumnDelimiter(MCStringRef p_value)
 	{
-        MCValueAssign(m_columndel, p_value);
+        m_columndel.Reset(p_value);
 	}
 
 	void SetRowDelimiter(MCStringRef p_value)
 	{
-        MCValueAssign(m_rowdel, p_value);
+        m_rowdel.Reset(p_value);
     }
 
     //////////
@@ -1634,18 +1638,17 @@ public:
     
     MCObject *GetObject(void) const
 	{
-        return m_object . object;
+        return m_object.getObjectPtr().object;
 	}
 
     MCObjectPtr GetObjectPtr(void) const
     {
-        return m_object;
+        return m_object.getObjectPtr();
     }
     
     void SetObject(MCObject *p_object)
     {
-        m_object . object = p_object;
-        m_object . part_id = 0;
+        m_object = p_object;
     }
     
 	void SetObjectPtr(MCObjectPtr p_object)
@@ -1772,7 +1775,7 @@ public:
 private:
 	Exec_stat m_stat;
 
-    MCObjectPtr m_object;
+    MCObjectPartHandle m_object;
 
     // MW-2009-01-30: [[ Inherited parentScripts ]]
     // We store a reference to the parentScript use which is the current context
@@ -1783,10 +1786,10 @@ private:
     MCHandlerlist *m_hlist;
     MCHandler *m_curhandler;
     
-    MCStringRef m_itemdel;
-    MCStringRef m_columndel;
-    MCStringRef m_linedel;
-    MCStringRef m_rowdel;
+    MCAutoStringRef m_itemdel;
+    MCAutoStringRef m_columndel;
+    MCAutoStringRef m_linedel;
+    MCAutoStringRef m_rowdel;
     
     uint2 m_nffw;
     uint2 m_nftrailing;
