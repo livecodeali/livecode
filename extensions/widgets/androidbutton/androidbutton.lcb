@@ -23,6 +23,8 @@ This widget is a native button on Android.
 
 Name: enabled
 
+Summary: The enabled state of the button.
+
 Syntax: 
 set the enabled of <widget> to {true | false}
 get the enabled of <widget>
@@ -31,6 +33,23 @@ Description:
 Use the <enabled> property to enable or disable the native button. When
 disabled, the button has a greyed out appearance and does not accept 
 clicks or touches.
+
+Name: mouseUp
+
+Type: message
+
+Summary: Sent when the user releases the mouse button.
+
+Syntax: mouseUp
+
+Example:
+on mouseUp
+  answer "You clicked" && the name of the target
+end mouseUp
+
+Description:
+Handle the <mouseUp> message to perform an action when the user
+releases the mouse button after clicking.
 */
 
 widget com.livecode.widget.native.android.button
