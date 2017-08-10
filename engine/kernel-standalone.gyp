@@ -95,7 +95,6 @@
 			'dependencies':
 			[
 				'kernel.gyp:kernel',
-				'community-classes',
 			],
 			
 			'includes':
@@ -115,7 +114,7 @@
 			
             'sources!':
             [
-                '../livecode/src/engine-dispatch.cpp',
+                'src/engine-dispatch.cpp',
             ],
 			
 			# Standalones do *not* contain error message strings
@@ -132,20 +131,13 @@
 						'dependencies':
 						[
 							'kernel.gyp:kernel-java',
+							'community-classes',
 						],
 						
 						'sources':
 						[
 							'src/mblandroidad.cpp',
 						],
-						
-						'all_dependent_settings':
-						{
-							'variables':
-							{
-								'dist_aux_files': [ '<(PRODUCT_DIR)/Classes-Community' ],
-							},
-						},
 					},
 				],
 			],
