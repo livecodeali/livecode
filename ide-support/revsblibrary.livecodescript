@@ -2302,6 +2302,16 @@ command revSBUpdateForDependencies pPlatform, @xSettings
          put revIDEExtensionProperty(tExtension, tRequiredMetadata) into tIsRequired
          put tIsRequired into xSettings["android,device capabilities"][tFeature]
       end repeat
+      
+      local tExtensionCodeFolder, tJarFiles
+      put revIDEExtensionProperty(tExtension, "install_path") & slash & "code" \
+            into tExtensionCodeFolder
+      put files(tExtensionCodeFolder) into tJarFiles
+      filter tJarFiles with "*.jar"
+      repeat for each line tJarFile in tJarFiles
+         put tExtensionCodeFolder & slash before tJarFile
+         appendToStringList tJarFile, xSettings["jarFiles"]
+      end repeat
    end repeat
 end revSBUpdateForDependencies
 
