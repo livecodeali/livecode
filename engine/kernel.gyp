@@ -287,7 +287,7 @@
 						# Include the rules for compiling Java
 						'includes':
 						[
-							'../config/java.gypi',
+							'../config/android-java.gypi',
 						],
 						
 						# A little indirection needed to get INTERMEDIATE_DIR escaped properly

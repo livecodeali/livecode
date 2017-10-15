@@ -5,8 +5,7 @@
 	},
 	
 	'rules':
-	[
-			
+	[		
 		{
 			'rule_name': 'aidl_interface_gen',
 			'extension': 'aidl',

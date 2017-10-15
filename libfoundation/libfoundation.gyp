@@ -16,8 +16,15 @@
 			'test/test_typeconvert.cpp',
             'test/test_system-library.cpp',
 		],
-	},
+		
+		# Java sources for FFI
+		'foundation_java_source_files':
+		[
+			'src/java/com/livecode/java/LCBInvocationHandler.java',
+		],
 
+		'java_classes_dir_name': 'classes_foundation',
+	},
 
 	'includes':
 	[
@@ -230,6 +237,12 @@
                 [
 					'host_os == "mac" and OS != "ios" and OS != "emscripten"',
 					{
+						# Include the rules for compiling Java
+						'includes':
+						[
+							'../config/desktop-java.gypi',
+						],	
+									
 						'defines':
 						[
 							'TARGET_SUPPORTS_JAVA',
@@ -243,8 +256,49 @@
 						[
 							'<(INTERMEDIATE_DIR)/src/libfoundationjvm.stubs.cpp',
 						],
+						
+						'dependencies':
+						[
+							'foundation-java',
+						],
+						
+						'actions':
+						[
+							{
+								'action_name': 'jar',
+								'message': 'JAR',
+						
+								'inputs':
+								[
+									# Depend on the Java source files directly to ensure correct updates
+									'<@(foundation_java_source_files)',
+								],
+					
+								'outputs':
+								[
+									'<(PRODUCT_DIR)/Classes-Foundation',
+								],
+					
+								'action':
+								[
+									'<(jar_path)',
+									'cf',
+									'<@(_outputs)',
+									'-C', '<(PRODUCT_DIR)/>(java_classes_dir_name)',
+									'.',
+								],
+							},
+						],
+						
+						'all_dependent_settings':
+						{
+							'variables':
+							{
+								'dist_aux_files': [ '<(PRODUCT_DIR)/Classes-Foundation' ],
+							},
+						},
 					},
-				],
+				],						
 				[
 					'host_os == "linux" and OS != "emscripten"',
 					{
@@ -342,6 +396,33 @@
 					],
 				],
 			},
+		},
+		{
+			'target_name': 'foundation-java',
+			'type': 'none',
+
+			'toolsets': ['host','target'],
+
+			# Include the rules for compiling Java
+			'includes':
+			[
+				'../config/desktop-java.gypi',
+			],	
+						
+			'sources':
+			[
+				'<@(foundation_java_source_files)',
+			],	
+															
+			'conditions':
+			[
+				[
+					'host_os == "mac" and OS != "ios" and OS != "emscripten"',
+					{			
+			
+					},
+				],
+			],
 		},
 	],
 }
