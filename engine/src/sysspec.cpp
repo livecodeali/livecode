@@ -919,8 +919,6 @@ struct MCS_getentries_state
 	MCListRef list;
 };
 
-bool MCFiltersUrlEncode(MCStringRef p_source, bool p_use_utf8, MCStringRef& r_result);
-
 static bool MCS_getentries_callback(void *p_context, const MCSystemFolderEntry *p_entry)
 {
 	MCS_getentries_state *t_state;

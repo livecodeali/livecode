@@ -30,8 +30,8 @@ bool MCFiltersIsCompressed(MCDataRef p_source);
 bool MCFiltersDecompress(MCDataRef p_source, MCDataRef& r_result);
 bool MCFiltersIsoToMac(MCDataRef p_source, MCDataRef &r_result);
 bool MCFiltersMacToIso(MCDataRef p_source, MCDataRef &r_result);
-bool MCFiltersUrlEncode(MCStringRef p_source, MCStringRef& r_result);
-bool MCFiltersUrlDecode(MCStringRef p_source, MCStringRef& r_result);
+bool MCFiltersUrlEncode(MCStringRef p_source, bool p_use_utf8, MCStringRef& r_result);
+bool MCFiltersUrlDecode(MCStringRef p_source, bool p_use_utf8, MCStringRef& r_result);
 
 ////////////////////////////////////////////////////////////////////////////////
 

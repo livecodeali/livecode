@@ -18,6 +18,7 @@
 #include "foundation-auto.h"
 #include "foundation-filters.h"
 
+/*
 void MCEncodingEvalEncodedOfValue(MCValueRef p_target, MCDataRef& r_output)
 {
     
@@ -27,47 +28,62 @@ void MCEncodingEvalDecodedOfValue(MCDataRef p_target, MCValueRef& r_output)
 {
     
 }
+*/
 
-void MCEncodingExecCompress(MCDataRef& x_target)
+extern "C" MC_DLLEXPORT_DEF MCDataRef MCEncodingExecCompressUsingZlib(MCDataRef p_target)
 {
     MCAutoDataRef t_compressed;
-    if (MCFiltersCompress(x_target, &t_compressed))
+    if (!MCFiltersCompress(p_target, &t_compressed))
     {
-        MCValueAssign(x_target, *t_compressed);
-        return;
+        MCErrorCreateAndThrow(kMCGenericErrorTypeInfo, "reason", MCSTR("could not compress data"), nil);
+        return nil;
     }
     
-    //    ctxt . Throw();
+    return MCValueRetain(*t_compressed);
 }
 
-void MCEncodingExecDecompress(MCDataRef& x_target)
+extern "C" MC_DLLEXPORT_DEF MCDataRef MCEncodingExecDecompressUsingZlib(MCDataRef p_target)
 {
     MCAutoDataRef t_decompressed;
-    if (MCFiltersDecompress(x_target, &t_decompressed))
+    if (!MCFiltersDecompress(p_target, &t_decompressed))
     {
-        MCValueAssign(x_target, *t_decompressed);
-        return;
+        MCErrorCreateAndThrow(kMCGenericErrorTypeInfo, "reason", MCSTR("could not decompress data"), nil);
+        return nil;
     }
     
-    //    ctxt . Throw();
+    return MCValueRetain(*t_decompressed);
 }
 
-void MCEncodingExecEncodeUsingBase64(MCDataRef p_target, MCStringRef& r_output)
+extern "C" MC_DLLEXPORT_DEF void MCEncodingEvalIsCompressedUsingZlib(MCDataRef p_data, bool& r_result)
 {
-    if (MCFiltersBase64Encode(p_target, r_output))
-        return;
-    
-    //    ctxt . Throw();
+    r_result = MCFiltersIsCompressed(p_data);
 }
 
-void MCEncodingExecDecodeUsingBase64(MCStringRef p_target, MCDataRef& r_output)
+extern "C" MC_DLLEXPORT_DEF MCStringRef MCEncodingExecEncodeUsingBase64(MCDataRef p_target)
 {
-    if (MCFiltersBase64Decode(p_target, r_output))
-        return;
+    MCAutoStringRef t_encoded;
+    if (!MCFiltersBase64Encode(p_target, &t_encoded))
+    {
+        MCErrorCreateAndThrow(kMCGenericErrorTypeInfo, "reason", MCSTR("could not encode data"), nil);
+        return nil;
+    }
     
-    //    ctxt . Throw();
+    return MCValueRetain(*t_encoded);
 }
 
+extern "C" MC_DLLEXPORT_DEF MCDataRef MCEncodingExecDecodeUsingBase64(MCStringRef p_target)
+{
+    MCAutoDataRef t_decoded;
+    if (!MCFiltersBase64Decode(p_target, &t_decoded))
+    {
+        MCErrorCreateAndThrow(kMCGenericErrorTypeInfo, "reason", MCSTR("could not decode string"), nil);
+        return nil;
+    }
+    
+    return MCValueRetain(*t_decoded);
+}
+
+/*
 void MCEncodingExecEncodeUsingBinary(MCStringRef p_target, MCStringRef p_format, MCDataRef& r_output)
 {
     //  TODO: Move binary encode/decode to foundation
@@ -81,9 +97,11 @@ void MCEncodingExecDecodeUsingBinary(MCDataRef p_target, MCStringRef p_format, M
     //  Does this take a list?
     //    ctxt . Throw();
 }
-
+*/
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/*
+ // We don't yet do the necessary validation for text encoding 
 void MCEncodingExecEncodeUsingUTF8(MCStringRef p_target, MCDataRef& r_output)
 {
     if (MCStringEncode(p_target, kMCStringEncodingUTF8, false, r_output))
@@ -147,23 +165,58 @@ void MCEncodingExecDecodeUsingASCII(MCDataRef p_target, MCStringRef& r_output)
     
     //    ctxt . Throw();
 }
+*/
 
-void MCEncodingEvalURLEncoded(MCStringRef p_target, MCStringRef& r_output)
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+extern "C" MC_DLLEXPORT_DEF MCStringRef MCEncodingExecEncodeForLegacyUrl(MCStringRef p_target)
 {
-    if (MCFiltersUrlEncode(p_target, r_output))
-        return;
+    MCAutoStringRef t_encoded;
+    if (!MCFiltersUrlEncode(p_target, false, &t_encoded))
+    {
+        MCErrorCreateAndThrow(kMCGenericErrorTypeInfo, "reason", MCSTR("could not encode url"), nil);
+        return nil;
+    }
     
-    //    ctxt . Throw();
+    return MCValueRetain(*t_encoded);
 }
 
-void MCEncodingEvalURLDecoded(MCStringRef p_target, MCStringRef& r_output)
+extern "C" MC_DLLEXPORT_DEF MCStringRef MCEncodingExecDecodeFromLegacyUrl(MCStringRef p_target)
 {
-    if (MCFiltersUrlDecode(p_target, r_output))
-        return;
+    MCAutoStringRef t_decoded;
+    if (!MCFiltersUrlDecode(p_target, false, &t_decoded))
+    {
+        MCErrorCreateAndThrow(kMCGenericErrorTypeInfo, "reason", MCSTR("could not decode url"), nil);
+        return nil;
+    }
     
-    //    ctxt . Throw();
+    return MCValueRetain(*t_decoded);
 }
 
+extern "C" MC_DLLEXPORT_DEF MCStringRef MCEncodingExecEncodeForUrl(MCStringRef p_target)
+{
+    MCAutoStringRef t_encoded;
+    if (!MCFiltersUrlEncode(p_target, true, &t_encoded))
+    {
+        MCErrorCreateAndThrow(kMCGenericErrorTypeInfo, "reason", MCSTR("could not encode url"), nil);
+        return nil;
+    }
+    
+    return MCValueRetain(*t_encoded);
+}
+
+extern "C" MC_DLLEXPORT_DEF MCStringRef MCEncodingExecDecodeFromUrl(MCStringRef p_target)
+{
+    MCAutoStringRef t_decoded;
+    if (!MCFiltersUrlDecode(p_target, true, &t_decoded))
+    {
+        MCErrorCreateAndThrow(kMCGenericErrorTypeInfo, "reason", MCSTR("could not decode url"), nil);
+        return nil;
+    }
+    
+    return MCValueRetain(*t_decoded);
+}
+ 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #ifdef _TEST

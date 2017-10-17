@@ -13,7 +13,7 @@
 			'src/char.lcb',
 			'src/codeunit.lcb',
 			'src/date.lcb',
-			#'src/encoding.lcb',
+			'src/encoding.lcb',
 			'src/file.lcb',
 			'src/foreign.lcb',
 			#'src/item.lcb',

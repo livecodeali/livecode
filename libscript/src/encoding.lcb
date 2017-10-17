@@ -1,4 +1,4 @@
-/* Copyright (C) 2003-2015 LiveCode Ltd.
+/* Copyright (C) 2017 LiveCode Ltd.
  
  This file is part of LiveCode.
  
@@ -14,34 +14,31 @@
  You should have received a copy of the GNU General Public License
  along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
+/**
+This library consists of the basic encoding operations included in the 
+standard library of LiveCode Builder.
+*/
+
 module com.livecode.encoding
 
-foreign handler EvalEncodedOfValue(in Target as any, out Value as data) returns nothing binds to "<builtin>"
-foreign handler EvalDecodedOfValue(in Target as data, out Value as any) returns nothing binds to "<builtin>"
+use com.livecode.foreign
 
-foreign handler ExecCompress(inout Target as data) returns nothing binds to "<builtin>"
-foreign handler ExecDecompress(inout Target as data) returns nothing binds to "<builtin>"
+public foreign handler MCEncodingExecCompressUsingZlib(in pData as Data) returns Data binds to "<builtin>"
+public foreign handler MCEncodingExecDecompressUsingZlib(in pData as Data) returns Data binds to "<builtin>"
+public foreign handler MCEncodingEvalIsCompressedUsingZlib(in pData as Data, out rResult as CBool) returns nothing binds to "<builtin>"
 
-foreign handler ExecEncodeUsingBase64(in Source as data, out Value as string) returns nothing binds to "<builtin>"
-foreign handler ExecDecodeUsingBase64(in Source as string, out Value as data) returns nothing binds to "<builtin>"
+public foreign handler MCEncodingExecEncodeUsingBase64(in pData as Data) returns String binds to "<builtin>"
+public foreign handler MCEncodingExecDecodeUsingBase64(in pBase64 as String) returns Data binds to "<builtin>"
 
-foreign handler ExecEncodeUsingBinary(in Source as data, in Format as string, out Value as string) returns nothing binds to "<builtin>"
-foreign handler ExecDecodeUsingBinary(in Source as string, in Format as string, out Value as data) returns nothing binds to "<builtin>"
+public foreign handler MCEncodingExecEncodeForLegacyUrl(in pString as String) returns String binds to "<builtin>"
+public foreign handler MCEncodingExecDecodeFromLegacyUrl(in pUrlEncoded as String) returns String binds to "<builtin>"
 
-foreign handler ExecEncodeUsingUTF8(in Source as string, out Target as data) returns nothing binds to "<builtin>"
-foreign handler ExecDecodeUsingUTF8(in Source as data, out Target as string) returns nothing binds to "<builtin>"
-foreign handler ExecEncodeUsingUTF16(in Source as string, out Target as data) returns nothing binds to "<builtin>"
-foreign handler ExecDecodeUsingUTF16(in Source as data, out Target as string) returns nothing binds to "<builtin>"
-foreign handler ExecEncodeUsingUTF32(in Source as string, out Target as data) returns nothing binds to "<builtin>"
-foreign handler ExecDecodeUsingUTF32(in Source as data, out Target as string) returns nothing binds to "<builtin>"
-foreign handler ExecEncodeUsingASCII(in Source as string, out Target as data) returns nothing binds to "<builtin>"
-foreign handler ExecDecodeUsingASCII(in Source as data, out Target as string) returns nothing binds to "<builtin>"
-
-foreign handler EvalURLEncoded(in Target as string, out Value as string) returns nothing binds to "<builtin>"
-foreign handler EvalURLDecoded(in Target as string, out Value as string) returns nothing binds to "<builtin>"
+public foreign handler MCEncodingExecEncodeForUrl(in pString as String) returns String binds to "<builtin>"
+public foreign handler MCEncodingExecDecodeFromUrl(in pUrlEncoded as String) returns String binds to "<builtin>"
 
 --
 
+/*
 syntax EncodeValue is statement
    "the" "encoded" "of" <Target: Expression>
 begin 
@@ -53,39 +50,43 @@ syntax DecodeValue is statement
 begin 
     EvalDecodedOfValue(Target, output)
 end syntax
-
+*/
 --
 
 syntax CompressData is statement
-   "compress" <Target: Expression>
+   "compress" <Target: Expression> ["using" "zlib"]
 begin 
-    ExecCompress(Target)
+    MCEncodingExecCompressUsingZlib(Target)
 end syntax
 
 syntax DecompressData is statement
-    "decode" <Target: Expression>
+    "decompress" <Target: Expression> ["using" "zlib"]
 begin 
-    ExecCompress(Target)
+    MCEncodingExecDecompressUsingZlib(Target)
+end syntax
+
+syntax IsCompressed is postfix operator with function chunk precedence
+	<Target: Expression> "is" "compressed" ["using" "zlib"]
+begin 
+    MCEncodingEvalIsCompressedUsingZlib(Target, output)
 end syntax
 
 --
 
 syntax EncodeUsingBase64 is statement
-"encode" <Source: Expression> "using" "base64" ["into" <Target: Expression>]
+	"encode" <Source: Expression> "using" "base" "sixty-four"
 begin
-    ExecEncodeUsingBase64(Source, Source)
-    ExecEncodeUsingBase64(Source, Target)
+    MCEncodingExecEncodeUsingBase64(Source)
 end syntax
 
 syntax DecodeUsingBase64 is statement
-"decode" <Source: Expression> "using" "base64" ["into" <Target: Expression>]
+	"decode" <Source: Expression> "using" "base" "sixty-four"
 begin
-    ExecDecodeUsingBase64(Source, Source)
-    ExecDecodeUsingBase64(Source, Target)
+    MCEncodingExecDecodeUsingBase64(Source)
 end syntax
 
 --
-
+/*
 syntax EncodeUsingBinary is statement
 "encode" <Source: Expression> "using" "binary" "format" <Format: Expression> ["into" <Target: Expression>]
 begin
@@ -99,9 +100,10 @@ begin
     ExecDecodeUsingBinary(Source, Format, Source)
     ExecDecodeUsingBinary(Source, Format, Target)
 end syntax
-
+*/
 --
 
+/*
 syntax EncodeTextUsingUTF8 is statement
     "encode" <Target: Expression> "using" "utf8"
 begin
@@ -149,19 +151,31 @@ syntax DecodeTextUsingASCII is statement
 begin
     ExecDecodeTextUsingASCII(Target, Target)
 end syntax
-
+*/
 --
 
-syntax URLEncoded is prefix operator with precedence 3
-    "the" "url" "encoded" "of" <Target: Expression>
+syntax EncodeForLegacyURL is statement
+    "encode" <Target: Expression> "for" "legacy" "url"
 begin
-    EvalURLEncoded(Target, output)
+    MCEncodingExecEncodeForLegacyUrl(Target)
 end syntax
 
-syntax URLDecoded is prefix operator with precedence 3
-    "the" "url" "decoded" "of" <Target: Expression>
+syntax DecodeFromLegacyURL is statement
+    "decode" <Target: Expression> "from" "legacy" "url"
 begin
-    EvalURLDecoded(Target, output)
+    MCEncodingExecDecodeFromLegacyUrl(Target)
+end syntax
+
+syntax EncodeForURL is statement
+    "encode" <Target: Expression> "for" "url"
+begin
+    MCEncodingExecEncodeForUrl(Target)
+end syntax
+
+syntax DecodeFromURL is statement
+    "decode" <Target: Expression> "from" "url"
+begin
+    MCEncodingExecDecodeFromUrl(Target)
 end syntax
 
 --

@@ -338,55 +338,78 @@ static const char * const url_table[256] =
     "%F7", "%F8", "%F9", "%FA", "%FB", "%FC", "%FD", "%FE", "%FF"
 };
 
-bool MCFiltersUrlEncode(MCStringRef p_source, MCStringRef& r_result)
+bool MCFiltersUrlEncode(MCStringRef p_source, bool p_use_utf8, MCStringRef& r_result)
 {
-	MCAutoStringRefAsUTF8String t_utf8_string;
-	const char *s;
-	uindex_t l;
-	uindex_t size;
+    char *t_chars;
+    uindex_t l;
+    uindex_t size;
     
-    // SN-2014-11-13: [[ Bug 14015 ]] We don't want to nativise the string,
+    // SN-2014-11-13: [[ Bug 14015 ]] If specified, we don't want to nativise the string,
     // but rather to encode it in UTF-8 and write the bytes (a '%' will be added).
-	if (!t_utf8_string.Lock (p_source))
-        return false;
-    
-	s = *t_utf8_string;
-	l = t_utf8_string.Size();
-	size = l + 1;
-	size += size / 4;
-    
-    MCAutoNativeCharArray buffer;
-    if (!buffer . New(size))
-        return false;
-    
-    char_t *dptr = buffer . Chars();
-    while (l--)
+    if (p_use_utf8)
     {
-        if (dptr - buffer . Chars() + 7 > size)
-        {
-            uint32_t newsize = size + size / 4 + 7;
-            uint32_t offset = dptr - buffer . Chars();
-            if (!buffer . Extend(newsize))
-                return false;
-            dptr = buffer . Chars() + offset;
-            size = newsize;
-        }
-        const char_t *sptr = (const char_t *)url_table[(uint8_t)*s++];
-        do
-        {
-            *dptr++ = *sptr++;
-        }
-        while (*sptr);
+        if (!MCStringConvertToUTF8(p_source, t_chars, l))
+            return false;
+        
+        size = l + 1;
+    }
+    else
+    {
+        if (!MCStringConvertToNative(p_source, (char_t*&)t_chars, l))
+            return false;
+        size = strlen(t_chars);
     }
     
-    buffer . Shrink(dptr - buffer . Chars());
+    // AL-2015-02-13: [[ Bug 14602 ]] Use copy of t_chars ptr for iteration so it can be freed properly.
+    const char *t_chars_iter = t_chars;
+    size = l + 1;
+    size += size / 4;
+    
+    bool t_success;
+    t_success = true;
+    
+    MCAutoNativeCharArray buffer;
+    t_success = buffer . New(size);
+    
+    if (t_success)
+    {
+        char_t *dptr;
+        dptr = buffer . Chars();
+        while (l--)
+        {
+            if (dptr - buffer . Chars() + 7 > size)
+            {
+                uint32_t newsize = size + size / 4 + 7;
+                uint32_t offset = dptr - buffer . Chars();
+                if (!buffer . Extend(newsize))
+                {
+                    t_success = false;
+                    break;
+                }
+                
+                dptr = buffer . Chars() + offset;
+                size = newsize;
+            }
+            const char_t *sptr = (const char_t *)url_table[(uint8_t)*t_chars_iter++];
+            do
+            {
+                *dptr++ = *sptr++;
+            }
+            while (*sptr);
+        }
+        buffer . Shrink(dptr - buffer . Chars());
+    }
+    
+    MCMemoryDeleteArray(t_chars);
+    if (!t_success)
+        return false;
     
     return buffer . CreateStringAndRelease(r_result);
 }
 
-bool MCFiltersUrlDecode(MCStringRef p_source, MCStringRef& r_result)
+bool MCFiltersUrlDecode(MCStringRef p_source, bool p_use_utf8, MCStringRef& r_result)
 {
-    // SN-2014-11-13: [[ Bug 14015 ]] We don't want to use a nativised string, but
+    // SN-2014-11-13: [[ Bug 14015 ]] If specified, we don't want to use a nativised string, but
     // bytes, as we can get UTF-8 characters (now usable in 7.0)
     MCAutoByteArray t_buffer;
     char_t *t_srcptr;
@@ -396,10 +419,10 @@ bool MCFiltersUrlDecode(MCStringRef p_source, MCStringRef& r_result)
         return false;
     
     if (!t_buffer . New(t_srclen))
-	{
-		MCMemoryDeleteArray (t_srcptr);
+    {
+        MCMemoryDeleteArray(t_srcptr);
         return false;
-	}
+    }
     
     const uint8_t *sptr = (uint8_t *)t_srcptr;
     const uint8_t *eptr = sptr + t_srclen;
@@ -421,7 +444,8 @@ bool MCFiltersUrlDecode(MCStringRef p_source, MCStringRef& r_result)
             else
                 if (source >= 'A' && source <= 'F')
                     value += source - 'A' + 10;
-            if (value != 13)
+            // Legacy behavior - for some reason 0x0D is skipped
+            if (p_use_utf8 || value != 13)
                 *dptr++ = value;
         }
         else
@@ -442,9 +466,13 @@ bool MCFiltersUrlDecode(MCStringRef p_source, MCStringRef& r_result)
     
     MCMemoryDeleteArray(t_srcptr);
     
-    // SN-2014-11-13: [[ Bug 14015 ]] The string is UTF-8 encoded, not native.
-    return MCStringCreateWithBytes(t_buffer . Bytes(), t_buffer.ByteCount(), kMCStringEncodingUTF8, false, r_result);
+    // SN-2014-11-13: [[ Bug 14015 ]] The string might be explicitly UTF-8 encoded.
+    if (p_use_utf8)
+        return MCStringCreateWithBytes(t_buffer . Bytes(), t_buffer.ByteCount(), kMCStringEncodingUTF8, false, r_result);
+    else
+        return MCStringCreateWithBytes(t_buffer . Bytes(), t_buffer.ByteCount(), kMCStringEncodingNative, false, r_result);
 }
+
 
 ////////////////////////////////////////////////////////////////////////////////
 
