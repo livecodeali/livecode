@@ -260,6 +260,7 @@ void MCScriptDestroyModule(MCScriptModuleRef self)
             case kMCScriptForeignHandlerLanguageBuiltinC:
                 break;
             case kMCScriptForeignHandlerLanguageObjC:
+                MCValueRelease(t_def->objc.class_name);
                 MCMemoryDelete(t_def->objc.function_cif);
                 break;
             case kMCScriptForeignHandlerLanguageJava:

@@ -981,14 +981,50 @@ __MCScriptResolveForeignFunctionBindingForObjC(MCScriptInstanceRef p_instance,
     {
         return false;
     }
-
+    
+    Class t_objc_class = nullptr;
     bool t_valid = true;
     
+    if (t_valid &&
+        MCStringIsEqualToCString(*t_selector_name, "protocol", kMCStringOptionCompareCaseless))
+    {
+        extern Class MCScriptCreateProtocolProxyClass(MCStringRef p_protocol_name);
+        t_objc_class = MCScriptCreateProtocolProxyClass(*t_class);
+        if (t_objc_class == nullptr)
+        {
+            /* ERROR: should be protocol not found */
+            t_valid = false;
+        }
+        
+        if (t_valid)
+        {
+            p_handler->objc.call_type = kMCScriptForeignHandlerObjcCallTypeProtocolProxy;
+            
+            MCNewAutoNameRef t_class_nameref;
+            if (!MCNameCreate(*t_class, &t_class_nameref))
+                return false;
+            
+            p_handler->objc.class_name = MCValueRetain(*t_class_nameref);
+            p_handler->objc.objc_selector = nullptr;
+            p_handler->objc.function_cif = nullptr;
+            
+            p_handler->language = kMCScriptForeignHandlerLanguageObjC;
+            p_handler->thread_affinity = t_thread_affinity;
+        
+            if (r_bound != nullptr)
+            {
+                *r_bound = true;
+            }
+        
+            return true;
+        }
+    }
+    
     /* Lookup the class, to make sure it exists. */
-    Class t_objc_class = nullptr;
     if (t_valid)
     {
         t_objc_class = objc_getClass(*t_class_cstring);
+        
         if (t_objc_class == nullptr)
         {
             /* ERROR: should be class not found */
@@ -1177,7 +1213,12 @@ __MCScriptResolveForeignFunctionBindingForObjC(MCScriptInstanceRef p_instance,
     {
         p_handler->objc.call_type = kMCScriptForeignHandlerObjcCallTypeInstanceMethod;
     }
-    p_handler->objc.objc_class = t_objc_class;
+    
+    MCNewAutoNameRef t_class_nameref;
+    if (!MCNameCreate(*t_class, &t_class_nameref))
+        return false;
+    
+    p_handler->objc.class_name = MCValueRetain(*t_class_nameref);
     p_handler->objc.objc_selector = t_objc_sel;
     p_handler->objc.function_cif = static_cast<ffi_cif*>(t_layout_cif.Release());
     

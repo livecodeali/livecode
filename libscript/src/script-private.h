@@ -382,6 +382,8 @@ enum MCScriptForeignHandlerObjcCallType
     /* Call the method using method_invoke on the class instance (on the default
      * thread) */
     kMCScriptForeignHandlerObjcCallTypeClassMethod,
+    
+    kMCScriptForeignHandlerObjcCallTypeProtocolProxy,
 };
 
 struct MCScriptForeignHandlerDefinition: public MCScriptCommonHandlerDefinition
@@ -405,7 +407,7 @@ struct MCScriptForeignHandlerDefinition: public MCScriptCommonHandlerDefinition
         struct
         {
             MCScriptForeignHandlerObjcCallType call_type : 8;
-            void *objc_class;
+            MCNameRef class_name;
             void *objc_selector;
             void *function_cif;
         } objc;

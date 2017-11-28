@@ -233,6 +233,17 @@ public:
                   void *p_result_slot_ptr)
     {
 #if defined(_MACOSX) || defined(TARGET_SUBPLATFORM_IPHONE)
+        if (p_handler->objc.call_type ==
+                kMCScriptForeignHandlerObjcCallTypeProtocolProxy)
+        {
+            extern bool MCScriptCreateProtocolProxy(MCNameRef p_proxy_class, MCTypeInfoRef p_signature, void *r_result, void **p_args, uindex_t p_arg_count);
+            return MCScriptCreateProtocolProxy(p_handler->objc.class_name,
+                                               p_handler_signature,
+                                               p_result_slot_ptr,
+                                               m_argument_values,
+                                               m_argument_count);
+        }
+        
         /* At this point we have a argument values array which will match
          * the LCB signature - depending on the call type we need to modify
          * it. */
@@ -259,7 +270,13 @@ public:
                 return MCErrorThrowOutOfMemory();
             }
             
-            t_objc_values[0] = &p_handler->objc.objc_class;
+            MCAutoStringRefAsUTF8String t_class_cstring;
+            if (!t_class_cstring.Lock(MCNameGetString(p_handler->objc.class_name)))
+            {
+                return MCErrorThrowOutOfMemory();
+            }
+            Class t_class = objc_getClass(*t_class_cstring);
+            t_objc_values[0] = &t_class;
             t_objc_values[1] = &p_handler->objc.objc_selector;
             for(uindex_t i = 0; i < m_argument_count; i++)
                 t_objc_values[i + 2] = m_argument_values[i];
