@@ -58,6 +58,8 @@ MCSystemExecGetArchitecture(MCStringRef & r_string)
     "arm64"
 #elif defined(__ARM__)
     "arm"
+#elif defined(__EMSCRIPTEN__)
+    ""
 #else
 #  error "Unrecognized architecture"
 #endif

@@ -74,6 +74,7 @@ The possible values are:
 * "x86_64" - 64-bit Windows, Mac and Linux
 * "arm" - Android device/emulator, 32-bit iOS device
 * "arm64" - 64-bit iOS device
+* "" - Emscripten
 
 Tags: System
 */
