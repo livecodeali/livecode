@@ -60,8 +60,8 @@ command releaseNotesBuilderRun pEdition, pVersion, pReleaseType, pOutputDir
       put builderPrivateRepoFolder() into tReposA["indy"]
       put builderRepoFolder() into tReposA["community"]
       
-      repeat for each key tEdition in tReposA
-         put tReposA[tEdition] into tPath
+      repeat for each key tRepo in tReposA
+         put tReposA[tRepo] into tPath
          
          repeat for each item tType in kExtensionLcbTypes
             put tPath & slash & "extensions" & slash & tType into tTypePath
@@ -74,11 +74,13 @@ command releaseNotesBuilderRun pEdition, pVersion, pReleaseType, pOutputDir
                put tFolder into tComponents[tIndex]["folder"]
                put "extension" into tComponents[tIndex]["metadata"]["category"]
                
+               put ExtensionsGetEdition(tFolder) into tEdition
+               if tEdition is empty then
+                  put tRepo into tEdition
+               end if
                put tEdition into tComponents[tIndex]["metadata"]["edition"]
-               put ExtensionsGetSectionName(tFolder) into tComponents[tIndex]["metadata"]["section"]
             end repeat
          end repeat
-         
          repeat for each item tType in kExtensionScriptTypes
             put tPath & slash & "extensions" & slash & tType into tTypePath
             if there is not a folder tTypePath then
@@ -90,16 +92,11 @@ command releaseNotesBuilderRun pEdition, pVersion, pReleaseType, pOutputDir
                put tFolder into tComponents[tIndex]["folder"]
                put "extension" into tComponents[tIndex]["metadata"]["category"]
                
-               --!TODO move these extensions to components
-               switch tFolder
-                  case "revdeploylibrarydesktop"
-                  case "remotedebugger"
-                  case "scriptprofiler"
-                     put "business" into tComponents[tIndex]["metadata"]["edition"]
-                     break
-                  default
-                     put tEdition into tComponents[tIndex]["metadata"]["edition"]
-               end switch
+               put ExtensionsGetEdition(tFolder) into tEdition
+               if tEdition is empty then
+                  put tRepo into tEdition
+               end if
+               put tEdition into tComponents[tIndex]["metadata"]["edition"]
                put ExtensionsGetSectionName(tFolder) into tComponents[tIndex]["metadata"]["section"]
             end repeat
          end repeat
@@ -878,6 +875,18 @@ private function ExtensionsGetLCBName pExtPath
    return tTargetName
 end ExtensionsGetLCBName
 
+function ExtensionsGetEdition pExtPath
+   local tDoc, tEdition
+   put builderFileGetContents(ExtensionsGetDocPath(pExtPath)) into tDoc
+   repeat for each line tLine in tDoc
+      get matchText(tLine, "(?i)^\s*(?:Edition\:)\s+([\w.]*)", tEdition)
+      if tEdition is not empty then
+         exit repeat
+      end if
+   end repeat
+   return tEdition
+end ExtensionsGetEdition
+   
 private function ExtensionsGetKind pExtPath
    -- Horrible-ish hack for extracting the "real" name of the LiveCode
    -- module.  See also tools/build-extensions.sh.
@@ -892,29 +901,35 @@ private function ExtensionsGetKind pExtPath
    end if
 end ExtensionsGetKind
 
+private function ValidateKind pKind
+   set the itemdelimiter to "."
+   if the number of items in pKind < 3 then
+      return false
+   end if
+   return true
+end ValidateKind
+
 private function ExtensionsGetLCSKind pExtPath, pShortName
-   local tSource, tLine, tName
+   local tSource
    if there is no file merge("[[pExtPath]]/[[pShortName]].livecodescript") then
       return empty
    end if
    put builderFileGetUTF8Contents(merge("[[pExtPath]]/[[pShortName]].livecodescript")) into tSource
-   repeat for each line tLine in tSource
-      get matchText(tLine, "(?i)^\s*(?:" & quote & "script" & quote & ")\s+([\w.]*)", tName)
-      if tName is not empty then
-         exit repeat
-      end if
-   end repeat
-   
-   return tName
+   return char 2 to -2 of word 2 of tSource
 end ExtensionsGetLCSKind
 
 private function ExtensionsGetLCBKind pExtPath, pShortName
    local tLcbSource, tLine, tModuleName
    put builderFileGetUTF8Contents(merge("[[pExtPath]]/[[pShortName]].lcb")) into tLcbSource
+   
    repeat for each line tLine in tLcbSource
       get matchText(tLine, "(?i)^\s*(?:module|widget|library)\s+([\w.]*)", tModuleName)
       if tModuleName is not empty then
-         exit repeat
+         if ValidateKind(tModuleName) then
+            exit repeat
+         else
+            put empty into tModuleName
+         end if
       end if
    end repeat
    
