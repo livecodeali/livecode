@@ -25,7 +25,7 @@ import subprocess
 BUILDBOT_PLATFORM_TRIPLES = (
     'x86-linux-debian8',
     'x86_64-linux-debian8',
-    'armv6-android-api9',
+    'armv6-android-api26',
     'universal-mac-macosx10.9', # Minimum deployment target
     'universal-ios-iphoneos11.4',
     'universal-ios-iphoneos11.2',
