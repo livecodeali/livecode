@@ -8,6 +8,8 @@ include $(top_srcdir)/Makefile.common
 TEST_DIR ?= $(top_srcdir)/_tests
 LCM_DIR ?= $(TEST_DIR)/_build
 TESTS_DIR ?= $(top_srcdir)/tests
+EDITION_TYPE ?= community
+
 # When running on headless Linux, run tests in -ui mode.
 
 LCS_ENGINE ?= $(guess_engine)
@@ -23,7 +25,7 @@ else
 LCS_CMD = $(LCS_ENGINE) $(LCS_ENGINE_FLAGS) $(LCS_TESTRUNNER) run $(LCS_TESTS_DIR)
 endif
 
-LCS_SERVER_ENGINE ?= $(bin_dir)/server-community
+LCS_SERVER_ENGINE ?= $(bin_dir)/server-$(EDITION_TYPE)
 LCS_SERVER_TESTRUNNER ?= $(TESTS_DIR)/_testrunner.lc
 LCS_SERVER_CMD = $(LCS_SERVER_ENGINE) $(LCS_SERVER_TESTRUNNER) run $(LCS_TESTS_DIR)
 
