@@ -1486,15 +1486,14 @@ end revSBBuiltinInclusions
 
 function revSBLcextFileIsZipArchive pFile, @rError
    open file pFile for binary read
-   if the result is empty then
-      read from file pFile for 4 bytes
-      close file pFile
-   end if
-   if it is empty then
+   if the result is not empty then
       put "could not open external -" && pFile into rError
       return false
    end if
    
+   read from file pFile for 4 bytes
+   close file pFile
+
    return byte 1 of it is "P" and byte 2 of it is "K" and \ 
          byte 3 of it is numToByte(3) and byte 4 of it is numToByte(4)
 end revSBLcextFileIsZipArchive

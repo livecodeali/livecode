@@ -76,12 +76,7 @@ on __Start
    end if
    
    set the itemDelimiter to slash
-   
-   local tPath
-   put the filename of me into tPath
-   put "extensions/script-libraries/getopt/getopt.livecodescript" into item -3 to -1 of tPath
-   start using stack tPath
-   
+
    constant kOptions = "h,help v,verbose p,platform= n,noui a,all t,target= profile="
    
    local tArgs
