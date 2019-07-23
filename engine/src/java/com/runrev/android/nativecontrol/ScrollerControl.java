@@ -140,7 +140,7 @@ class ScrollerControl extends NativeControl
                 // handle dispatching of touch events so we can send them to both scrollviews
                 if (!m_scrolling_enabled)
                 {
-                    NativeControlModule.getEngine().onTouchEvent(e);
+                    // If scrolling is disabled, simply pass the event to the parent view
                     return false;
                 }
                 
