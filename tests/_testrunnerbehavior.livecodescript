@@ -290,13 +290,7 @@ command TestRunnerInvokeTestCommand pScriptFile, pCommand
       end try
       
       -- Check for uncaught errors
-      put TestGetUncaughtErrorDialog() into tError
-      if tError is not empty then
-         repeat for each line tLine in tError
-            TestAssert "uncaught error dialog" && tLine, false
-         end repeat
-         TestDiagnostic tError
-      end if
+      TestAssertNoUncaughtErrors
 
    end if
 end TestRunnerInvokeTestCommand

@@ -361,9 +361,15 @@ on TestAssertErrorDialog pDescription, pErrorCode
 	put empty into sError
 end TestAssertErrorDialog
 
-function TestGetUncaughtErrorDialog
-	return sError
-end TestGetUncaughtErrorDialog
+command TestAssertNoUncaughtErrors
+   if sError is not empty then
+      repeat for each line tLine in sError
+         TestAssert "uncaught error dialog" && tLine, false
+      end repeat
+      TestDiagnostic sError
+      put empty into sError
+   end if
+end TestAssertNoUncaughtErrors
 
 function TestGetEngineRepositoryPath
   set the itemdelimiter to "/"
